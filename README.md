@@ -32,7 +32,7 @@ Eklenti dört kategoriyi otomatik oluşturur ve kaynak URL'si/puanı gibi alanla
 
 ### Railway worker
 
-`worker/.env.example` dosyasındaki değişkenleri Railway servis değişkenleri olarak tanımlayın. Servis kök dizini `/worker`, yapılandırma dosyası `/worker/railway.toml` olmalıdır.
+`worker/.env.example` dosyasındaki değişkenleri Railway servis değişkenleri olarak tanımlayın. Depo kökündeki `Dockerfile` ve `railway.toml`, Railway'in monorepo içindeki worker'ı doğrudan kurmasını sağlar.
 
 İşleyici tek sefer çalışır ve çıkar. Railway cron ifadesi `0 2 * * *` olup her gün 02.00 UTC'de çalışır.
 
@@ -49,4 +49,3 @@ npm run start
 - WordPress uygulama parolası yalnız Railway secret olarak saklanır.
 - CAPTCHA, oturum açma veya ödeme duvarı aşılmaz.
 - Her yazının sonunda yayın adı ve doğrudan kaynak bağlantısı bulunur.
-
