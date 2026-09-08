@@ -1,0 +1,26 @@
+{
+  "name": "sanatcin-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "check": "node --check src/index.js && node --check src/sources.js && node dev/check-php.mjs",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "php-parser": "^3.2.5"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "cheerio": "^1.0.0",
+    "jsdom": "^26.1.0",
+    "openai": "^5.12.2",
+    "playwright": "^1.55.0",
+    "rss-parser": "^3.13.0"
+  }
+}
+
