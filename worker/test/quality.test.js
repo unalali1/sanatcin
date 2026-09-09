@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { countCjk, isUsableImageUrl, translationIssues } from '../src/quality.js';
+import { countCjk, imageDimensions, isUsableImageUrl, sourceContentIssues, translationIssues } from '../src/quality.js';
 
 test('Çince karakterleri yakalar', () => {
   assert.equal(countCjk('Türkçe metin 龟兹'), 2);
@@ -26,3 +26,14 @@ test('Logo ve yer tutucu görselleri reddeder', () => {
   assert.equal(isUsableImageUrl('https://example.com/news/exhibition-2026.webp'), true);
 });
 
+test('Yasal site metnini haber gövdesi olarak reddeder', () => {
+  const text = '中国大陆更多VOGUE网站 版权所有 北京风华创想网络有限公司 京ICP备09041637号 出版物经营许可证 营业执照 电信与信息服务业务经营许可证';
+  assert.ok(sourceContentIssues(text.repeat(4)).some((item) => item.includes('yasal metin')));
+});
+
+test('PNG boyutlarını okur', () => {
+  const buffer = Buffer.alloc(24);
+  buffer.writeUInt32BE(1280, 16);
+  buffer.writeUInt32BE(720, 20);
+  assert.deepEqual(imageDimensions(buffer, 'image/png'), { width: 1280, height: 720 });
+});
