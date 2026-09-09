@@ -1,11 +1,44 @@
 import crypto from 'node:crypto';
+import OpenAI from 'openai';
 import { config } from './config.js';
 import { sourceHash } from './fetch.js';
-import { isUsableImageUrl } from './quality.js';
+import { assertImageDimensions, isUsableImageUrl } from './quality.js';
 
 const auth = `Basic ${Buffer.from(`${config.wpUsername}:${config.wpAppPassword}`).toString('base64')}`;
 const categoryIds = new Map();
 const runImageHashes = new Set();
+const ai = new OpenAI({ apiKey: config.openaiApiKey });
+
+async function validateEditorialImage(article, image) {
+  const response = await ai.responses.create({
+    model: config.openaiModel,
+    input: [{
+      role: 'user',
+      content: [
+        {
+          type: 'input_text',
+          text: [
+            'Bir kültür-sanat haber editörü olarak başlık, kategori ve görseli denetle.',
+            'Geçerli kategoriler: kultur-sanat, sinema, moda-tasarim, sehir-yasam.',
+            'Ekonomi, finans, siyaset, spor ve bu dört alanla ilgisiz içerikler için kategori uygunsuz olmalı.',
+            'Görsel yalnız habere doğrudan ilişkin fotoğraf, illüstrasyon veya etkinlik afişiyse kullanılabilir.',
+            'QR kod, logo, genel haber kartı, site ekran görüntüsü, boş/soyut yer tutucu ya da başlıkla ilgisiz görseli reddet.',
+            'Yalnız şu JSON biçiminde yanıt ver: {"usable":true,"category":"kultur-sanat","reason":"kısa gerekçe"}',
+            `Başlık: ${article.title}`,
+            `Mevcut kategori: ${article.category}`
+          ].join('\n')
+        },
+        { type: 'input_image', image_url: `data:${image.contentType};base64,${image.buffer.toString('base64')}`, detail: 'low' }
+      ]
+    }]
+  });
+  const raw = response.output_text.replace(/^\`\`\`json\s*|\s*\`\`\`$/g, '').trim();
+  const result = JSON.parse(raw);
+  if (result.usable !== true) throw new Error(`Kaynak görsel editoryal olarak uygun değil: ${result.reason ?? 'gerekçe belirtilmedi'}`);
+  if (result.category !== article.category) {
+    throw new Error(`Haber kategoriyle uyumlu değil: ${article.category} yerine ${result.category ?? 'uygunsuz'}.`);
+  }
+}
 
 async function wp(path, options = {}) {
   const response = await fetch(`${config.wpBaseUrl}/wp-json${path}`, {
@@ -36,30 +69,40 @@ function extensionFor(contentType) {
 }
 
 export async function prepareFeaturedImage(article) {
-  if (!isUsableImageUrl(article.sourceImageUrl)) throw new Error('Haberde kullanılabilir bir kaynak görsel bulunamadı.');
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
-  try {
-    const response = await fetch(article.sourceImageUrl, {
+  const candidates = article.sourceImageUrls?.length ? article.sourceImageUrls : [article.sourceImageUrl];
+  const errors = [];
+  for (const imageUrl of candidates) {
+    if (!isUsableImageUrl(imageUrl)) continue;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
+    try {
+      const response = await fetch(imageUrl, {
       redirect: 'follow',
       signal: controller.signal,
       headers: { 'user-agent': config.userAgent, accept: 'image/jpeg,image/png,image/webp,image/*;q=0.8', referer: article.url }
-    });
-    if (!response.ok) throw new Error(`Kaynak görsel indirilemedi: HTTP ${response.status}`);
-    const contentType = response.headers.get('content-type') ?? '';
-    const extension = extensionFor(contentType);
-    if (!extension) throw new Error(`Desteklenmeyen görsel türü: ${contentType || 'bilinmiyor'}`);
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.length < 12_000) throw new Error('Kaynak görsel güvenilir kalite için çok küçük.');
-    if (buffer.length > 10_000_000) throw new Error('Kaynak görsel 10 MB sınırını aşıyor.');
-    const imageHash = crypto.createHash('sha256').update(buffer).digest('hex');
-    if (runImageHashes.has(imageHash)) throw new Error('Aynı görsel bu çalışmada başka bir haber için zaten kullanıldı.');
-    const existing = await wp(`/sanatcin/v1/image-known?hash=${encodeURIComponent(imageHash)}`);
-    if (existing.known) throw new Error('Aynı görsel daha önce başka bir haberde kullanılmış.');
-    return { buffer, contentType: contentType.split(';')[0], extension, imageHash };
-  } finally {
-    clearTimeout(timer);
+      });
+      if (!response.ok) throw new Error(`Kaynak görsel indirilemedi: HTTP ${response.status}`);
+      const contentType = response.headers.get('content-type') ?? '';
+      const extension = extensionFor(contentType);
+      if (!extension) throw new Error(`Desteklenmeyen görsel türü: ${contentType || 'bilinmiyor'}`);
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length < 12_000) throw new Error('Kaynak görsel güvenilir kalite için çok küçük.');
+      if (buffer.length > 10_000_000) throw new Error('Kaynak görsel 10 MB sınırını aşıyor.');
+      assertImageDimensions(buffer, contentType);
+      const imageHash = crypto.createHash('sha256').update(buffer).digest('hex');
+      if (runImageHashes.has(imageHash)) throw new Error('Aynı görsel bu çalışmada başka bir haber için zaten kullanıldı.');
+      const existing = await wp(`/sanatcin/v1/image-known?hash=${encodeURIComponent(imageHash)}`);
+      if (existing.known) throw new Error('Aynı görsel daha önce başka bir haberde kullanılmış.');
+      const image = { buffer, contentType: contentType.split(';')[0], extension, imageHash, sourceUrl: imageUrl };
+      await validateEditorialImage(article, image);
+      return image;
+    } catch (error) {
+      errors.push(error.message);
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  throw new Error(`Haberde kullanılabilir bir kaynak görsel bulunamadı: ${errors.slice(0, 3).join(' | ')}`);
 }
 
 async function uploadFeaturedImage(article, image) {

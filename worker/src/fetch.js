@@ -5,6 +5,7 @@ import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
 import { chromium } from 'playwright';
 import { config } from './config.js';
+import { assertSourceContentQuality, isUsableImageUrl } from './quality.js';
 
 const parser = new Parser({ timeout: config.requestTimeoutMs });
 
@@ -122,22 +123,27 @@ export async function extractArticle(candidate) {
     $('meta[name="publishdate"]').attr('content') ||
     $('time').first().attr('datetime')
   );
-  const leadImage = $('article img, main img, .article img, .content img').first();
-  const image =
-    $('meta[property="og:image"]').attr('content') ||
-    $('meta[name="twitter:image"]').attr('content') ||
-    leadImage.attr('data-src') ||
-    leadImage.attr('data-lazy-src') ||
-    leadImage.attr('src') ||
-    null;
   const text = (article?.textContent ?? '').replace(/\n{3,}/g, '\n\n').trim();
-  if (text.length < 300) throw new Error('Makale gövdesi güvenilir biçimde çıkarılamadı.');
+  assertSourceContentQuality(text);
+
+  const readable = cheerio.load(article?.content ?? '');
+  const rawImages = [
+    ...readable('img').map((_, element) => readable(element).attr('data-src') || readable(element).attr('data-lazy-src') || readable(element).attr('src')).get(),
+    $('meta[property="og:image"]').attr('content'),
+    $('meta[name="twitter:image"]').attr('content'),
+    ...$('article img, main img, .article img, .content img').map((_, element) => $(element).attr('data-src') || $(element).attr('data-lazy-src') || $(element).attr('src')).get()
+  ];
+  const sourceImageUrls = [...new Set(rawImages
+    .filter(Boolean)
+    .map((image) => normalizeUrl(image, candidate.url))
+    .filter((image) => image && isUsableImageUrl(image)))];
 
   return {
     ...candidate,
     title: cleanTitle(article?.title || candidate.title),
     publishedAt,
-    sourceImageUrl: image ? normalizeUrl(image, candidate.url) : null,
+    sourceImageUrl: sourceImageUrls[0] ?? null,
+    sourceImageUrls,
     text
   };
 }
