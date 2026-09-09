@@ -122,7 +122,14 @@ export async function extractArticle(candidate) {
     $('meta[name="publishdate"]').attr('content') ||
     $('time').first().attr('datetime')
   );
-  const image = $('meta[property="og:image"]').attr('content') || null;
+  const leadImage = $('article img, main img, .article img, .content img').first();
+  const image =
+    $('meta[property="og:image"]').attr('content') ||
+    $('meta[name="twitter:image"]').attr('content') ||
+    leadImage.attr('data-src') ||
+    leadImage.attr('data-lazy-src') ||
+    leadImage.attr('src') ||
+    null;
   const text = (article?.textContent ?? '').replace(/\n{3,}/g, '\n\n').trim();
   if (text.length < 300) throw new Error('Makale gövdesi güvenilir biçimde çıkarılamadı.');
 

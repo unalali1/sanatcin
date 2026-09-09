@@ -2,20 +2,31 @@
 /**
  * Plugin Name: SanatÇin Otomasyon Köprüsü
  * Description: Railway haber işleyicisi için kaynak alanlarını ve tekrar kontrolü REST uçlarını sağlar.
- * Version: 0.1.0
+ * Version: 0.1.1
  * Requires at least: 6.5
  * Requires PHP: 8.1
  */
 
 if (!defined('ABSPATH')) exit;
 
+const SANATCIN_AUTOMATION_VERSION = '0.1.1';
+
 const SANATCIN_META_FIELDS = [
     'sanatcin_source_url' => 'string',
     'sanatcin_source_name' => 'string',
     'sanatcin_source_hash' => 'string',
+    'sanatcin_image_hash' => 'string',
     'sanatcin_score' => 'number',
     'sanatcin_original_title' => 'string'
 ];
+
+function sanatcin_sanitize_meta_text($value) {
+    return sanitize_text_field($value);
+}
+
+function sanatcin_sanitize_meta_number($value) {
+    return is_numeric($value) ? (float) $value : 0.0;
+}
 
 function sanatcin_register_meta_fields() {
     foreach (SANATCIN_META_FIELDS as $key => $type) {
@@ -23,7 +34,9 @@ function sanatcin_register_meta_fields() {
             'type' => $type,
             'single' => true,
             'show_in_rest' => true,
-            'sanitize_callback' => $type === 'number' ? 'floatval' : 'sanitize_text_field',
+            'sanitize_callback' => $type === 'number'
+                ? 'sanatcin_sanitize_meta_number'
+                : 'sanatcin_sanitize_meta_text',
             'auth_callback' => function () { return current_user_can('edit_posts'); }
         ]);
     }
@@ -57,16 +70,37 @@ function sanatcin_known_hashes(WP_REST_Request $request) {
     return new WP_REST_Response(['known' => $known], 200);
 }
 
+function sanatcin_image_hash_known(WP_REST_Request $request) {
+    $hash = sanitize_text_field((string) $request->get_param('hash'));
+    if (!$hash) return new WP_REST_Response(['known' => false], 200);
+    $query = new WP_Query([
+        'post_type' => 'post',
+        'post_status' => ['publish', 'draft', 'pending', 'future', 'private'],
+        'posts_per_page' => 1,
+        'fields' => 'ids',
+        'meta_key' => 'sanatcin_image_hash',
+        'meta_value' => $hash
+    ]);
+    return new WP_REST_Response(['known' => !empty($query->posts)], 200);
+}
+
 function sanatcin_register_routes() {
+    $can_edit = function () { return current_user_can('edit_posts'); };
     register_rest_route('sanatcin/v1', '/known', [
         'methods' => 'POST',
         'callback' => 'sanatcin_known_hashes',
-        'permission_callback' => function () { return current_user_can('edit_posts'); },
+        'permission_callback' => $can_edit,
         'args' => ['hashes' => ['required' => true, 'type' => 'array']]
+    ]);
+    register_rest_route('sanatcin/v1', '/image-known', [
+        'methods' => 'GET',
+        'callback' => 'sanatcin_image_hash_known',
+        'permission_callback' => $can_edit,
+        'args' => ['hash' => ['required' => true, 'type' => 'string']]
     ]);
     register_rest_route('sanatcin/v1', '/health', [
         'methods' => 'GET',
-        'callback' => fn() => ['status' => 'ok', 'version' => '0.1.0', 'time' => gmdate('c')],
+        'callback' => fn() => ['status' => 'ok', 'version' => SANATCIN_AUTOMATION_VERSION, 'time' => gmdate('c')],
         'permission_callback' => '__return_true'
     ]);
 }

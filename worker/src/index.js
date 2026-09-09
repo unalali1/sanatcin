@@ -68,9 +68,9 @@ async function run() {
         }
         const translated = await translateArticle({ ...article, originalTitle: article.title });
         const post = await publishArticle(translated);
-        results.push({ source: candidate.source.id, category: candidate.category, score: candidate.score, scoreReason: candidate.scoreReason, postId: post.id, link: post.link });
+        results.push({ source: candidate.source.id, category: candidate.category, score: candidate.score, scoreReason: candidate.scoreReason, postId: post.id, link: post.link, mode: config.dryRun ? 'dry-run' : config.publishStatus });
         categoryPublished += 1;
-        log('info', 'Haber yayımlandı', results.at(-1));
+        log('info', config.dryRun ? 'Haber simülasyonu tamamlandı' : config.publishStatus === 'draft' ? 'Haber taslak olarak kaydedildi' : 'Haber yayımlandı', results.at(-1));
       } catch (error) {
         log('error', 'Haber işlenemedi; sıradaki aday denenecek', { source: candidate.source.id, url: candidate.url, error: error.message });
       }
@@ -78,7 +78,7 @@ async function run() {
     if (categoryPublished === 0) log('error', 'Kategori için yayımlanabilir yeni haber bulunamadı', { category: slug });
   }
 
-  log('info', 'Günlük SanatÇin taraması tamamlandı', { published: results.length, results });
+  log('info', 'Günlük SanatÇin taraması tamamlandı', { processed: results.length, results });
   if (results.length === 0) process.exitCode = 2;
 }
 
@@ -86,3 +86,4 @@ run().catch((error) => {
   log('fatal', 'İşleyici durdu', { error: error.stack ?? error.message });
   process.exitCode = 1;
 });
+
