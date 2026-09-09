@@ -6,7 +6,7 @@ Bu depo iki parçadan oluşur:
 
 - `wordpress/theme/sanatcin`: Taslak görsele göre hazırlanmış özel WordPress teması.
 - `wordpress/plugin/sanatcin-automation`: Kaynak bilgilerini saklayan ve otomasyon için REST uçları sağlayan WordPress eklentisi.
-- `worker`: Railway'de her gün bir kez çalışan haber tarama, puanlama, tam metin çeviri ve yayın işleyicisi.
+- `worker`: Railway'de her gün bir kez çalışan haber tarama, puanlama, editoryal doğrulama ve yayın işleyicisi.
 
 ## Yayın kuralı
 
@@ -17,7 +17,9 @@ Dört kategori kullanılır:
 3. Moda & Tasarım
 4. Şehir & Yaşam
 
-Her kategori için en az bir, en fazla iki haber seçilir. Matematiksel günlük üst sınır sekiz haberdir. İşleyici önce son 72 saati, yeterli aday yoksa son yedi günü değerlendirir. Aynı kaynak URL'si ikinci kez yayımlanmaz.
+Her kategori için en fazla iki haber seçilir. Matematiksel günlük üst sınır sekiz haberdir; kalite kapısını geçen aday yoksa ilgili kategoride yayın yapılmaz. İşleyici son yedi günü değerlendirir, yayın tarihi doğrulanamayan adayları atlar ve aynı kaynak URL'sini ya da yüksek ölçüde benzer başlığı ikinci kez yayımlamaz. Finans, ekonomi, siyaset, spor, protokol ve kurumsal PR içerikleri kapsam dışıdır.
+
+Kaynak metin bire bir çevrilmez. Kaynaktaki doğrulanabilir bilgilerden doğal Türkçe bir haber özeti oluşturulur; metin ikinci bir model çağrısıyla kaynak karşısında denetlenir. Görselin çözünürlüğü, oranı, konu ilgisi ve daha önce kullanılıp kullanılmadığı ayrıca doğrulanır. Kontrollerden herhangi biri başarısızsa aday yayımlanmaz ve sıradaki aday denenir.
 
 ## Kurulum
 
@@ -34,7 +36,7 @@ Eklenti dört kategoriyi otomatik oluşturur ve kaynak URL'si/puanı gibi alanla
 
 `worker/.env.example` dosyasındaki değişkenleri Railway servis değişkenleri olarak tanımlayın. Depo kökündeki `Dockerfile` ve `railway.toml`, Railway'in monorepo içindeki worker'ı doğrudan kurmasını sağlar.
 
-İşleyici tek sefer çalışır ve çıkar. Railway cron ifadesi `0 2 * * *` olup her gün 02.00 UTC'de çalışır.
+İşleyici tek sefer çalışır ve çıkar. Railway cron ifadesi `0 2 * * *` olup her gün 02.00 UTC'de çalışır. Canlı ortamda `PUBLISH_STATUS=publish`, `DRY_RUN=false` ve `REQUIRE_PUBLISHED_DATE=true` kullanılır.
 
 ```bash
 cd worker

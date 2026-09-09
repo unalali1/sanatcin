@@ -6,25 +6,17 @@
     toggle.setAttribute('aria-expanded', String(open));
     if (open) panel.querySelector('input')?.focus();
   });
-
-  const slides = [...document.querySelectorAll('.hero-slide')];
-  const dots = [...document.querySelectorAll('.hero-dot')];
-  if (!slides.length) return;
-  let active = 0;
-  let timer;
-
-  const show = (index) => {
-    active = (index + slides.length) % slides.length;
-    slides.forEach((slide, i) => slide.classList.toggle('is-active', i === active));
-    dots.forEach((dot, i) => dot.classList.toggle('is-active', i === active));
-  };
-  const restart = () => {
-    clearInterval(timer);
-    timer = setInterval(() => show(active + 1), 7000);
-  };
-  document.querySelector('[data-prev]')?.addEventListener('click', () => { show(active - 1); restart(); });
-  document.querySelector('[data-next]')?.addEventListener('click', () => { show(active + 1); restart(); });
-  dots.forEach((dot) => dot.addEventListener('click', () => { show(Number(dot.dataset.go)); restart(); }));
-  restart();
+  const menuToggle = document.querySelector('.menu-toggle');
+  const menu = document.querySelector('.main-nav');
+  menuToggle?.addEventListener('click', () => {
+    const open = menu.classList.toggle('is-open');
+    menuToggle.setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    panel?.classList.remove('is-open');
+    toggle?.setAttribute('aria-expanded', 'false');
+    menu?.classList.remove('is-open');
+    menuToggle?.setAttribute('aria-expanded', 'false');
+  });
 })();
-

@@ -7,8 +7,8 @@ function sanatcin_setup() {
     add_theme_support('html5', ['search-form', 'gallery', 'caption', 'style', 'script']);
     add_theme_support('responsive-embeds');
     register_nav_menus(['primary' => __('Ana menü', 'sanatcin')]);
-    add_image_size('sanatcin-hero', 1400, 900, true);
-    add_image_size('sanatcin-card', 760, 460, true);
+    add_image_size('sanatcin-hero', 1440, 810, true);
+    add_image_size('sanatcin-card', 800, 450, true);
 }
 add_action('after_setup_theme', 'sanatcin_setup');
 
@@ -53,11 +53,49 @@ function sanatcin_fallback_image($post_id = null) {
     return get_template_directory_uri() . '/assets/images/' . $file;
 }
 
-function sanatcin_story_image($size = 'sanatcin-card') {
+function sanatcin_story_image($size = 'sanatcin-card', $priority = false) {
+    $attributes = [
+        'loading' => $priority ? 'eager' : 'lazy',
+        'decoding' => 'async'
+    ];
+    if ($priority) $attributes['fetchpriority'] = 'high';
     if (has_post_thumbnail()) {
-        the_post_thumbnail($size, ['loading' => 'lazy']);
+        the_post_thumbnail($size, $attributes);
     } else {
-        printf('<img src="%s" alt="" loading="lazy">', esc_url(sanatcin_fallback_image()));
+        $dimensions = $size === 'sanatcin-hero' ? [1440, 810] : [800, 450];
+        printf(
+            '<img src="%s" alt="" width="%d" height="%d" loading="%s" decoding="async"%s>',
+            esc_url(sanatcin_fallback_image()),
+            $dimensions[0],
+            $dimensions[1],
+            $priority ? 'eager' : 'lazy',
+            $priority ? ' fetchpriority="high"' : ''
+        );
     }
 }
 
+function sanatcin_post_image_caption($post_id = null) {
+    $thumbnail_id = get_post_thumbnail_id($post_id ?: get_the_ID());
+    if (!$thumbnail_id) return '';
+    return trim((string) wp_get_attachment_caption($thumbnail_id));
+}
+
+function sanatcin_archive_heading() {
+    if (is_category()) return single_cat_title('', false);
+    if (is_tag()) return single_tag_title('', false);
+    return get_the_archive_title();
+}
+
+function sanatcin_story_card($heading = 'h3') {
+    $category = sanatcin_primary_category();
+    ?>
+    <article class="story-card">
+        <a class="story-image" href="<?php the_permalink(); ?>" aria-hidden="true" tabindex="-1"><?php sanatcin_story_image(); ?></a>
+        <div class="story-body">
+            <span class="eyebrow"><?php echo esc_html($category ? $category->name : 'SanatÇin'); ?></span>
+            <<?php echo tag_escape($heading); ?>><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></<?php echo tag_escape($heading); ?>>
+            <div class="story-meta"><?php echo esc_html(get_the_date('j F Y')); ?> · <?php echo esc_html(sanatcin_reading_time()); ?> dakika</div>
+        </div>
+    </article>
+    <?php
+}

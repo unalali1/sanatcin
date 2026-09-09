@@ -2,22 +2,25 @@
 /**
  * Plugin Name: SanatÇin Otomasyon Köprüsü
  * Description: Railway haber işleyicisi için kaynak alanlarını ve tekrar kontrolü REST uçlarını sağlar.
- * Version: 0.1.1
+ * Version: 0.2.0
  * Requires at least: 6.5
  * Requires PHP: 8.1
  */
 
 if (!defined('ABSPATH')) exit;
 
-const SANATCIN_AUTOMATION_VERSION = '0.1.1';
+const SANATCIN_AUTOMATION_VERSION = '0.2.0';
 
 const SANATCIN_META_FIELDS = [
     'sanatcin_source_url' => 'string',
     'sanatcin_source_name' => 'string',
     'sanatcin_source_hash' => 'string',
     'sanatcin_image_hash' => 'string',
+    'sanatcin_image_source_url' => 'string',
+    'sanatcin_image_description' => 'string',
     'sanatcin_score' => 'number',
-    'sanatcin_original_title' => 'string'
+    'sanatcin_original_title' => 'string',
+    'sanatcin_editorial_mode' => 'string'
 ];
 
 function sanatcin_sanitize_meta_text($value) {
@@ -111,10 +114,11 @@ function sanatcin_source_box() {
         $name = get_post_meta($post->ID, 'sanatcin_source_name', true);
         $url = get_post_meta($post->ID, 'sanatcin_source_url', true);
         $score = get_post_meta($post->ID, 'sanatcin_score', true);
+        $mode = get_post_meta($post->ID, 'sanatcin_editorial_mode', true);
         echo '<p><strong>Kaynak:</strong> ' . esc_html($name ?: '—') . '</p>';
         echo '<p><strong>Puan:</strong> ' . esc_html($score ?: '—') . '</p>';
+        echo '<p><strong>Editoryal biçim:</strong> ' . esc_html($mode ?: '—') . '</p>';
         if ($url) echo '<p><a href="' . esc_url($url) . '" target="_blank" rel="noopener">Özgün haberi aç</a></p>';
     }, 'post', 'side', 'default');
 }
 add_action('add_meta_boxes', 'sanatcin_source_box');
-

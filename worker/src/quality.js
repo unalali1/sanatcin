@@ -7,23 +7,40 @@ const BOILERPLATE_PATTERNS = [
   /business license|işletme sicil numarası|营业执照/iu,
   /publication business permit|yayın işletme izni|出版物经营许可证/iu,
   /telecommunications?.{0,30}(?:permit|license)|telekomünikasyon.{0,40}izni|电信与信息服务业务经营许可证/iu,
-  /other VOGUE sites|diğer VOGUE siteleri|更多VOGUE网站/iu
+  /other VOGUE sites|diğer VOGUE siteleri|更多VOGUE网站/iu,
+  /(?:privacy policy|cookie policy|terms (?:of use|and conditions)|gizlilik politikası|çerez politikası|kullanım koşulları)/iu,
+  /(?:follow us|subscribe|newsletter|sign in|log in|bizi takip edin|abone ol|giriş yap)/iu
+];
+
+const OUTPUT_BOILERPLATE_PATTERNS = [
+  ...BOILERPLATE_PATTERNS,
+  /(?:ana sayfa|haberler|iletişim|hakkımızda).{0,80}(?:gizlilik|çerez|kullanım koşulları)/iu
 ];
 
 export function countCjk(value = '') {
   return value.match(CJK_PATTERN)?.length ?? 0;
 }
 
-export function translationIssues({ title = '', excerpt = '', text = '' }) {
+export function translationIssues({ title = '', excerpt = '', text = '', paragraphs = [] }) {
   const issues = [];
   const combined = `${title}\n${excerpt}\n${text}`.trim();
-  if (text.trim().length < 300) issues.push('Türkçe haber gövdesi 300 karakterden kısa.');
+  const paragraphCount = paragraphs.length || text.split(/\n{2,}/).filter((item) => item.trim()).length;
+  if (text.trim().length < 700) issues.push('Türkçe haber gövdesi 700 karakterden kısa.');
+  if (paragraphCount < 4) issues.push('Türkçe haber gövdesi en az dört paragraf içermiyor.');
   if (countCjk(combined) > 0) issues.push('Metinde çevrilmemiş Çince karakterler bulunuyor.');
   const words = text.match(/\p{L}+/gu) ?? [];
   const turkishSignals = text.match(TURKISH_WORD_PATTERN)?.length ?? 0;
   if (words.length >= 80 && turkishSignals < 4) issues.push('Metin akıcı Türkçe haber dili olarak doğrulanamadı.');
-  if (title.trim().length < 20 || title.trim().length > 120) issues.push('Başlık uzunluğu uygun değil.');
-  if (excerpt.trim().length < 80 || excerpt.trim().length > 240) issues.push('Spot uzunluğu uygun değil.');
+  if (title.trim().length < 35 || title.trim().length > 105) issues.push('Başlık uzunluğu uygun değil.');
+  if (excerpt.trim().length < 100 || excerpt.trim().length > 220) issues.push('Spot uzunluğu uygun değil.');
+  if (OUTPUT_BOILERPLATE_PATTERNS.some((pattern) => pattern.test(combined))) {
+    issues.push('Türkçe metinde navigasyon, üyelik veya yasal site artığı bulunuyor.');
+  }
+  const titleLetters = title.match(/\p{L}/gu) ?? [];
+  const upperLetters = title.match(/\p{Lu}/gu) ?? [];
+  if (titleLetters.length > 15 && upperLetters.length / titleLetters.length > 0.72) {
+    issues.push('Başlık gereksiz biçimde büyük harflerden oluşuyor.');
+  }
   return issues;
 }
 
@@ -36,7 +53,7 @@ export function sourceContentIssues(text = '') {
   const compact = text.replace(/\s+/g, ' ').trim();
   const boilerplateHits = BOILERPLATE_PATTERNS.filter((pattern) => pattern.test(compact)).length;
   const issues = [];
-  if (compact.length < 300) issues.push('Makale gövdesi güvenilir biçimde çıkarılamadı.');
+  if (compact.length < 500) issues.push('Makale gövdesi güvenilir biçimde çıkarılamadı.');
   if (boilerplateHits >= 2) issues.push('Makale yerine site navigasyonu veya yasal metin çıkarıldı.');
   return issues;
 }
@@ -86,9 +103,11 @@ export function imageDimensions(buffer, contentType = '') {
 export function assertImageDimensions(buffer, contentType) {
   const dimensions = imageDimensions(buffer, contentType);
   if (!dimensions) throw new Error('Kaynak görsel boyutları doğrulanamadı.');
-  if (dimensions.width < 600 || dimensions.height < 340) {
+  if (dimensions.width < 1000 || dimensions.height < 560) {
     throw new Error(`Kaynak görsel çözünürlüğü yetersiz: ${dimensions.width}x${dimensions.height}.`);
   }
+  const ratio = dimensions.width / dimensions.height;
+  if (ratio < 1.15 || ratio > 2.4) throw new Error(`Kaynak görsel oranı haber kartlarına uygun değil: ${dimensions.width}x${dimensions.height}.`);
   return dimensions;
 }
 
@@ -102,4 +121,24 @@ export function isUsableImageUrl(value) {
   } catch {
     return false;
   }
+}
+
+const TITLE_STOP_WORDS = new Set(['ve', 'ile', 'bir', 'bu', 'için', 'da', 'de', 'mi', 'mı', 'mu', 'mü', 'the', 'and', 'of', 'in', 'to']);
+
+export function normalizedTitleTokens(value = '') {
+  return new Set(value
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFKD')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter((token) => token.length > 2 && !TITLE_STOP_WORDS.has(token)));
+}
+
+export function titleSimilarity(left, right) {
+  const a = normalizedTitleTokens(left);
+  const b = normalizedTitleTokens(right);
+  if (!a.size || !b.size) return { score: 0, shared: 0 };
+  const shared = [...a].filter((token) => b.has(token)).length;
+  const union = new Set([...a, ...b]).size;
+  return { score: shared / union, shared };
 }

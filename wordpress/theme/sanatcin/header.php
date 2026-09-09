@@ -13,15 +13,18 @@
 <header class="brand-header">
     <div class="site-wrap brand-row">
         <a class="brand-logo" href="<?php echo esc_url(home_url('/')); ?>" aria-label="SanatÇin ana sayfa">
-            <img src="<?php echo esc_url(get_template_directory_uri() . '/assets/images/logo.webp'); ?>" alt="<?php bloginfo('name'); ?>">
+            <img src="<?php echo esc_url(get_template_directory_uri() . '/assets/images/logo.webp'); ?>" alt="<?php bloginfo('name'); ?>" width="423" height="220" fetchpriority="high">
         </a>
-        <button class="search-toggle" type="button" aria-expanded="false" aria-controls="site-search" aria-label="Arama panelini aç">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-        </button>
+        <div class="header-actions">
+            <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation"><span></span><span></span><span></span><span class="screen-reader-text">Menüyü aç</span></button>
+            <button class="search-toggle" type="button" aria-expanded="false" aria-controls="site-search" aria-label="Arama panelini aç">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+            </button>
+        </div>
     </div>
     <div id="site-search" class="search-panel"><?php get_search_form(); ?></div>
 </header>
-<nav class="main-nav" aria-label="Ana menü">
+<nav id="primary-navigation" class="main-nav" aria-label="Ana menü">
     <div class="site-wrap">
         <?php
         wp_nav_menu([
@@ -48,4 +51,3 @@
     </div>
 </nav>
 <main id="content">
-

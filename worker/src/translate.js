@@ -1,115 +1,119 @@
 import OpenAI from 'openai';
 import { config } from './config.js';
-import { assertTranslationQuality, translationIssues } from './quality.js';
+import { assertTranslationQuality } from './quality.js';
 
 const client = new OpenAI({ apiKey: config.openaiApiKey });
 
-function chunks(text, maxChars = 6000) {
-  const paragraphs = text.split(/\n{2,}/).map((item) => item.trim()).filter(Boolean);
-  const output = [];
-  let current = '';
-  for (const paragraph of paragraphs) {
-    if (current && current.length + paragraph.length + 2 > maxChars) {
-      output.push(current);
-      current = '';
-    }
-    current += `${current ? '\n\n' : ''}${paragraph}`;
-  }
-  if (current) output.push(current);
-  return output;
+function parseJson(value) {
+  return JSON.parse(value.replace(/^```json\s*|\s*```$/g, '').trim());
 }
 
 function escapeHtml(value) {
   return value.replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' })[char]);
 }
 
-async function translateChunk(text, index, total) {
+function cleanString(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function normalizeDraft(article, draft) {
+  const paragraphs = (Array.isArray(draft.paragraphs) ? draft.paragraphs : [])
+    .map(cleanString)
+    .filter(Boolean);
+  const text = paragraphs.join('\n\n');
+  const tags = [...new Set((Array.isArray(draft.tags) ? draft.tags : [])
+    .map(cleanString)
+    .filter(Boolean))].slice(0, 5);
+  return {
+    ...article,
+    title: cleanString(draft.title),
+    excerpt: cleanString(draft.excerpt),
+    paragraphs,
+    text,
+    tags,
+    bodyHtml: paragraphs.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join('\n')
+  };
+}
+
+function sourceExcerpt(text, maxChars = 24_000) {
+  const compact = String(text ?? '').trim();
+  if (compact.length <= maxChars) return compact;
+  const head = compact.slice(0, Math.floor(maxChars * 0.78));
+  const tail = compact.slice(-Math.floor(maxChars * 0.22));
+  return `${head}\n\n[KAYNAK METNİN ORTA BÖLÜMÜ UZUNLUK NEDENİYLE KISALTILDI]\n\n${tail}`;
+}
+
+async function createDigest(article, feedback = []) {
   const response = await client.responses.create({
     model: config.openaiModel,
     input: [
       {
         role: 'system',
         content: [
-          'Çince ve İngilizce bilen kıdemli bir Türkçe haber çevirmeni ve editörüsün.',
-          'Kaynak metindeki doğrulanabilir bilgileri eksiksiz koru; bilgi ekleme, tahmin yürütme veya abartma.',
-          'Kelime kelime çeviri yapma; doğal, açık ve profesyonel Türkçe haber dili kullan.',
-          'Çince kişi ve yer adlarını standart Hanyu Pinyin yazımıyla Latin harflerine aktar.',
-          'Başlıklar dahil hiçbir Çince karakter bırakma.',
-          'Fotoğraf altyazılarını, fotoğraf kredilerini, editör notlarını, navigasyon kalıntılarını ve “son/编辑/记者/摄/供图” türü kaynak sitesi artıklarını çıkar.',
-          'Yalnızca Türkçe haber metnini ver.'
+          'SanatÇin için çalışan, Çince ve İngilizce kaynakları okuyabilen kıdemli bir Türkçe haber editörüsün.',
+          'Görevin tam metin çevirisi yapmak değil; kaynakta doğrulanabilen bilgilerden özgün, doğal ve telif açısından ölçülü bir Türkçe haber özeti yazmaktır.',
+          'Kaynağın cümle yapısını kopyalama. Bilgi, sayı, tarih, unvan, kişi, kurum, eser ve yer adlarını değiştirme; kaynakta olmayan ayrıntı, yorum veya alıntı ekleme.',
+          'Çince kişi ve yer adlarını yerleşik Türkçe kullanım varsa onunla, yoksa standart Hanyu Pinyin ile Latin harflerinde yaz. Hiçbir Çince karakter bırakma.',
+          'Reklam dili, propaganda, basın bülteni övgüsü, fotoğraf kredisi, editör notu, navigasyon ve yasal site metinlerini çıkar.',
+          'Başlık haberin asıl somut gelişmesini anlatsın; sansasyon, kelime kelime çeviri ve belirsiz tamlamalardan kaçın.',
+          'Spot başlığı tekrar etmeden haberi bir cümlede özetlesin. Gövde 4-7 kısa paragraf ve en az 700 karakter olsun.',
+          'Yalnız geçerli JSON ver.'
         ].join(' ')
       },
-      { role: 'user', content: `Bu, haberin ${index + 1}/${total} bölümüdür:\n\n${text}` }
+      {
+        role: 'user',
+        content: [
+          feedback.length ? `Önceki taslaktaki sorunları gider: ${feedback.join(' | ')}` : '',
+          `Kaynak: ${article.source.name}`,
+          `Kaynak URL: ${article.url}`,
+          `Kaynak başlığı: ${article.title}`,
+          `Kategori: ${article.category}`,
+          `Kaynak metin:\n${sourceExcerpt(article.text)}`,
+          'JSON şeması: {"title":"35-105 karakter","excerpt":"100-220 karakter","paragraphs":["paragraf 1","paragraf 2","paragraf 3","paragraf 4"],"tags":["en fazla 5 etiket"]}'
+        ].filter(Boolean).join('\n\n')
+      }
     ]
   });
-  return response.output_text.trim();
+  return normalizeDraft(article, parseJson(response.output_text));
 }
 
-async function polishChunk(sourceText, draft, index, total, problems = []) {
+async function auditDigest(article, draft) {
   const response = await client.responses.create({
     model: config.openaiModel,
     input: [
       {
         role: 'system',
         content: [
-          'Kıdemli bir Türkçe kültür-sanat haber editörüsün.',
-          'Taslağı kaynak metinle karşılaştır ve anlam hatalarını düzelt.',
-          'Bütün yabancı cümleleri Türkçeye çevir; hiçbir Çince karakter bırakma.',
-          'Özel adları standart Latin harfli yazımla ver.',
-          'Düşük kaliteli makine çevirisi kalıplarını temizle, cümleleri doğal Türkçe söz dizimiyle yeniden kur.',
-          'Yeni bilgi ekleme, özetleme veya yorum yapma.',
-          'Fotoğraf kredilerini ve editoryal artıkları çıkar.',
-          'Yalnızca yayıma hazır Türkçe gövde metnini ver.'
+          'Kaynak ile Türkçe haber taslağını karşılaştıran bağımsız bir doğrulama editörüsün.',
+          'Aşağıdaki koşulların hepsi sağlanmadıkça accepted=false ver:',
+          'haber yalnız kültür-sanat, sinema, moda-tasarım veya şehir yaşamı kapsamındadır;',
+          'başlık ve spot gövde tarafından desteklenir; kişi, kurum, tarih, sayı ve olaylar kaynağa sadıktır;',
+          'metin doğal Türkçedir ve Çince karakter, reklam, propaganda, navigasyon ya da yasal site artığı içermez;',
+          'taslak en az dört paragraftır ve gereksiz tekrar içermez.',
+          'Yalnız geçerli JSON ver.'
         ].join(' ')
       },
       {
         role: 'user',
-        content: `Bölüm ${index + 1}/${total}\n${problems.length ? `Düzeltilmesi gereken sorunlar: ${problems.join(' ')}\n` : ''}\nKAYNAK:\n${sourceText}\n\nTÜRKÇE TASLAK:\n${draft}`
+        content: `KAYNAK:\n${sourceExcerpt(article.text, 18_000)}\n\nTÜRKÇE TASLAK:\n${JSON.stringify({ title: draft.title, excerpt: draft.excerpt, paragraphs: draft.paragraphs })}\n\nJSON şeması: {"accepted":true,"issues":["kısa ve somut sorun"]}`
       }
     ]
   });
-  return response.output_text.trim();
-}
-
-async function createMetadata(article, translatedText, problems = []) {
-  const response = await client.responses.create({
-    model: config.openaiModel,
-    input: [
-      {
-        role: 'system',
-        content: 'Bir Türkçe kültür-sanat sitesinin kıdemli editörüsün. Başlık ve spot tamamen Türkçe olmalı; Çince karakter kullanma. Özel adları Latin harfleriyle yaz. Geçerli JSON dışında hiçbir şey yazma.'
-      },
-      {
-        role: 'user',
-        content: `${problems.length ? `Önceki denemedeki sorunlar: ${problems.join(' ')}\n` : ''}Kaynak başlığı: ${article.title}\nKategori: ${article.category}\nMetin: ${translatedText.slice(0, 6000)}\n\nŞu JSON biçiminde Türkçe metadata üret: {"title":"60-100 karakterlik doğal haber başlığı","excerpt":"140-200 karakterlik haber spotu","tags":["en fazla 5 etiket"]}`
-      }
-    ]
-  });
-  const raw = response.output_text.replace(/^```json\s*|\s*```$/g, '').trim();
-  return JSON.parse(raw);
+  const result = parseJson(response.output_text);
+  return {
+    accepted: result.accepted === true,
+    issues: (Array.isArray(result.issues) ? result.issues : [result.reason]).map(cleanString).filter(Boolean).slice(0, 8)
+  };
 }
 
 export async function translateArticle(article) {
-  const sourceParts = chunks(article.text);
-  const editedParts = [];
-  for (let index = 0; index < sourceParts.length; index += 1) {
-    const draft = await translateChunk(sourceParts[index], index, sourceParts.length);
-    let edited = await polishChunk(sourceParts[index], draft, index, sourceParts.length);
-    const problems = translationIssues({ title: 'Geçici haber başlığı kontrolü', excerpt: 'Geçici spot metni yalnızca gövde kalite kontrolü için yeterli uzunlukta hazırlanmıştır.', text: edited })
-      .filter((item) => !item.startsWith('Başlık') && !item.startsWith('Spot'));
-    if (problems.length) edited = await polishChunk(sourceParts[index], edited, index, sourceParts.length, problems);
-    editedParts.push(edited);
+  let draft = await createDigest(article);
+  let audit = await auditDigest(article, draft);
+  if (!audit.accepted) {
+    draft = await createDigest(article, audit.issues.length ? audit.issues : ['Kaynakla tam uyumlu, doğal bir Türkçe haber olarak yeniden yaz.']);
+    audit = await auditDigest(article, draft);
   }
-
-  const fullText = editedParts.join('\n\n');
-  let metadata = await createMetadata(article, fullText);
-  let issues = translationIssues({ ...metadata, text: fullText });
-  if (issues.some((item) => item.startsWith('Başlık') || item.startsWith('Spot') || item.includes('Çince'))) {
-    metadata = await createMetadata(article, fullText, issues);
-    issues = translationIssues({ ...metadata, text: fullText });
-  }
-  assertTranslationQuality({ ...metadata, text: fullText });
-  const bodyHtml = fullText.split(/\n{2,}/).map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join('\n');
-  return { ...article, ...metadata, bodyHtml };
+  if (!audit.accepted) throw new Error(`Editoryal doğrulama başarısız: ${audit.issues.join(' ') || 'gerekçe belirtilmedi'}`);
+  assertTranslationQuality(draft);
+  return { ...draft, editorialMode: 'original-turkish-digest-v1' };
 }
-

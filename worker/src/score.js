@@ -9,6 +9,16 @@ const terms = {
 
 const interestSignals = ['first','largest','record','award','festival','opens','premiere','new','major','international','historic','首次','最大','纪录','获奖','开幕','首映','新','国际','历史'];
 
+const excludedTopicPatterns = [
+  /\b(?:bank capital|capital injection|central bank|commercial bank|financial institution|stock market|bond market|gdp|tariff|trade war|military|missile|election|party congress)\b/i,
+  /(?:银行资本|资本补充|中央银行|金融机构|股票市场|债券市场|国内生产总值|关税|军事|导弹|选举|党代会)/u
+];
+
+export function hasExcludedTopic(candidate) {
+  const haystack = `${candidate.title} ${candidate.summary ?? ''}`;
+  return excludedTopicPatterns.some((pattern) => pattern.test(haystack));
+}
+
 export function inferCategory(candidate) {
   if (candidate.source.defaultCategory) return candidate.source.defaultCategory;
   const haystack = `${candidate.title} ${candidate.summary ?? ''}`.toLowerCase();
@@ -31,6 +41,9 @@ export function freshnessPoints(publishedAt, now = new Date()) {
 }
 
 export function scoreCandidate(candidate, now = new Date()) {
+  if (hasExcludedTopic(candidate)) {
+    return { ...candidate, category: 'uygunsuz', eligible: false, score: 0, scoreReason: 'Kapsam dışı finans, siyaset veya askerî gündem.' };
+  }
   const haystack = `${candidate.title} ${candidate.summary ?? ''}`.toLowerCase();
   const signals = interestSignals.reduce((sum, term) => sum + (haystack.includes(term) ? 1 : 0), 0);
   const numberBonus = /\d/.test(haystack) ? 3 : 0;
@@ -38,7 +51,7 @@ export function scoreCandidate(candidate, now = new Date()) {
   const source = Math.min(10, candidate.source.quality ?? 5);
   const category = inferCategory(candidate);
   const relevance = terms[category].some((term) => haystack.includes(term)) || candidate.source.defaultCategory ? 20 : 10;
-  return { ...candidate, category, score: freshnessPoints(candidate.publishedAt, now) + interest + source + relevance };
+  return { ...candidate, category, eligible: true, score: freshnessPoints(candidate.publishedAt, now) + interest + source + relevance };
 }
 
 export function selectByCategory(candidates, maxPerCategory = 2) {
@@ -49,4 +62,3 @@ export function selectByCategory(candidates, maxPerCategory = 2) {
   }
   return selected.sort((a, b) => b.score - a.score);
 }
-

@@ -17,6 +17,7 @@ export const config = {
   wpAppPassword: (process.env.WP_APP_PASSWORD ?? '').replace(/\s+/g, ''),
   publishStatus: process.env.PUBLISH_STATUS ?? 'draft',
   dryRun: boolean('DRY_RUN'),
+  requirePublishedDate: boolean('REQUIRE_PUBLISHED_DATE', true),
   maxPerCategory: Math.max(1, Math.min(integer('MAX_PER_CATEGORY', 2), 2)),
   primaryLookbackHours: integer('PRIMARY_LOOKBACK_HOURS', 72),
   fallbackLookbackDays: integer('FALLBACK_LOOKBACK_DAYS', 7),
@@ -41,4 +42,3 @@ export function validateConfig() {
     throw new Error('PUBLISH_STATUS yalnız publish veya draft olabilir.');
   }
 }
-

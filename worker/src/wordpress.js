@@ -2,12 +2,16 @@ import crypto from 'node:crypto';
 import OpenAI from 'openai';
 import { config } from './config.js';
 import { sourceHash } from './fetch.js';
-import { assertImageDimensions, isUsableImageUrl } from './quality.js';
+import { assertImageDimensions, isUsableImageUrl, titleSimilarity } from './quality.js';
 
 const auth = `Basic ${Buffer.from(`${config.wpUsername}:${config.wpAppPassword}`).toString('base64')}`;
 const categoryIds = new Map();
 const runImageHashes = new Set();
 const ai = new OpenAI({ apiKey: config.openaiApiKey });
+
+function escapeHtml(value = '') {
+  return String(value).replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' })[char]);
+}
 
 async function validateEditorialImage(article, image) {
   const response = await ai.responses.create({
@@ -23,7 +27,10 @@ async function validateEditorialImage(article, image) {
             'Ekonomi, finans, siyaset, spor ve bu dört alanla ilgisiz içerikler için kategori uygunsuz olmalı.',
             'Görsel yalnız habere doğrudan ilişkin fotoğraf, illüstrasyon veya etkinlik afişiyse kullanılabilir.',
             'QR kod, logo, genel haber kartı, site ekran görüntüsü, boş/soyut yer tutucu ya da başlıkla ilgisiz görseli reddet.',
-            'Yalnız şu JSON biçiminde yanıt ver: {"usable":true,"category":"kultur-sanat","reason":"kısa gerekçe"}',
+            'Kare/dikey QR kodları, yayınevi/medya logolu kimlik kartlarını, internet sitesi ekran görüntülerini ve başka bir habere de uyabilecek jenerik görselleri reddet.',
+            'description alanına görselde gerçekten görülenleri, 8-18 kelimelik doğal Türkçe alternatif metin olarak yaz.',
+            'kind alanı editorial-photo, illustration veya event-poster olmalı.',
+            'Yalnız şu JSON biçiminde yanıt ver: {"usable":true,"category":"kultur-sanat","kind":"editorial-photo","description":"kısa görsel açıklaması","reason":"kısa gerekçe"}',
             `Başlık: ${article.title}`,
             `Mevcut kategori: ${article.category}`
           ].join('\n')
@@ -35,9 +42,13 @@ async function validateEditorialImage(article, image) {
   const raw = response.output_text.replace(/^\`\`\`json\s*|\s*\`\`\`$/g, '').trim();
   const result = JSON.parse(raw);
   if (result.usable !== true) throw new Error(`Kaynak görsel editoryal olarak uygun değil: ${result.reason ?? 'gerekçe belirtilmedi'}`);
+  if (!['editorial-photo', 'illustration', 'event-poster'].includes(result.kind)) {
+    throw new Error(`Kaynak görsel türü uygun değil: ${result.kind ?? 'belirlenemedi'}.`);
+  }
   if (result.category !== article.category) {
     throw new Error(`Haber kategoriyle uyumlu değil: ${article.category} yerine ${result.category ?? 'uygunsuz'}.`);
   }
+  return { kind: result.kind, altText: String(result.description ?? '').replace(/\s+/g, ' ').trim().slice(0, 180) };
 }
 
 async function wp(path, options = {}) {
@@ -50,7 +61,7 @@ async function wp(path, options = {}) {
 }
 
 export async function knownHashes(hashes) {
-  if (config.dryRun || hashes.length === 0) return [];
+  if (hashes.length === 0) return [];
   const result = await wp('/sanatcin/v1/known', { method: 'POST', body: JSON.stringify({ hashes }) });
   return result.known ?? [];
 }
@@ -88,13 +99,15 @@ export async function prepareFeaturedImage(article) {
       const buffer = Buffer.from(await response.arrayBuffer());
       if (buffer.length < 12_000) throw new Error('Kaynak görsel güvenilir kalite için çok küçük.');
       if (buffer.length > 10_000_000) throw new Error('Kaynak görsel 10 MB sınırını aşıyor.');
-      assertImageDimensions(buffer, contentType);
+      const dimensions = assertImageDimensions(buffer, contentType);
       const imageHash = crypto.createHash('sha256').update(buffer).digest('hex');
       if (runImageHashes.has(imageHash)) throw new Error('Aynı görsel bu çalışmada başka bir haber için zaten kullanıldı.');
       const existing = await wp(`/sanatcin/v1/image-known?hash=${encodeURIComponent(imageHash)}`);
       if (existing.known) throw new Error('Aynı görsel daha önce başka bir haberde kullanılmış.');
-      const image = { buffer, contentType: contentType.split(';')[0], extension, imageHash, sourceUrl: imageUrl };
-      await validateEditorialImage(article, image);
+      const image = { buffer, contentType: contentType.split(';')[0], extension, imageHash, sourceUrl: imageUrl, dimensions };
+      const validation = await validateEditorialImage(article, image);
+      image.kind = validation.kind;
+      image.altText = validation.altText;
       return image;
     } catch (error) {
       errors.push(error.message);
@@ -117,14 +130,20 @@ async function uploadFeaturedImage(article, image) {
   });
   await wp(`/wp/v2/media/${media.id}`, {
     method: 'POST',
-    body: JSON.stringify({ title: article.title, alt_text: article.title })
+    body: JSON.stringify({
+      title: article.title,
+      alt_text: image.altText || article.title,
+      caption: `Görsel: ${article.source.name}`,
+      description: `Kaynak görsel: ${image.sourceUrl}`
+    })
   });
   runImageHashes.add(image.imageHash);
   return media.id;
 }
 
 export async function publishArticle(article, preparedImage = null) {
-  const sourceLine = `<aside class="sanatcin-source"><strong>Kaynak:</strong> <a href="${article.url}" target="_blank" rel="noopener noreferrer nofollow">${article.source.name}</a></aside>`;
+  const sourceUrl = new URL(article.url).href;
+  const sourceLine = `<aside class="sanatcin-source"><strong>Kaynak:</strong> <a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(article.source.name)}</a><span> · Kaynak haberden özgün Türkçe özet</span></aside>`;
   const category = await categoryId(article.category);
   const image = preparedImage ?? await prepareFeaturedImage(article);
   if (config.dryRun) {
@@ -150,8 +169,11 @@ export async function publishArticle(article, preparedImage = null) {
       sanatcin_source_name: article.source.name,
       sanatcin_source_hash: sourceHash(article.url),
       sanatcin_image_hash: image.imageHash,
+      sanatcin_image_source_url: image.sourceUrl,
+      sanatcin_image_description: image.altText || '',
       sanatcin_score: Math.round(article.score),
-      sanatcin_original_title: article.originalTitle
+      sanatcin_original_title: article.originalTitle,
+      sanatcin_editorial_mode: article.editorialMode
     }
   };
   let post = await wp('/wp/v2/posts', { method: 'POST', body: JSON.stringify(payload) });
@@ -159,4 +181,27 @@ export async function publishArticle(article, preparedImage = null) {
     post = await wp(`/wp/v2/posts/${post.id}`, { method: 'POST', body: JSON.stringify({ status: 'publish' }) });
   }
   return post;
+}
+
+function decodeTitle(value = '') {
+  return String(value)
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+    .replace(/&(?:amp|#038);/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export async function assertNoSimilarPublishedTitle(title) {
+  const posts = await wp('/wp/v2/posts?status=publish&per_page=100&orderby=date&order=desc&_fields=id,link,title');
+  for (const post of posts) {
+    const existingTitle = decodeTitle(post.title?.rendered);
+    const similarity = titleSimilarity(title, existingTitle);
+    if (similarity.shared >= 4 && similarity.score >= 0.62) {
+      throw new Error(`Benzer haber daha önce yayımlanmış: "${existingTitle}" (${Math.round(similarity.score * 100)}%).`);
+    }
+  }
 }

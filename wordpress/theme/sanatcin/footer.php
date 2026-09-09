@@ -1,37 +1,15 @@
 </main>
-<section class="newsletter">
-    <div class="site-wrap newsletter-grid">
-        <div>
-            <span class="eyebrow" style="color:#ffe19f">Haftalık seçki</span>
-            <h2>SanatÇin Bülteni</h2>
-            <p>Çin'in kültür, sanat, sinema, moda ve yaşam dünyasından görülmeye değer hikâyeler.</p>
-        </div>
-        <div>
-            <p>Haftanın gürültüsünü değil, öne çıkan hikâyelerini gönderiyoruz.</p>
-            <form class="newsletter-form" action="#" method="post">
-                <label class="screen-reader-text" for="newsletter-email">E-posta adresiniz</label>
-                <input id="newsletter-email" name="email" type="email" placeholder="E-posta adresiniz" required>
-                <button type="submit">Abone ol →</button>
-            </form>
-        </div>
-    </div>
-</section>
 <footer class="site-footer">
     <div class="site-wrap footer-row">
-        <a class="footer-brand" href="<?php echo esc_url(home_url('/')); ?>">SanatÇin</a>
+        <div class="footer-about"><a class="footer-brand" href="<?php echo esc_url(home_url('/')); ?>">SanatÇin</a><p>Çin’in kültür, sanat, sinema, moda ve şehir yaşamına Türkçe bir bakış.</p></div>
         <div class="footer-links">
-            <a href="<?php echo esc_url(home_url('/hakkimizda/')); ?>">Hakkımızda</a><span>·</span>
-            <a href="<?php echo esc_url(home_url('/iletisim/')); ?>">İletişim</a><span>·</span>
-            <a href="<?php echo esc_url(home_url('/gizlilik/')); ?>">Gizlilik</a>
+            <?php foreach (['kultur-sanat' => 'Kültür & Sanat', 'sinema' => 'Sinema', 'moda-tasarim' => 'Moda & Tasarım', 'sehir-yasam' => 'Şehir & Yaşam'] as $slug => $label) : $category = get_category_by_slug($slug); if ($category) : ?>
+                <a href="<?php echo esc_url(get_category_link($category)); ?>"><?php echo esc_html($label); ?></a>
+            <?php endif; endforeach; ?>
         </div>
-        <div class="social-links" aria-label="Sosyal medya">
-            <a href="#" aria-label="Instagram"><span class="social-icon">◎</span>Instagram</a>
-            <a href="#" aria-label="X"><span class="social-icon">𝕏</span></a>
-            <a href="#" aria-label="YouTube"><span class="social-icon">▶</span>YouTube</a>
-        </div>
+        <p class="copyright">© <?php echo esc_html(wp_date('Y')); ?> SanatÇin</p>
     </div>
 </footer>
 <?php wp_footer(); ?>
 </body>
 </html>
-

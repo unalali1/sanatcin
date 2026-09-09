@@ -6,7 +6,7 @@ import { scoreCandidate } from './score.js';
 import { rerankCandidates } from './rank.js';
 import { CATEGORIES, SOURCES } from './sources.js';
 import { translateArticle } from './translate.js';
-import { knownHashes, prepareFeaturedImage, publishArticle } from './wordpress.js';
+import { assertNoSimilarPublishedTitle, knownHashes, prepareFeaturedImage, publishArticle } from './wordpress.js';
 
 function uniqueCandidates(items) {
   const urls = new Set();
@@ -45,10 +45,10 @@ async function run() {
   try {
     ranked = await rerankCandidates(newCandidates);
   } catch (error) {
-    ranked = newCandidates;
-    log('error', 'Yapay zekâ puanlaması başarısız; deterministik puan kullanılıyor', { error: error.message });
+    ranked = [];
+    log('error', 'Yapay zekâ puanlaması başarısız; güvenlik gereği bu çalışmada yayın yapılmayacak', { error: error.message });
   }
-  const queues = Object.fromEntries(CATEGORIES.map(({ slug }) => [slug, ranked.filter((item) => item.category === slug).sort((a, b) => b.score - a.score)]));
+  const queues = Object.fromEntries(CATEGORIES.map(({ slug }) => [slug, ranked.filter((item) => item.eligible !== false && item.category === slug).sort((a, b) => b.score - a.score)]));
   log('info', 'Aday seçimi tamamlandı', {
     discovered: candidates.length,
     newCandidates: newCandidates.length,
@@ -66,10 +66,15 @@ async function run() {
           log('info', 'Eski makale atlandı', { source: candidate.source.id, url: candidate.url, publishedAt: article.publishedAt });
           continue;
         }
+        if (config.requirePublishedDate && !article.publishedAt) {
+          log('info', 'Yayın tarihi doğrulanamayan makale atlandı', { source: candidate.source.id, url: candidate.url });
+          continue;
+        }
         // Reject missing, invalid, or repeated images before spending time and API
         // budget on translation. The hash is reserved only after translation succeeds.
         const image = await prepareFeaturedImage(article);
         const translated = await translateArticle({ ...article, originalTitle: article.title });
+        await assertNoSimilarPublishedTitle(translated.title);
         const post = await publishArticle(translated, image);
         results.push({ source: candidate.source.id, category: candidate.category, score: candidate.score, scoreReason: candidate.scoreReason, postId: post.id, link: post.link, mode: config.dryRun ? 'dry-run' : config.publishStatus });
         categoryPublished += 1;
@@ -89,4 +94,3 @@ run().catch((error) => {
   log('fatal', 'İşleyici durdu', { error: error.stack ?? error.message });
   process.exitCode = 1;
 });
-

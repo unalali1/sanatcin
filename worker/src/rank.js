@@ -9,8 +9,9 @@ export function applyAiScores(candidates, items, now = new Date()) {
   const byId = new Map(items.map((item) => [String(item.id), item]));
   return candidates.map((candidate) => {
     const ai = byId.get(String(candidate.id));
-    if (!ai) return candidate;
-    const category = allowedCategories.has(ai.category) ? ai.category : candidate.category;
+    if (!ai) return { ...candidate, eligible: false, category: 'uygunsuz', score: 0, scoreReason: 'Yapay zekâ editoryal değerlendirmesi alınamadı.' };
+    const eligible = ai.eligible === true && allowedCategories.has(ai.category);
+    const category = eligible ? ai.category : 'uygunsuz';
     const interest = Math.max(0, Math.min(100, Number(ai.interest) || 0));
     const relevance = Math.max(0, Math.min(100, Number(ai.relevance) || 0));
     const score =
@@ -18,7 +19,7 @@ export function applyAiScores(candidates, items, now = new Date()) {
       interest * 0.30 +
       relevance * 0.20 +
       Math.min(10, candidate.source.quality ?? 5);
-    return { ...candidate, category, score: Math.round(score * 10) / 10, scoreReason: String(ai.reason ?? '').slice(0, 240) };
+    return { ...candidate, eligible, category, score: eligible ? Math.round(score * 10) / 10 : 0, scoreReason: String(ai.reason ?? '').slice(0, 240) };
   });
 }
 
@@ -41,11 +42,11 @@ export async function rerankCandidates(candidates) {
     input: [
       {
         role: 'system',
-        content: 'SanatÇin için haber seçen kıdemli bir Türkçe kültür-sanat editörüsün. Yalnız geçerli JSON ver. Siyasi propaganda, sıradan protokol, reklam ve zayıf PR metinlerine düşük puan ver. Türkiye’deki okur için yenilik, görsel güç, özgünlük ve somut kültürel değer arıyoruz.'
+        content: 'SanatÇin için haber seçen kıdemli bir Türkçe kültür-sanat editörüsün. Yalnız geçerli JSON ver. Finans, ekonomi, borsa, bankacılık, siyaset, askerî gündem, spor, sıradan protokol, reklam ve zayıf PR metinleri kesinlikle kapsam dışıdır. Türkiye’deki okur için yenilik, görsel güç, özgünlük ve somut kültürel değer arıyoruz.'
       },
       {
         role: 'user',
-        content: `Her adayı dört kategoriden birine koy: kultur-sanat, sinema, moda-tasarim, sehir-yasam. interest ve relevance alanlarını 0-100 puanla. Aynı olayı tekrar eden adaylara düşük interest ver. JSON biçimi: {"items":[{"id":"...","category":"...","interest":0,"relevance":0,"reason":"kısa gerekçe"}]}. Adaylar:\n${JSON.stringify(batch)}`
+        content: `Önce her adayın yayın kapsamına girip girmediğini belirle. Yalnız gerçek kültür-sanat, sinema, moda-tasarım ve şehir yaşamı haberleri eligible=true olabilir. Finans/ekonomi/siyaset/spor/protokol/kurumsal PR için eligible=false ve category="uygunsuz" ver. Uygun adayları kultur-sanat, sinema, moda-tasarim veya sehir-yasam kategorisine koy. interest ve relevance alanlarını 0-100 puanla. Aynı olayı tekrar eden adaylara düşük interest ver. JSON biçimi: {"items":[{"id":"...","eligible":true,"category":"...","interest":0,"relevance":0,"reason":"kısa gerekçe"}]}. Adaylar:\n${JSON.stringify(batch)}`
       }
     ]
   });
@@ -53,4 +54,3 @@ export async function rerankCandidates(candidates) {
   const parsed = JSON.parse(raw);
   return applyAiScores(candidates, Array.isArray(parsed.items) ? parsed.items : []);
 }
-
