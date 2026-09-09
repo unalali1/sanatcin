@@ -83,16 +83,17 @@ async function uploadFeaturedImage(article, image) {
 export async function publishArticle(article) {
   const sourceLine = `<aside class="sanatcin-source"><strong>Kaynak:</strong> <a href="${article.url}" target="_blank" rel="noopener noreferrer nofollow">${article.source.name}</a></aside>`;
   const category = await categoryId(article.category);
+  const image = await downloadSourceImage(article);
   if (config.dryRun) {
+    runImageHashes.add(image.imageHash);
     return {
       id: null,
       link: null,
       dryRun: true,
-      payload: { title: article.title, excerpt: article.excerpt, status: config.publishStatus, categories: [category], sourceImageUrl: article.sourceImageUrl }
+      payload: { title: article.title, excerpt: article.excerpt, status: config.publishStatus, categories: [category], sourceImageUrl: article.sourceImageUrl, imageHash: image.imageHash }
     };
   }
 
-  const image = await downloadSourceImage(article);
   const featuredMedia = await uploadFeaturedImage(article, image);
   const payload = {
     title: article.title,
@@ -116,4 +117,3 @@ export async function publishArticle(article) {
   }
   return post;
 }
-
