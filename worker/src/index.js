@@ -6,7 +6,7 @@ import { scoreCandidate } from './score.js';
 import { rerankCandidates } from './rank.js';
 import { CATEGORIES, SOURCES } from './sources.js';
 import { translateArticle } from './translate.js';
-import { knownHashes, publishArticle } from './wordpress.js';
+import { knownHashes, prepareFeaturedImage, publishArticle } from './wordpress.js';
 
 function uniqueCandidates(items) {
   const urls = new Set();
@@ -66,8 +66,11 @@ async function run() {
           log('info', 'Eski makale atlandı', { source: candidate.source.id, url: candidate.url, publishedAt: article.publishedAt });
           continue;
         }
+        // Reject missing, invalid, or repeated images before spending time and API
+        // budget on translation. The hash is reserved only after translation succeeds.
+        const image = await prepareFeaturedImage(article);
         const translated = await translateArticle({ ...article, originalTitle: article.title });
-        const post = await publishArticle(translated);
+        const post = await publishArticle(translated, image);
         results.push({ source: candidate.source.id, category: candidate.category, score: candidate.score, scoreReason: candidate.scoreReason, postId: post.id, link: post.link, mode: config.dryRun ? 'dry-run' : config.publishStatus });
         categoryPublished += 1;
         log('info', config.dryRun ? 'Haber simülasyonu tamamlandı' : config.publishStatus === 'draft' ? 'Haber taslak olarak kaydedildi' : 'Haber yayımlandı', results.at(-1));
