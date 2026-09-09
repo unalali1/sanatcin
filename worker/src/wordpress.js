@@ -35,7 +35,7 @@ function extensionFor(contentType) {
   return { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[mime] ?? null;
 }
 
-async function downloadSourceImage(article) {
+export async function prepareFeaturedImage(article) {
   if (!isUsableImageUrl(article.sourceImageUrl)) throw new Error('Haberde kullanılabilir bir kaynak görsel bulunamadı.');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
@@ -80,10 +80,10 @@ async function uploadFeaturedImage(article, image) {
   return media.id;
 }
 
-export async function publishArticle(article) {
+export async function publishArticle(article, preparedImage = null) {
   const sourceLine = `<aside class="sanatcin-source"><strong>Kaynak:</strong> <a href="${article.url}" target="_blank" rel="noopener noreferrer nofollow">${article.source.name}</a></aside>`;
   const category = await categoryId(article.category);
-  const image = await downloadSourceImage(article);
+  const image = preparedImage ?? await prepareFeaturedImage(article);
   if (config.dryRun) {
     runImageHashes.add(image.imageHash);
     return {
