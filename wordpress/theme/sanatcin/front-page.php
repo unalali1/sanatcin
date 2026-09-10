@@ -11,7 +11,7 @@ if ($featured->have_posts()) : ?>
                 <span class="eyebrow"><?php echo esc_html($category ? $category->name : 'SanatÇin'); ?></span>
                 <h1><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h1>
                 <p class="lead-excerpt"><?php echo esc_html(wp_trim_words(get_the_excerpt(), 28)); ?></p>
-                <div class="story-meta"><?php echo esc_html(sanatcin_reading_time()); ?> dakikalık okuma · <?php echo esc_html(get_the_date('j F Y')); ?></div>
+                <div class="story-meta"><?php echo esc_html(get_the_date('j F Y')); ?></div>
             </div>
         </article>
         <?php if ($featured->have_posts()) : ?>
