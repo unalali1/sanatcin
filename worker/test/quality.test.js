@@ -25,6 +25,34 @@ test('Akıcı Türkçe metni kabul eder', () => {
   assert.deepEqual(issues, []);
 });
 
+test('kaynak süreci notlarını ve ham Pinyin zincirlerini reddeder', () => {
+  const base = {
+    title: 'Pekin’de açılan sergi kültürel mirasa yeni bir pencere açıyor',
+    excerpt: 'Yeni sergi, geleneksel üretim yöntemlerini çağdaş çalışmalarla bir araya getirerek izleyiciye kapsamlı bir seçki sunuyor.',
+    paragraphs: [
+      'Haberde etkinliğin açılış tarihi belirtilmemiş; daha fazla bilgi için kaynak internet sitesine bakılabilir.',
+      'Beijing Shi Wenhua Ju temsilcileri serginin önemini anlattı ve izleyicilerle bir araya geldi.',
+      'Program, farklı dönemlerden yapıtları aynı çatı altında buluşturuyor ve üretim süreçlerine ilişkin örnekler içeriyor.',
+      'Sergide yer alan çalışmalar, geleneksel yöntemlerle çağdaş yorumların nasıl bir araya geldiğini ortaya koyuyor.'
+    ]
+  };
+  const issues = translationIssues({ ...base, text: `${base.paragraphs.join('\n\n')} ${'Bu gelişme kültür ve sanat alanında yeni bir buluşma oluşturuyor. '.repeat(8)}` });
+  assert.ok(issues.some((item) => item.includes('kaynak-site artığı')));
+  assert.ok(issues.some((item) => item.includes('Pinyin')));
+});
+
+test('yinelenen haber cümlelerini reddeder', () => {
+  const repeated = 'Sergi, geleneksel yöntemlerle çağdaş yorumları aynı salonda buluşturarak izleyiciye geniş bir seçki sunuyor.';
+  const text = [repeated, repeated, 'Programda farklı dönemlerden sanatçıların çalışmaları yer alıyor ve üretim süreçleri ayrıntılı biçimde ele alınıyor.', 'Etkinlik, sanatçılar ile izleyiciler arasında yeni bir tartışma alanı açmayı amaçlıyor.', ...Array(7).fill('Küratörler seçkinin tarihsel bağlamını yeni yapıtlarla birlikte açıklıyor ve farklı disiplinler arasındaki ilişkiyi görünür kılıyor.')].join('\n\n');
+  const issues = translationIssues({
+    title: 'Pekin’de çağdaş sanat sergisi yeni yapıtlarla açıldı',
+    excerpt: 'Yeni sergi, farklı kuşaklardan sanatçıların çalışmalarını aynı çatı altında buluşturarak izleyiciye kapsamlı bir seçki sunuyor.',
+    text,
+    paragraphs: text.split('\n\n')
+  });
+  assert.ok(issues.some((item) => item.includes('yinelenen cümle')));
+});
+
 test('Logo ve yer tutucu görselleri reddeder', () => {
   assert.equal(isUsableImageUrl('https://example.com/assets/site-logo.png'), false);
   assert.equal(isUsableImageUrl('https://example.com/images/placeholder.jpg'), false);

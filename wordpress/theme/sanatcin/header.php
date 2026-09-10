@@ -7,13 +7,16 @@
 </head>
 <body <?php body_class(); ?>>
 <?php wp_body_open(); ?>
+<a class="skip-link screen-reader-text" href="#content">İçeriğe geç</a>
 <?php if (is_active_sidebar('top-ad')) : ?>
     <aside class="top-ad" aria-label="Reklam"><div class="site-wrap"><?php dynamic_sidebar('top-ad'); ?></div></aside>
 <?php endif; ?>
 <header class="brand-header">
     <div class="site-wrap brand-row">
         <a class="brand-logo" href="<?php echo esc_url(home_url('/')); ?>" aria-label="SanatÇin ana sayfa">
-            <img src="<?php echo esc_url(get_template_directory_uri() . '/assets/images/logo.webp'); ?>" alt="<?php bloginfo('name'); ?>" width="423" height="220" fetchpriority="high">
+            <?php if (has_custom_logo()) : $logo_id = get_theme_mod('custom_logo'); echo wp_get_attachment_image($logo_id, 'full', false, ['alt' => 'SanatÇin', 'fetchpriority' => 'high']); else : ?>
+            <img src="<?php echo esc_url(get_template_directory_uri() . '/assets/images/logo.webp'); ?>" alt="SanatÇin" width="423" height="220" fetchpriority="high">
+            <?php endif; ?>
         </a>
         <p class="brand-deck">Çin’in kültür ve yaşam gündemine<br>bağımsız Türkçe bakış</p>
         <div class="header-actions">
@@ -37,11 +40,13 @@
                     'kultur-sanat' => 'KÜLTÜR & SANAT',
                     'sinema' => 'SİNEMA',
                     'moda-tasarim' => 'MODA & TASARIM',
-                    'sehir-yasam' => 'ŞEHİR & YAŞAM'
+                    'sehir-yasam' => 'ŞEHİR & YAŞAM',
+                    'editorden' => 'EDİTÖRDEN'
                 ];
                 echo '<ul class="nav-list">';
                 foreach ($items as $slug => $label) {
                     $category = get_category_by_slug($slug);
+                    if (!$category && $slug === 'editorden') continue;
                     $url = $category ? get_category_link($category) : home_url('/category/' . $slug . '/');
                     printf('<li><a href="%s">%s</a></li>', esc_url($url), esc_html($label));
                 }

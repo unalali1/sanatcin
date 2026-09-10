@@ -2,14 +2,14 @@
 /**
  * Plugin Name: SanatÇin Otomasyon Köprüsü
  * Description: Railway haber işleyicisi için kaynak alanlarını ve tekrar kontrolü REST uçlarını sağlar.
- * Version: 0.3.0
+ * Version: 0.4.0
  * Requires at least: 6.5
  * Requires PHP: 8.1
  */
 
 if (!defined('ABSPATH')) exit;
 
-const SANATCIN_AUTOMATION_VERSION = '0.3.0';
+const SANATCIN_AUTOMATION_VERSION = '0.4.0';
 
 const SANATCIN_META_FIELDS = [
     'sanatcin_source_url' => 'string',
@@ -19,6 +19,9 @@ const SANATCIN_META_FIELDS = [
     'sanatcin_image_source_hash' => 'string',
     'sanatcin_image_source_url' => 'string',
     'sanatcin_image_description' => 'string',
+    'sanatcin_image_origin' => 'string',
+    'sanatcin_image_kind' => 'string',
+    'sanatcin_ai_image_model' => 'string',
     'sanatcin_score' => 'number',
     'sanatcin_original_title' => 'string',
     'sanatcin_editorial_mode' => 'string'
@@ -47,18 +50,30 @@ function sanatcin_register_meta_fields() {
 }
 add_action('init', 'sanatcin_register_meta_fields');
 
-function sanatcin_activate() {
+function sanatcin_ensure_categories() {
     $categories = [
         'kultur-sanat' => 'Kültür & Sanat',
         'sinema' => 'Sinema',
         'moda-tasarim' => 'Moda & Tasarım',
-        'sehir-yasam' => 'Şehir & Yaşam'
+        'sehir-yasam' => 'Şehir & Yaşam',
+        'editorden' => 'Editörden'
     ];
     foreach ($categories as $slug => $name) {
         if (!term_exists($slug, 'category')) wp_insert_term($name, 'category', ['slug' => $slug]);
     }
 }
+function sanatcin_activate() {
+    sanatcin_ensure_categories();
+    update_option('sanatcin_automation_version', SANATCIN_AUTOMATION_VERSION, false);
+}
 register_activation_hook(__FILE__, 'sanatcin_activate');
+
+function sanatcin_maybe_upgrade() {
+    if (get_option('sanatcin_automation_version') === SANATCIN_AUTOMATION_VERSION) return;
+    sanatcin_ensure_categories();
+    update_option('sanatcin_automation_version', SANATCIN_AUTOMATION_VERSION, false);
+}
+add_action('init', 'sanatcin_maybe_upgrade', 5);
 
 function sanatcin_known_hashes(WP_REST_Request $request) {
     $hashes = array_slice(array_values(array_filter(array_map('sanitize_text_field', (array) $request->get_param('hashes')))), 0, 500);
@@ -122,9 +137,11 @@ function sanatcin_source_box() {
         $url = get_post_meta($post->ID, 'sanatcin_source_url', true);
         $score = get_post_meta($post->ID, 'sanatcin_score', true);
         $mode = get_post_meta($post->ID, 'sanatcin_editorial_mode', true);
+        $image_origin = get_post_meta($post->ID, 'sanatcin_image_origin', true);
         echo '<p><strong>Kaynak:</strong> ' . esc_html($name ?: '—') . '</p>';
         echo '<p><strong>Puan:</strong> ' . esc_html($score ?: '—') . '</p>';
         echo '<p><strong>Editoryal biçim:</strong> ' . esc_html($mode ?: '—') . '</p>';
+        echo '<p><strong>Görsel kökeni:</strong> ' . esc_html($image_origin ?: '—') . '</p>';
         if ($url) echo '<p><a href="' . esc_url($url) . '" target="_blank" rel="noopener">Özgün haberi aç</a></p>';
     }, 'post', 'side', 'default');
 }

@@ -19,9 +19,11 @@ Dört kategori kullanılır:
 
 Her kategori için en fazla iki haber seçilir. Matematiksel günlük üst sınır sekiz haberdir; kalite kapısını geçen aday yoksa ilgili kategoride yayın yapılmaz. İşleyici son yedi günü değerlendirir, yayın tarihi doğrulanamayan adayları atlar ve aynı kaynak URL'sini ya da yüksek ölçüde benzer başlığı ikinci kez yayımlamaz. Finans, ekonomi, siyaset, spor, protokol ve kurumsal PR içerikleri kapsam dışıdır.
 
-Kaynak metin bire bir çevrilmez. 0.3 yayın zinciri önce doğrulanabilir olguları çıkarır, bu olgu fişinden Türkçe haber yazar, ayrı bir redaksiyon aşamasında çeviri kokusunu giderir ve son olarak metni yeniden olgu fişiyle karşılaştırır. Başlık ve spot uzunlukları otomatik onarılır. Görselin çözünürlüğü, oranı, konu ilgisi ve daha önce kullanılıp kullanılmadığı ayrıca doğrulanır; uygun kaynak görsel bulunamazsa yanıltıcı veya tekrar eden bir fotoğraf kullanmak yerine haber görselsiz yayımlanır.
+Kaynak metin bire bir çevrilmez. 0.4 yayın zinciri önce kaynağın tam ve güncel bir haber olup olmadığını belirler, doğrulanabilir olguları çıkarır, bu olgu fişinden Türkçe haber yazar ve ayrı bir redaksiyon aşamasında çeviri kokusunu giderir. Metin daha sonra birbirinden bağımsız olgu ve Türkçe yazı işleri denetimlerinden geçer. Başlık/spot uzunluğu, Pinyin zincirleri, editoryal süreç notları ve cümle tekrarları ayrıca mekanik olarak denetlenir.
 
-Ana sayfa içerik sayısına göre uyarlanır: tek haberde dengeli bir görsel-metin düzeni, iki-dört haberde ana haber ile yan kartlar, daha zengin arşivde ise dört sütunlu yayın ızgarası kullanılır. Tema dış font servisi ve sayfa kurucu gerektirmez.
+Kaynak görselleri yalnız ilgili kaynak için yeniden kullanım izni, lisans bağlantısı ve atıf bilgisi açıkça tanımlandığında içeri alınır. Uygun ve izinli fotoğraf yoksa OpenAI ile konuya özel, temsili bir editoryal illüstrasyon üretilir; bu görsel başlıkla ilişki, çözünürlük ve tekrar denetiminden geçer. Görsel hazırlanamayan haber yayımlanmaz.
+
+Ana sayfa içerik sayısına göre uyarlanır: ana haber ile iki yan kart, kalan içerik sayısına göre daralan yayın ızgarası ve içerik geldiğinde kendiliğinden açılan `Editörden` bandı kullanılır. Yazar arşivi, byline, ilgili haberler, sosyal paylaşım meta verileri ve NewsArticle şeması temaya dahildir. Tema dış font servisi ve sayfa kurucu gerektirmez.
 
 ## Kurulum
 
@@ -32,7 +34,7 @@ Ana sayfa içerik sayısına göre uyarlanır: tek haberde dengeli bir görsel-m
 3. WordPress'te otomasyon kullanıcısı oluşturup bir uygulama parolası üretin.
 4. Kalıcı bağlantıları `Yazı ismi` biçimine alın.
 
-Eklenti dört kategoriyi otomatik oluşturur ve kaynak URL'si/puanı gibi alanları REST API'ye açar.
+Eklenti dört haber kategorisini ve `Editörden` kategorisini otomatik oluşturur; kaynak URL'si, puanı ve görsel kökeni gibi alanları REST API'ye açar.
 
 ### Railway worker
 

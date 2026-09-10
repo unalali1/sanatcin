@@ -7,7 +7,10 @@
             <span class="eyebrow"><?php echo esc_html($category ? $category->name : 'SanatÇin'); ?></span>
             <h1><?php the_title(); ?></h1>
             <div class="article-deck"><?php the_excerpt(); ?></div>
-            <div class="story-meta"><?php echo esc_html(get_the_date('j F Y')); ?></div>
+            <div class="article-byline">
+                <a class="author-link" href="<?php echo esc_url(get_author_posts_url(get_the_author_meta('ID'))); ?>"><?php echo get_avatar(get_the_author_meta('ID'), 42, '', '', ['class' => 'author-avatar']); ?><span><small>Yazan</small><strong><?php the_author(); ?></strong></span></a>
+                <div class="story-meta"><?php sanatcin_story_meta(); ?></div>
+            </div>
         </header>
         <?php if (has_post_thumbnail()) : ?><figure class="article-figure">
             <?php sanatcin_story_image('sanatcin-hero', true); ?>

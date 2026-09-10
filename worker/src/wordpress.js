@@ -41,9 +41,9 @@ async function validateEditorialImage(article, image) {
   });
   const raw = response.output_text.replace(/^\`\`\`json\s*|\s*\`\`\`$/g, '').trim();
   const result = JSON.parse(raw);
-  if (result.usable !== true) throw new Error(`Kaynak görsel editoryal olarak uygun değil: ${result.reason ?? 'gerekçe belirtilmedi'}`);
+  if (result.usable !== true) throw new Error(`Görsel editoryal olarak uygun değil: ${result.reason ?? 'gerekçe belirtilmedi'}`);
   if (!['editorial-photo', 'illustration', 'event-poster'].includes(result.kind)) {
-    throw new Error(`Kaynak görsel türü uygun değil: ${result.kind ?? 'belirlenemedi'}.`);
+    throw new Error(`Görsel türü uygun değil: ${result.kind ?? 'belirlenemedi'}.`);
   }
   return { kind: result.kind, altText: String(result.description ?? '').replace(/\s+/g, ' ').trim().slice(0, 180) };
 }
@@ -91,8 +91,69 @@ function extensionFor(contentType) {
   return { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[mime] ?? null;
 }
 
+function sourceImageReuseAllowed(article) {
+  if (config.sourceImagePolicy === 'allow-all') return true;
+  return article.source?.imageReuse === 'permitted'
+    && Boolean(article.source?.imageCredit)
+    && Boolean(article.source?.imageLicenseUrl);
+}
+
+function visualPrompt(article) {
+  const facts = article.factSheet?.facts?.slice(0, 5).join(' | ') ?? '';
+  return [
+    'Create one original landscape editorial illustration for a Turkish culture and lifestyle news publication.',
+    `Article category: ${article.category}.`,
+    `Headline: ${article.title}.`,
+    `Summary: ${article.excerpt}.`,
+    facts ? `Verified visual context: ${facts}.` : '',
+    'Use a refined contemporary editorial-art style with realistic materials, natural light and a clear central subject.',
+    'The image must communicate the topic without pretending to be documentary evidence of the exact event.',
+    'Do not depict a recognizable real person. Do not add words, letters, logos, watermarks, flags, UI, frames or decorative borders.',
+    'Avoid generic stock-photo compositions, split screens, collages and repeated motifs. Compose for a 3:2 news card with safe crop space.'
+  ].filter(Boolean).join('\n');
+}
+
+async function generateEditorialImage(article) {
+  const result = await ai.images.generate({
+    model: config.openaiImageModel,
+    prompt: visualPrompt(article),
+    size: '1536x1024',
+    quality: config.openaiImageQuality,
+    output_format: 'jpeg'
+  });
+  const encoded = result.data?.[0]?.b64_json;
+  if (!encoded) throw new Error('OpenAI görsel üretimi boş sonuç döndürdü.');
+  const buffer = Buffer.from(encoded, 'base64');
+  if (buffer.length < 12_000) throw new Error('Üretilen görsel güvenilir kalite için çok küçük.');
+  const contentType = 'image/jpeg';
+  const dimensions = assertImageDimensions(buffer, contentType);
+  const imageHash = crypto.createHash('sha256').update(buffer).digest('hex');
+  const imageSourceHash = sourceHash(`openai:${article.url}`);
+  if (runImageHashes.has(imageHash)) throw new Error('Üretilen görsel bu çalışmada başka bir haber için zaten kullanıldı.');
+  const existing = await wp(`/sanatcin/v1/image-known?hash=${encodeURIComponent(imageHash)}&source_hash=${encodeURIComponent(imageSourceHash)}`);
+  if (existing.known) throw new Error('Bu haber için üretilen görsel daha önce kullanılmış.');
+  const image = {
+    buffer,
+    contentType,
+    extension: 'jpg',
+    imageHash,
+    imageSourceHash,
+    sourceUrl: '',
+    dimensions,
+    origin: 'openai-generated',
+    model: config.openaiImageModel,
+    kind: 'illustration'
+  };
+  const validation = await validateEditorialImage(article, image);
+  image.kind = 'illustration';
+  image.altText = validation.altText;
+  return image;
+}
+
 export async function prepareFeaturedImage(article) {
-  const candidates = article.sourceImageUrls?.length ? article.sourceImageUrls : [article.sourceImageUrl];
+  const candidates = sourceImageReuseAllowed(article)
+    ? (article.sourceImageUrls?.length ? article.sourceImageUrls : [article.sourceImageUrl])
+    : [];
   const errors = [];
   for (const imageUrl of candidates) {
     if (!isUsableImageUrl(imageUrl)) continue;
@@ -117,7 +178,7 @@ export async function prepareFeaturedImage(article) {
       if (runImageHashes.has(imageHash)) throw new Error('Aynı görsel bu çalışmada başka bir haber için zaten kullanıldı.');
       const existing = await wp(`/sanatcin/v1/image-known?hash=${encodeURIComponent(imageHash)}&source_hash=${encodeURIComponent(imageSourceHash)}`);
       if (existing.known) throw new Error('Aynı görsel daha önce başka bir haberde kullanılmış.');
-      const image = { buffer, contentType: contentType.split(';')[0], extension, imageHash, imageSourceHash, sourceUrl: imageUrl, dimensions };
+      const image = { buffer, contentType: contentType.split(';')[0], extension, imageHash, imageSourceHash, sourceUrl: imageUrl, dimensions, origin: 'licensed-source' };
       const validation = await validateEditorialImage(article, image);
       image.kind = validation.kind;
       image.altText = validation.altText;
@@ -128,13 +189,23 @@ export async function prepareFeaturedImage(article) {
       clearTimeout(timer);
     }
   }
-  log('warn', 'Haber uygun görsel bulunamadığı için görselsiz devam edecek', {
+  if (config.generateFallbackImages) {
+    log('info', 'Uygun ve yeniden kullanılabilir kaynak görseli bulunamadı; özgün editoryal illüstrasyon üretilecek', {
+      source: article.source.id,
+      url: article.url,
+      sourceImagePolicy: config.sourceImagePolicy,
+      attempted: candidates.filter(Boolean).length,
+      errors: errors.slice(0, 5)
+    });
+    return generateEditorialImage(article);
+  }
+  log('error', 'Haber için zorunlu görsel hazırlanamadı', {
     source: article.source.id,
     url: article.url,
     attempted: candidates.filter(Boolean).length,
     errors: errors.slice(0, 5)
   });
-  return null;
+  throw new Error('Haber için lisansı ve uygunluğu doğrulanmış bir görsel hazırlanamadı.');
 }
 
 async function uploadFeaturedImage(article, image) {
@@ -152,8 +223,12 @@ async function uploadFeaturedImage(article, image) {
     body: JSON.stringify({
       title: article.title,
       alt_text: image.altText || article.title,
-      caption: `Görsel: ${article.source.name}`,
-      description: `Kaynak görsel: ${image.sourceUrl}`
+      caption: image.origin === 'openai-generated'
+        ? 'OpenAI ile üretilmiş temsili editoryal illüstrasyon.'
+        : `Görsel: ${article.source.imageCredit || article.source.name}`,
+      description: image.origin === 'openai-generated'
+        ? 'Bu görsel haberin konusu için yapay zekâ ile üretilmiş temsili bir illüstrasyondur.'
+        : `Kaynak görsel: ${image.sourceUrl}`
     })
   });
   runImageHashes.add(image.imageHash);
@@ -165,13 +240,14 @@ export async function publishArticle(article, preparedImage = undefined) {
   const sourceLine = `<aside class="sanatcin-source"><strong>Kaynak:</strong> <a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(article.source.name)}</a><span> · Kaynak haber temel alınarak Türkçe yeniden yazıldı</span></aside>`;
   const category = await categoryId(article.category);
   const image = preparedImage === undefined ? await prepareFeaturedImage(article) : preparedImage;
+  if (!image) throw new Error('Öne çıkan görsel zorunludur; haber yayımlanmadı.');
   if (config.dryRun) {
     if (image) runImageHashes.add(image.imageHash);
     return {
       id: null,
       link: null,
       dryRun: true,
-      payload: { title: article.title, excerpt: article.excerpt, status: config.publishStatus, categories: [category], sourceImageUrl: image?.sourceUrl ?? null, imageHash: image?.imageHash ?? null }
+      payload: { title: article.title, excerpt: article.excerpt, status: config.publishStatus, categories: [category], imageOrigin: image.origin, sourceImageUrl: image.sourceUrl || null, imageHash: image.imageHash }
     };
   }
 
@@ -190,12 +266,15 @@ export async function publishArticle(article, preparedImage = undefined) {
       sanatcin_image_source_hash: image?.imageSourceHash ?? '',
       sanatcin_image_source_url: image?.sourceUrl ?? '',
       sanatcin_image_description: image?.altText ?? '',
+      sanatcin_image_origin: image?.origin ?? '',
+      sanatcin_image_kind: image?.kind ?? '',
+      sanatcin_ai_image_model: image?.model ?? '',
       sanatcin_score: Math.round(article.score),
       sanatcin_original_title: article.originalTitle,
       sanatcin_editorial_mode: article.editorialMode
     }
   };
-  if (featuredMedia) payload.featured_media = featuredMedia;
+  payload.featured_media = featuredMedia;
   let post = await wp('/wp/v2/posts', { method: 'POST', body: JSON.stringify(payload) });
   if (config.publishStatus === 'publish') {
     post = await wp(`/wp/v2/posts/${post.id}`, { method: 'POST', body: JSON.stringify({ status: 'publish' }) });

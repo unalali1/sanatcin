@@ -95,7 +95,7 @@ async function run() {
         await assertNoSimilarPublishedTitle(translated.title);
         const image = await prepareFeaturedImage(translated);
         const post = await publishArticle(translated, image);
-        results.push({ source: candidate.source.id, category: candidate.category, score: candidate.score, scoreReason: candidate.scoreReason, postId: post.id, link: post.link, hasImage: Boolean(image), mode: config.dryRun ? 'dry-run' : config.publishStatus });
+        results.push({ source: candidate.source.id, category: candidate.category, score: candidate.score, scoreReason: candidate.scoreReason, postId: post.id, link: post.link, hasImage: true, imageOrigin: image.origin, mode: config.dryRun ? 'dry-run' : config.publishStatus });
         categoryPublished += 1;
         sourceStats[candidate.source.id].published += 1;
         log('info', config.dryRun ? 'Haber simülasyonu tamamlandı' : config.publishStatus === 'draft' ? 'Haber taslak olarak kaydedildi' : 'Haber yayımlandı', results.at(-1));

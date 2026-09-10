@@ -14,8 +14,15 @@ const BOILERPLATE_PATTERNS = [
 
 const OUTPUT_BOILERPLATE_PATTERNS = [
   ...BOILERPLATE_PATTERNS,
-  /(?:ana sayfa|haberler|iletişim|hakkımızda).{0,80}(?:gizlilik|çerez|kullanım koşulları)/iu
+  /(?:ana sayfa|haberler|iletişim|hakkımızda).{0,80}(?:gizlilik|çerez|kullanım koşulları)/iu,
+  /(?:daha fazla|ayrıntılı) bilgi için.{0,80}(?:kaynak|internet sitesi|sayfa)/iu,
+  /(?:haberde|kaynakta|metinde).{0,70}(?:belirtilmemiş|yer almıyor|aktarılmıyor|açıklanmıyor)/iu,
+  /(?:haber|metin|içerik) için kullanılan (?:fotoğraf|görsel)/iu,
+  /(?:web|internet|çevrimiçi) (?:editörü|sürümü|sayfası)/iu,
+  /okuyucuya.{0,60}(?:sunuluyor|aktarılıyor|veriliyor)/iu
 ];
+
+const RAW_PINYIN_MARKERS = /\b(?:sheng|shi|xian|qu|zhen|zhou|zizhiqu|renmin|zhengfu|wenhua|bowuguan|meishuguan|daxue|ribao|dianshitai)\b/giu;
 
 export function countCjk(value = '') {
   return value.match(CJK_PATTERN)?.length ?? 0;
@@ -25,17 +32,23 @@ export function translationIssues({ title = '', excerpt = '', text = '', paragra
   const issues = [];
   const combined = `${title}\n${excerpt}\n${text}`.trim();
   const paragraphCount = paragraphs.length || text.split(/\n{2,}/).filter((item) => item.trim()).length;
-  if (text.trim().length < 700) issues.push('Türkçe haber gövdesi 700 karakterden kısa.');
+  if (text.trim().length < 650) issues.push('Türkçe haber gövdesi 650 karakterden kısa.');
   if (paragraphCount < 4) issues.push('Türkçe haber gövdesi en az dört paragraf içermiyor.');
   if (countCjk(combined) > 0) issues.push('Metinde çevrilmemiş Çince karakterler bulunuyor.');
   const words = text.match(/\p{L}+/gu) ?? [];
   const turkishSignals = text.match(TURKISH_WORD_PATTERN)?.length ?? 0;
   if (words.length >= 80 && turkishSignals < 4) issues.push('Metin akıcı Türkçe haber dili olarak doğrulanamadı.');
-  if (title.trim().length < 35 || title.trim().length > 95) issues.push('Başlık 35-95 karakter aralığında değil.');
-  if (excerpt.trim().length < 110 || excerpt.trim().length > 190) issues.push('Spot 110-190 karakter aralığında değil.');
+  if (title.trim().length < 32 || title.trim().length > 82) issues.push('Başlık 32-82 karakter aralığında değil.');
+  if (excerpt.trim().length < 105 || excerpt.trim().length > 180) issues.push('Spot 105-180 karakter aralığında değil.');
   if (OUTPUT_BOILERPLATE_PATTERNS.some((pattern) => pattern.test(combined))) {
-    issues.push('Türkçe metinde navigasyon, üyelik veya yasal site artığı bulunuyor.');
+    issues.push('Türkçe metinde navigasyon, editoryal not veya kaynak-site artığı bulunuyor.');
   }
+  const pinyinMarkers = combined.match(RAW_PINYIN_MARKERS)?.length ?? 0;
+  if (pinyinMarkers >= 2) issues.push('Kurum veya yer adlarında açıklanmamış ham Pinyin zinciri bulunuyor.');
+  const sentences = text.split(/(?<=[.!?])\s+/u).map((item) => item.replace(/\s+/g, ' ').trim().toLocaleLowerCase('tr-TR')).filter((item) => item.length > 45);
+  if (new Set(sentences).size < sentences.length) issues.push('Haber gövdesinde yinelenen cümle bulunuyor.');
+  const paragraphStarts = paragraphs.map((paragraph) => String(paragraph).split(/\s+/).slice(0, 7).join(' ').toLocaleLowerCase('tr-TR')).filter(Boolean);
+  if (paragraphStarts.length && new Set(paragraphStarts).size < paragraphStarts.length) issues.push('Paragraflar aynı ifadeyle tekrarlı biçimde başlıyor.');
   const titleLetters = title.match(/\p{L}/gu) ?? [];
   const upperLetters = title.match(/\p{Lu}/gu) ?? [];
   if (titleLetters.length > 15 && upperLetters.length / titleLetters.length > 0.72) {
@@ -55,6 +68,8 @@ export function sourceContentIssues(text = '') {
   const issues = [];
   if (compact.length < 500) issues.push('Makale gövdesi güvenilir biçimde çıkarılamadı.');
   if (boilerplateHits >= 2) issues.push('Makale yerine site navigasyonu veya yasal metin çıkarıldı.');
+  const sentences = compact.split(/(?<=[.!?。！？])\s+/u).filter((item) => item.trim().length > 30);
+  if (compact.length < 1100 && sentences.length < 6) issues.push('Kaynak, tam haber yerine kısa duyuru veya görsel altyazı dizisi gibi görünüyor.');
   return issues;
 }
 

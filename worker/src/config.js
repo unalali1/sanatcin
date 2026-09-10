@@ -12,6 +12,10 @@ function boolean(name, fallback = false) {
 export const config = {
   openaiApiKey: process.env.OPENAI_API_KEY ?? '',
   openaiModel: process.env.OPENAI_MODEL ?? 'gpt-5-mini',
+  openaiImageModel: process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-2.5-flare',
+  openaiImageQuality: process.env.OPENAI_IMAGE_QUALITY ?? 'medium',
+  generateFallbackImages: boolean('GENERATE_FALLBACK_IMAGES', true),
+  sourceImagePolicy: process.env.SOURCE_IMAGE_POLICY ?? 'licensed-only',
   wpBaseUrl: (process.env.WP_BASE_URL ?? '').replace(/\/$/, ''),
   wpUsername: process.env.WP_USERNAME ?? '',
   wpAppPassword: (process.env.WP_APP_PASSWORD ?? '').replace(/\s+/g, ''),
@@ -44,5 +48,11 @@ export function validateConfig() {
   }
   if (!['publish', 'draft'].includes(config.publishStatus)) {
     throw new Error('PUBLISH_STATUS yalnız publish veya draft olabilir.');
+  }
+  if (!['licensed-only', 'allow-all'].includes(config.sourceImagePolicy)) {
+    throw new Error('SOURCE_IMAGE_POLICY yalnız licensed-only veya allow-all olabilir.');
+  }
+  if (!['low', 'medium', 'high', 'auto'].includes(config.openaiImageQuality)) {
+    throw new Error('OPENAI_IMAGE_QUALITY low, medium, high veya auto olmalı.');
   }
 }
