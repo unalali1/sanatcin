@@ -20,24 +20,43 @@ function uniqueCandidates(items) {
   });
 }
 
+function rejectionReason(error) {
+  const message = String(error?.message ?? error);
+  if (/tarih|Eski makale/i.test(message)) return 'date';
+  if (/olgu|Editoryal|Çeviri|Türkçe|başlık|spot/i.test(message)) return 'editorial';
+  if (/görsel|image|HTTP 403|çözünürlük|oranı/i.test(message)) return 'image';
+  if (/benzer haber|known|daha önce/i.test(message)) return 'duplicate';
+  if (/HTTP|fetch|abort|timeout|Makale gövdesi|site navigasyonu/i.test(message)) return 'source';
+  return 'other';
+}
+
+function increment(record, key) {
+  record[key] = (record[key] ?? 0) + 1;
+}
+
 async function run() {
   validateConfig();
   log('info', 'Günlük SanatÇin taraması başladı', { sources: SOURCES.length, status: config.publishStatus, dryRun: config.dryRun });
 
+  const sourceStats = Object.fromEntries(SOURCES.filter((source) => source.enabled).map((source) => [source.id, { discovered: 0, attempted: 0, published: 0, rejected: 0 }]));
+  const rejectedReasons = {};
   const discovered = await mapLimit(SOURCES.filter((source) => source.enabled), config.discoveryConcurrency, async (source) => {
     try {
       const items = await discover(source);
+      sourceStats[source.id].discovered = items.length;
       log('info', 'Kaynak tarandı', { source: source.id, candidates: items.length });
       return items;
     } catch (error) {
+      sourceStats[source.id].error = error.message;
       log('error', 'Kaynak taranamadı', { source: source.id, error: error.message });
       return [];
     }
   });
 
   const cutoff = Date.now() - config.fallbackLookbackDays * 24 * 60 * 60 * 1000;
+  const futureLimit = Date.now() + 6 * 60 * 60 * 1000;
   const candidates = uniqueCandidates(discovered.flat())
-    .filter((item) => !item.publishedAt || new Date(item.publishedAt).getTime() >= cutoff)
+    .filter((item) => !item.publishedAt || (new Date(item.publishedAt).getTime() >= cutoff && new Date(item.publishedAt).getTime() <= futureLimit))
     .map((item) => scoreCandidate(item));
   const known = new Set(await knownHashes(candidates.map((item) => sourceHash(item.url))));
   const newCandidates = candidates.filter((item) => !known.has(sourceHash(item.url)));
@@ -57,9 +76,11 @@ async function run() {
 
   const results = [];
   for (const { slug } of CATEGORIES) {
+    if (results.length >= config.maxDailyTotal) break;
     let categoryPublished = 0;
     for (const candidate of queues[slug]) {
-      if (categoryPublished >= config.maxPerCategory) break;
+      if (categoryPublished >= config.maxPerCategory || results.length >= config.maxDailyTotal) break;
+      sourceStats[candidate.source.id].attempted += 1;
       try {
         const article = await extractArticle(candidate);
         if (article.publishedAt && new Date(article.publishedAt).getTime() < cutoff) {
@@ -70,23 +91,27 @@ async function run() {
           log('info', 'Yayın tarihi doğrulanamayan makale atlandı', { source: candidate.source.id, url: candidate.url });
           continue;
         }
-        // Reject missing, invalid, or repeated images before spending time and API
-        // budget on translation. The hash is reserved only after translation succeeds.
-        const image = await prepareFeaturedImage(article);
         const translated = await translateArticle({ ...article, originalTitle: article.title });
         await assertNoSimilarPublishedTitle(translated.title);
+        const image = await prepareFeaturedImage(translated);
         const post = await publishArticle(translated, image);
-        results.push({ source: candidate.source.id, category: candidate.category, score: candidate.score, scoreReason: candidate.scoreReason, postId: post.id, link: post.link, mode: config.dryRun ? 'dry-run' : config.publishStatus });
+        results.push({ source: candidate.source.id, category: candidate.category, score: candidate.score, scoreReason: candidate.scoreReason, postId: post.id, link: post.link, hasImage: Boolean(image), mode: config.dryRun ? 'dry-run' : config.publishStatus });
         categoryPublished += 1;
+        sourceStats[candidate.source.id].published += 1;
         log('info', config.dryRun ? 'Haber simülasyonu tamamlandı' : config.publishStatus === 'draft' ? 'Haber taslak olarak kaydedildi' : 'Haber yayımlandı', results.at(-1));
       } catch (error) {
+        sourceStats[candidate.source.id].rejected += 1;
+        increment(rejectedReasons, rejectionReason(error));
         log('error', 'Haber işlenemedi; sıradaki aday denenecek', { source: candidate.source.id, url: candidate.url, error: error.message });
       }
     }
-    if (categoryPublished === 0) log('error', 'Kategori için yayımlanabilir yeni haber bulunamadı', { category: slug });
+    if (categoryPublished === 0) log('warn', 'Kategori için yayımlanabilir yeni haber bulunamadı', { category: slug });
   }
 
-  log('info', 'Günlük SanatÇin taraması tamamlandı', { processed: results.length, results });
+  if (results.length < config.minDailyTarget) {
+    log('warn', 'Günlük asgari yayın hedefinin altında kalındı', { target: config.minDailyTarget, processed: results.length });
+  }
+  log('info', 'Günlük SanatÇin taraması tamamlandı', { processed: results.length, target: `${config.minDailyTarget}-${config.maxDailyTotal}`, rejectedReasons, sourceStats, results });
   if (results.length === 0) process.exitCode = 2;
 }
 

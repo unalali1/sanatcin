@@ -7,8 +7,8 @@ function sanatcin_setup() {
     add_theme_support('html5', ['search-form', 'gallery', 'caption', 'style', 'script']);
     add_theme_support('responsive-embeds');
     register_nav_menus(['primary' => __('Ana menü', 'sanatcin')]);
-    add_image_size('sanatcin-hero', 1440, 810, true);
-    add_image_size('sanatcin-card', 800, 450, true);
+    add_image_size('sanatcin-hero', 1440, 960, true);
+    add_image_size('sanatcin-card', 800, 600, true);
 }
 add_action('after_setup_theme', 'sanatcin_setup');
 
@@ -53,6 +53,11 @@ function sanatcin_fallback_image($post_id = null) {
     return get_template_directory_uri() . '/assets/images/' . $file;
 }
 
+function sanatcin_category_slug($post_id = null) {
+    $category = sanatcin_primary_category($post_id);
+    return $category ? sanitize_html_class($category->slug) : 'sanatcin';
+}
+
 function sanatcin_story_image($size = 'sanatcin-card', $priority = false) {
     $attributes = [
         'loading' => $priority ? 'eager' : 'lazy',
@@ -62,14 +67,11 @@ function sanatcin_story_image($size = 'sanatcin-card', $priority = false) {
     if (has_post_thumbnail()) {
         the_post_thumbnail($size, $attributes);
     } else {
-        $dimensions = $size === 'sanatcin-hero' ? [1440, 810] : [800, 450];
+        $category = sanatcin_primary_category();
         printf(
-            '<img src="%s" alt="" width="%d" height="%d" loading="%s" decoding="async"%s>',
-            esc_url(sanatcin_fallback_image()),
-            $dimensions[0],
-            $dimensions[1],
-            $priority ? 'eager' : 'lazy',
-            $priority ? ' fetchpriority="high"' : ''
+            '<span class="story-placeholder" role="img" aria-label="%s"><span>%s</span><small>SanatÇin</small></span>',
+            esc_attr__('Bu haber için kaynak görsel bulunamadı', 'sanatcin'),
+            esc_html($category ? $category->name : 'SanatÇin')
         );
     }
 }
@@ -86,10 +88,10 @@ function sanatcin_archive_heading() {
     return get_the_archive_title();
 }
 
-function sanatcin_story_card($heading = 'h3') {
+function sanatcin_story_card($heading = 'h3', $variant = '') {
     $category = sanatcin_primary_category();
     ?>
-    <article class="story-card">
+    <article class="story-card category-<?php echo esc_attr(sanatcin_category_slug()); ?> <?php echo esc_attr($variant); ?>">
         <a class="story-image" href="<?php the_permalink(); ?>" aria-hidden="true" tabindex="-1"><?php sanatcin_story_image(); ?></a>
         <div class="story-body">
             <span class="eyebrow"><?php echo esc_html($category ? $category->name : 'SanatÇin'); ?></span>
@@ -98,4 +100,14 @@ function sanatcin_story_card($heading = 'h3') {
         </div>
     </article>
     <?php
+}
+
+function sanatcin_related_posts($post_id, $limit = 3) {
+    $category_ids = wp_get_post_categories($post_id);
+    return new WP_Query([
+        'posts_per_page' => $limit,
+        'post__not_in' => [$post_id],
+        'category__in' => $category_ids,
+        'ignore_sticky_posts' => true
+    ]);
 }

@@ -38,9 +38,18 @@ test('Yasal site metnini haber gövdesi olarak reddeder', () => {
 
 test('PNG boyutlarını okur', () => {
   const buffer = Buffer.alloc(24);
+  Buffer.from('89504e470d0a1a0a', 'hex').copy(buffer, 0);
   buffer.writeUInt32BE(1280, 16);
   buffer.writeUInt32BE(720, 20);
   assert.deepEqual(imageDimensions(buffer, 'image/png'), { width: 1280, height: 720 });
+});
+
+test('geçersiz JPEG içindeki rastgele baytları boyut sanmaz', () => {
+  const buffer = Buffer.alloc(40);
+  buffer[0] = 0xff;
+  buffer[1] = 0xd8;
+  buffer[2] = 0xc0;
+  assert.equal(imageDimensions(buffer, 'image/jpeg'), null);
 });
 
 test('benzer başlıkları ortak anlamlı kelimelerle yakalar', () => {

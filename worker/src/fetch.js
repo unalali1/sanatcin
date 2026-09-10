@@ -64,6 +64,14 @@ function dateValue(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+export function dateFromText(value = '') {
+  const normalized = String(value).replace(/年|\//g, '-').replace(/月/g, '-').replace(/日/g, ' ');
+  const match = normalized.match(/\b(20\d{2})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (!match) return null;
+  const [, year, month, day, hour = '00', minute = '00'] = match;
+  return dateValue(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute}:00+08:00`);
+}
+
 function looksLikeArticle(url, title) {
   const compact = title.replace(/\s+/g, '');
   if (compact.length < 8 || compact.length > 180) return false;
@@ -90,17 +98,19 @@ export async function discover(source) {
   const seen = new Set();
   const items = [];
   $('article a[href], main a[href], .content a[href], .list a[href], a[href]').each((_, element) => {
-    if (items.length >= 40) return;
+    if (items.length >= (source.id === 'chinaculture' ? 60 : 40)) return;
     const title = cleanTitle($(element).attr('title') || $(element).text());
     const url = normalizeUrl($(element).attr('href'), source.url);
     if (!url || seen.has(url) || !looksLikeArticle(url, title)) return;
     const sourceHost = new URL(source.url).hostname.replace(/^www\./, '');
     const itemHost = new URL(url).hostname.replace(/^www\./, '');
     if (!itemHost.endsWith(sourceHost) && !sourceHost.endsWith(itemHost)) return;
+    if (source.id === 'chinaculture' && !/\/a\/20\d{4}\/\d{2}\//.test(new URL(url).pathname)) return;
     seen.add(url);
     const container = $(element).closest('article, li, .item, .news-item, .card');
+    const containerText = container.text().replace(/\s+/g, ' ').trim();
     const dateText = container.find('time').attr('datetime') || container.find('time, .date, .time').first().text();
-    items.push({ id: sourceHash(url), source, title, url, publishedAt: dateValue(dateText), summary: container.text().replace(/\s+/g, ' ').trim().slice(0, 600) });
+    items.push({ id: sourceHash(url), source, title, url, publishedAt: dateValue(dateText) || dateFromText(containerText), summary: containerText.slice(0, 600) });
   });
   return items;
 }
@@ -121,17 +131,19 @@ export async function extractArticle(candidate) {
   const publishedAt = candidate.publishedAt || dateValue(
     $('meta[property="article:published_time"]').attr('content') ||
     $('meta[name="publishdate"]').attr('content') ||
+    $('meta[name="publish_date"]').attr('content') ||
+    $('meta[itemprop="datePublished"]').attr('content') ||
     $('time').first().attr('datetime')
-  );
+  ) || dateFromText($('body').text().slice(0, 5000));
   const text = (article?.textContent ?? '').replace(/\n{3,}/g, '\n\n').trim();
   assertSourceContentQuality(text);
 
   const readable = cheerio.load(article?.content ?? '');
   const rawImages = [
-    ...readable('img').map((_, element) => readable(element).attr('data-src') || readable(element).attr('data-lazy-src') || readable(element).attr('src')).get(),
+    ...readable('img').map((_, element) => readable(element).attr('data-src') || readable(element).attr('data-lazy-src') || readable(element).attr('data-original') || readable(element).attr('src')).get(),
     $('meta[property="og:image"]').attr('content'),
     $('meta[name="twitter:image"]').attr('content'),
-    ...$('article img, main img, .article img, .content img').map((_, element) => $(element).attr('data-src') || $(element).attr('data-lazy-src') || $(element).attr('src')).get()
+    ...$('article img, main img, .article img, .content img').map((_, element) => $(element).attr('data-src') || $(element).attr('data-lazy-src') || $(element).attr('data-original') || $(element).attr('src')).get()
   ];
   const sourceImageUrls = [...new Set(rawImages
     .filter(Boolean)
@@ -147,4 +159,3 @@ export async function extractArticle(candidate) {
     text
   };
 }
-

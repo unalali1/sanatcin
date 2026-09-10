@@ -24,7 +24,7 @@ export const SOURCES = [
   html('people-zh-culture', 'People’s Daily – Culture (Chinese)', 'https://culture.people.com.cn/', 9, 'kultur-sanat', true, false),
   html('people-en-culture', 'People’s Daily Online – Culture', 'https://en.people.cn/90782/index.html', 8, 'kultur-sanat'),
   html('cgtn-culture', 'CGTN – Culture', 'https://www.cgtn.com/culture', 9),
-  html('chinaculture', 'Chinaculture.org', 'https://en.chinaculture.org/', 9, 'kultur-sanat'),
+  html('chinaculture', 'Chinaculture.org – News', 'https://en.chinaculture.org/news', 10, null),
   rss('sixth-tone', 'Sixth Tone', 'https://api.sixthtone.com/cont/output/rssApi', 'https://www.sixthtone.com/', 9, null, false),
   rss('1905-film', '1905.com – Film', 'https://www.1905.com/rss.php?rssid=54', 'https://www.1905.com/news/', 10, 'sinema'),
   html('film-administration', 'China Film Administration', 'https://www.chinafilm.gov.cn/', 10, 'sinema'),

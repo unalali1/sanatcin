@@ -23,12 +23,56 @@ export function applyAiScores(candidates, items, now = new Date()) {
   });
 }
 
+export function buildBalancedShortlist(candidates, maxCandidates = config.maxAiCandidates) {
+  const eligible = candidates.filter((candidate) => candidate.eligible !== false);
+  const selected = [];
+  const used = new Set();
+  const perCategory = Math.max(1, Math.floor(maxCandidates / allowedCategories.size));
+
+  for (const category of allowedCategories) {
+    const group = eligible
+      .filter((candidate) => candidate.category === category)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, perCategory);
+    for (const candidate of group) {
+      selected.push(candidate);
+      used.add(candidate.id);
+    }
+  }
+
+  if (selected.length < maxCandidates) {
+    const remainder = eligible
+      .filter((candidate) => !used.has(candidate.id))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxCandidates - selected.length);
+    selected.push(...remainder);
+  }
+  return selected.slice(0, maxCandidates);
+}
+
+async function rerankBatch(batch) {
+  const response = await client.responses.create({
+    model: config.openaiModel,
+    input: [
+      {
+        role: 'system',
+        content: 'SanatÇin için haber seçen kıdemli bir Türkçe kültür-sanat editörüsün. Yalnız geçerli JSON ver. Finans, ekonomi, borsa, bankacılık, siyaset, askerî gündem, spor, sıradan protokol, reklam ve zayıf PR metinleri kesinlikle kapsam dışıdır. Türkiye’deki okur için güncellik, somut gelişme, görsel güç, özgünlük ve kültürel değer arıyoruz.'
+      },
+      {
+        role: 'user',
+        content: `Her adayı bağımsız değerlendir; hiçbir adayı atlama. Yalnız gerçek kültür-sanat, sinema, moda-tasarım ve şehir yaşamı haberleri eligible=true olabilir. Finans/ekonomi/siyaset/spor/protokol/kurumsal PR için eligible=false ve category="uygunsuz" ver. Uygun adayları kultur-sanat, sinema, moda-tasarim veya sehir-yasam kategorisine koy. Kaynağın varsayılan kategorisini gerektiğinde değiştir. interest ve relevance alanlarını 0-100 puanla. Aynı olayı tekrar eden adaylara düşük interest ver. JSON biçimi: {"items":[{"id":"...","eligible":true,"category":"...","interest":0,"relevance":0,"reason":"kısa gerekçe"}]}. Adaylar:\n${JSON.stringify(batch)}`
+      }
+    ]
+  });
+  const raw = response.output_text.replace(/^```json\s*|\s*```$/g, '').trim();
+  const parsed = JSON.parse(raw);
+  return Array.isArray(parsed.items) ? parsed.items : [];
+}
+
 export async function rerankCandidates(candidates) {
   if (!candidates.length) return [];
-  const batch = candidates
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 80)
-    .map((candidate) => ({
+  const shortlist = buildBalancedShortlist(candidates);
+  const input = shortlist.map((candidate) => ({
       id: candidate.id,
       title: candidate.title,
       summary: candidate.summary?.slice(0, 350) ?? '',
@@ -36,21 +80,9 @@ export async function rerankCandidates(candidates) {
       preliminary_category: candidate.category,
       published_at: candidate.publishedAt
     }));
-
-  const response = await client.responses.create({
-    model: config.openaiModel,
-    input: [
-      {
-        role: 'system',
-        content: 'SanatÇin için haber seçen kıdemli bir Türkçe kültür-sanat editörüsün. Yalnız geçerli JSON ver. Finans, ekonomi, borsa, bankacılık, siyaset, askerî gündem, spor, sıradan protokol, reklam ve zayıf PR metinleri kesinlikle kapsam dışıdır. Türkiye’deki okur için yenilik, görsel güç, özgünlük ve somut kültürel değer arıyoruz.'
-      },
-      {
-        role: 'user',
-        content: `Önce her adayın yayın kapsamına girip girmediğini belirle. Yalnız gerçek kültür-sanat, sinema, moda-tasarım ve şehir yaşamı haberleri eligible=true olabilir. Finans/ekonomi/siyaset/spor/protokol/kurumsal PR için eligible=false ve category="uygunsuz" ver. Uygun adayları kultur-sanat, sinema, moda-tasarim veya sehir-yasam kategorisine koy. interest ve relevance alanlarını 0-100 puanla. Aynı olayı tekrar eden adaylara düşük interest ver. JSON biçimi: {"items":[{"id":"...","eligible":true,"category":"...","interest":0,"relevance":0,"reason":"kısa gerekçe"}]}. Adaylar:\n${JSON.stringify(batch)}`
-      }
-    ]
-  });
-  const raw = response.output_text.replace(/^```json\s*|\s*```$/g, '').trim();
-  const parsed = JSON.parse(raw);
-  return applyAiScores(candidates, Array.isArray(parsed.items) ? parsed.items : []);
+  const items = [];
+  for (let offset = 0; offset < input.length; offset += config.aiBatchSize) {
+    items.push(...await rerankBatch(input.slice(offset, offset + config.aiBatchSize)));
+  }
+  return applyAiScores(shortlist, items);
 }

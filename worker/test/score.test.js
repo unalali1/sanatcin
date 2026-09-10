@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { freshnessPoints, hasExcludedTopic, inferCategory, scoreCandidate, selectByCategory } from '../src/score.js';
-import { applyAiScores } from '../src/rank.js';
+import { applyAiScores, buildBalancedShortlist } from '../src/rank.js';
 
 const source = { id: 'test', name: 'Test', quality: 9, defaultCategory: null };
 
@@ -13,6 +13,11 @@ test('24 saatlik haber en yüksek güncellik puanını alır', () => {
   const now = new Date('2026-09-08T12:00:00Z');
   assert.equal(freshnessPoints('2026-09-08T01:00:00Z', now), 35);
   assert.equal(freshnessPoints('2026-08-20T01:00:00Z', now), 0);
+});
+
+test('altı saatten fazla gelecekte görünen habere güncellik puanı vermez', () => {
+  const now = new Date('2026-09-08T12:00:00Z');
+  assert.equal(freshnessPoints('2026-09-09T01:00:00Z', now), 0);
 });
 
 test('kategori başına ikiden fazla haber seçmez', () => {
@@ -51,4 +56,17 @@ test('AI değerlendirmesi gelmeyen aday yayıma alınmaz', () => {
   const [ranked] = applyAiScores([candidate], []);
   assert.equal(ranked.eligible, false);
   assert.equal(ranked.category, 'uygunsuz');
+});
+
+test('AI kısa listesi kategorileri dengeli taşır', () => {
+  const candidates = [
+    ...Array.from({ length: 10 }, (_, index) => ({ id: `k${index}`, category: 'kultur-sanat', score: 100 - index, eligible: true })),
+    { id: 's1', category: 'sinema', score: 5, eligible: true },
+    { id: 'm1', category: 'moda-tasarim', score: 4, eligible: true },
+    { id: 'y1', category: 'sehir-yasam', score: 3, eligible: true }
+  ];
+  const selected = buildBalancedShortlist(candidates, 8);
+  assert.ok(selected.some((item) => item.category === 'sinema'));
+  assert.ok(selected.some((item) => item.category === 'moda-tasarim'));
+  assert.ok(selected.some((item) => item.category === 'sehir-yasam'));
 });
