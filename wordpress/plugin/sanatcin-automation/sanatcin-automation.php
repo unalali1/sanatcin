@@ -2,20 +2,21 @@
 /**
  * Plugin Name: SanatÇin Otomasyon Köprüsü
  * Description: Railway haber işleyicisi için kaynak alanlarını ve tekrar kontrolü REST uçlarını sağlar.
- * Version: 0.2.0
+ * Version: 0.3.0
  * Requires at least: 6.5
  * Requires PHP: 8.1
  */
 
 if (!defined('ABSPATH')) exit;
 
-const SANATCIN_AUTOMATION_VERSION = '0.2.0';
+const SANATCIN_AUTOMATION_VERSION = '0.3.0';
 
 const SANATCIN_META_FIELDS = [
     'sanatcin_source_url' => 'string',
     'sanatcin_source_name' => 'string',
     'sanatcin_source_hash' => 'string',
     'sanatcin_image_hash' => 'string',
+    'sanatcin_image_source_hash' => 'string',
     'sanatcin_image_source_url' => 'string',
     'sanatcin_image_description' => 'string',
     'sanatcin_score' => 'number',
@@ -75,14 +76,17 @@ function sanatcin_known_hashes(WP_REST_Request $request) {
 
 function sanatcin_image_hash_known(WP_REST_Request $request) {
     $hash = sanitize_text_field((string) $request->get_param('hash'));
-    if (!$hash) return new WP_REST_Response(['known' => false], 200);
+    $source_hash = sanitize_text_field((string) $request->get_param('source_hash'));
+    if (!$hash && !$source_hash) return new WP_REST_Response(['known' => false], 200);
+    $clauses = [];
+    if ($hash) $clauses[] = ['key' => 'sanatcin_image_hash', 'value' => $hash];
+    if ($source_hash) $clauses[] = ['key' => 'sanatcin_image_source_hash', 'value' => $source_hash];
     $query = new WP_Query([
         'post_type' => 'post',
         'post_status' => ['publish', 'draft', 'pending', 'future', 'private'],
         'posts_per_page' => 1,
         'fields' => 'ids',
-        'meta_key' => 'sanatcin_image_hash',
-        'meta_value' => $hash
+        'meta_query' => array_merge(['relation' => 'OR'], $clauses)
     ]);
     return new WP_REST_Response(['known' => !empty($query->posts)], 200);
 }
@@ -99,7 +103,10 @@ function sanatcin_register_routes() {
         'methods' => 'GET',
         'callback' => 'sanatcin_image_hash_known',
         'permission_callback' => $can_edit,
-        'args' => ['hash' => ['required' => true, 'type' => 'string']]
+        'args' => [
+            'hash' => ['required' => true, 'type' => 'string'],
+            'source_hash' => ['required' => false, 'type' => 'string']
+        ]
     ]);
     register_rest_route('sanatcin/v1', '/health', [
         'methods' => 'GET',

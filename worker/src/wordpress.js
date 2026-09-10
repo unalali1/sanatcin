@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import OpenAI from 'openai';
 import { config } from './config.js';
 import { sourceHash } from './fetch.js';
+import { log } from './logger.js';
 import { assertImageDimensions, isUsableImageUrl, titleSimilarity } from './quality.js';
 
 const auth = `Basic ${Buffer.from(`${config.wpUsername}:${config.wpAppPassword}`).toString('base64')}`;
@@ -22,15 +23,14 @@ async function validateEditorialImage(article, image) {
         {
           type: 'input_text',
           text: [
-            'Bir kültür-sanat haber editörü olarak başlık, kategori ve görseli denetle.',
-            'Geçerli kategoriler: kultur-sanat, sinema, moda-tasarim, sehir-yasam.',
-            'Ekonomi, finans, siyaset, spor ve bu dört alanla ilgisiz içerikler için kategori uygunsuz olmalı.',
+            'Bir kültür-sanat haber editörü olarak başlık ile görsel arasındaki ilişkiyi denetle.',
             'Görsel yalnız habere doğrudan ilişkin fotoğraf, illüstrasyon veya etkinlik afişiyse kullanılabilir.',
             'QR kod, logo, genel haber kartı, site ekran görüntüsü, boş/soyut yer tutucu ya da başlıkla ilgisiz görseli reddet.',
             'Kare/dikey QR kodları, yayınevi/medya logolu kimlik kartlarını, internet sitesi ekran görüntülerini ve başka bir habere de uyabilecek jenerik görselleri reddet.',
             'description alanına görselde gerçekten görülenleri, 8-18 kelimelik doğal Türkçe alternatif metin olarak yaz.',
             'kind alanı editorial-photo, illustration veya event-poster olmalı.',
-            'Yalnız şu JSON biçiminde yanıt ver: {"usable":true,"category":"kultur-sanat","kind":"editorial-photo","description":"kısa görsel açıklaması","reason":"kısa gerekçe"}',
+            'Haberi yeniden kategorize etme; yalnız görselin doğrudan ilişkisini değerlendir.',
+            'Yalnız şu JSON biçiminde yanıt ver: {"usable":true,"kind":"editorial-photo","description":"kısa görsel açıklaması","reason":"kısa gerekçe"}',
             `Başlık: ${article.title}`,
             `Mevcut kategori: ${article.category}`
           ].join('\n')
@@ -45,10 +45,18 @@ async function validateEditorialImage(article, image) {
   if (!['editorial-photo', 'illustration', 'event-poster'].includes(result.kind)) {
     throw new Error(`Kaynak görsel türü uygun değil: ${result.kind ?? 'belirlenemedi'}.`);
   }
-  if (result.category !== article.category) {
-    throw new Error(`Haber kategoriyle uyumlu değil: ${article.category} yerine ${result.category ?? 'uygunsuz'}.`);
-  }
   return { kind: result.kind, altText: String(result.description ?? '').replace(/\s+/g, ' ').trim().slice(0, 180) };
+}
+
+export function canonicalImageUrl(value = '') {
+  try {
+    const url = new URL(value);
+    url.hash = '';
+    url.search = '';
+    return url.href;
+  } catch {
+    return String(value).trim();
+  }
 }
 
 async function wp(path, options = {}) {
@@ -62,8 +70,12 @@ async function wp(path, options = {}) {
 
 export async function knownHashes(hashes) {
   if (hashes.length === 0) return [];
-  const result = await wp('/sanatcin/v1/known', { method: 'POST', body: JSON.stringify({ hashes }) });
-  return result.known ?? [];
+  const known = [];
+  for (let offset = 0; offset < hashes.length; offset += 500) {
+    const result = await wp('/sanatcin/v1/known', { method: 'POST', body: JSON.stringify({ hashes: hashes.slice(offset, offset + 500) }) });
+    known.push(...(result.known ?? []));
+  }
+  return known;
 }
 
 async function categoryId(slug) {
@@ -101,10 +113,11 @@ export async function prepareFeaturedImage(article) {
       if (buffer.length > 10_000_000) throw new Error('Kaynak görsel 10 MB sınırını aşıyor.');
       const dimensions = assertImageDimensions(buffer, contentType);
       const imageHash = crypto.createHash('sha256').update(buffer).digest('hex');
+      const imageSourceHash = sourceHash(canonicalImageUrl(imageUrl));
       if (runImageHashes.has(imageHash)) throw new Error('Aynı görsel bu çalışmada başka bir haber için zaten kullanıldı.');
-      const existing = await wp(`/sanatcin/v1/image-known?hash=${encodeURIComponent(imageHash)}`);
+      const existing = await wp(`/sanatcin/v1/image-known?hash=${encodeURIComponent(imageHash)}&source_hash=${encodeURIComponent(imageSourceHash)}`);
       if (existing.known) throw new Error('Aynı görsel daha önce başka bir haberde kullanılmış.');
-      const image = { buffer, contentType: contentType.split(';')[0], extension, imageHash, sourceUrl: imageUrl, dimensions };
+      const image = { buffer, contentType: contentType.split(';')[0], extension, imageHash, imageSourceHash, sourceUrl: imageUrl, dimensions };
       const validation = await validateEditorialImage(article, image);
       image.kind = validation.kind;
       image.altText = validation.altText;
@@ -115,7 +128,13 @@ export async function prepareFeaturedImage(article) {
       clearTimeout(timer);
     }
   }
-  throw new Error(`Haberde kullanılabilir bir kaynak görsel bulunamadı: ${errors.slice(0, 3).join(' | ')}`);
+  log('warn', 'Haber uygun görsel bulunamadığı için görselsiz devam edecek', {
+    source: article.source.id,
+    url: article.url,
+    attempted: candidates.filter(Boolean).length,
+    errors: errors.slice(0, 5)
+  });
+  return null;
 }
 
 async function uploadFeaturedImage(article, image) {
@@ -141,41 +160,42 @@ async function uploadFeaturedImage(article, image) {
   return media.id;
 }
 
-export async function publishArticle(article, preparedImage = null) {
+export async function publishArticle(article, preparedImage = undefined) {
   const sourceUrl = new URL(article.url).href;
-  const sourceLine = `<aside class="sanatcin-source"><strong>Kaynak:</strong> <a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(article.source.name)}</a><span> · Kaynak haberden özgün Türkçe özet</span></aside>`;
+  const sourceLine = `<aside class="sanatcin-source"><strong>Kaynak:</strong> <a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(article.source.name)}</a><span> · Kaynak haber temel alınarak Türkçe yeniden yazıldı</span></aside>`;
   const category = await categoryId(article.category);
-  const image = preparedImage ?? await prepareFeaturedImage(article);
+  const image = preparedImage === undefined ? await prepareFeaturedImage(article) : preparedImage;
   if (config.dryRun) {
-    runImageHashes.add(image.imageHash);
+    if (image) runImageHashes.add(image.imageHash);
     return {
       id: null,
       link: null,
       dryRun: true,
-      payload: { title: article.title, excerpt: article.excerpt, status: config.publishStatus, categories: [category], sourceImageUrl: article.sourceImageUrl, imageHash: image.imageHash }
+      payload: { title: article.title, excerpt: article.excerpt, status: config.publishStatus, categories: [category], sourceImageUrl: image?.sourceUrl ?? null, imageHash: image?.imageHash ?? null }
     };
   }
 
-  const featuredMedia = await uploadFeaturedImage(article, image);
+  const featuredMedia = image ? await uploadFeaturedImage(article, image) : null;
   const payload = {
     title: article.title,
     excerpt: article.excerpt,
     content: `${article.bodyHtml}\n${sourceLine}`,
     status: 'draft',
     categories: [category],
-    featured_media: featuredMedia,
     meta: {
       sanatcin_source_url: article.url,
       sanatcin_source_name: article.source.name,
       sanatcin_source_hash: sourceHash(article.url),
-      sanatcin_image_hash: image.imageHash,
-      sanatcin_image_source_url: image.sourceUrl,
-      sanatcin_image_description: image.altText || '',
+      sanatcin_image_hash: image?.imageHash ?? '',
+      sanatcin_image_source_hash: image?.imageSourceHash ?? '',
+      sanatcin_image_source_url: image?.sourceUrl ?? '',
+      sanatcin_image_description: image?.altText ?? '',
       sanatcin_score: Math.round(article.score),
       sanatcin_original_title: article.originalTitle,
       sanatcin_editorial_mode: article.editorialMode
     }
   };
+  if (featuredMedia) payload.featured_media = featuredMedia;
   let post = await wp('/wp/v2/posts', { method: 'POST', body: JSON.stringify(payload) });
   if (config.publishStatus === 'publish') {
     post = await wp(`/wp/v2/posts/${post.id}`, { method: 'POST', body: JSON.stringify({ status: 'publish' }) });

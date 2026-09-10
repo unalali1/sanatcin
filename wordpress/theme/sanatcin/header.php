@@ -15,6 +15,7 @@
         <a class="brand-logo" href="<?php echo esc_url(home_url('/')); ?>" aria-label="SanatÇin ana sayfa">
             <img src="<?php echo esc_url(get_template_directory_uri() . '/assets/images/logo.webp'); ?>" alt="<?php bloginfo('name'); ?>" width="423" height="220" fetchpriority="high">
         </a>
+        <p class="brand-deck">Çin’in kültür ve yaşam gündemine<br>bağımsız Türkçe bakış</p>
         <div class="header-actions">
             <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation"><span></span><span></span><span></span><span class="screen-reader-text">Menüyü aç</span></button>
             <button class="search-toggle" type="button" aria-expanded="false" aria-controls="site-search" aria-label="Arama panelini aç">

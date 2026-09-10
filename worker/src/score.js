@@ -31,7 +31,9 @@ export function inferCategory(candidate) {
 
 export function freshnessPoints(publishedAt, now = new Date()) {
   if (!publishedAt) return 18;
-  const hours = Math.max(0, (now.getTime() - new Date(publishedAt).getTime()) / 3_600_000);
+  const hours = (now.getTime() - new Date(publishedAt).getTime()) / 3_600_000;
+  if (hours < -6) return 0;
+  if (hours < 0) return 35;
   if (hours <= 24) return 35;
   if (hours <= 48) return 31;
   if (hours <= 72) return 27;

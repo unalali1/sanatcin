@@ -3,9 +3,9 @@
 $featured = new WP_Query(['posts_per_page' => 4, 'ignore_sticky_posts' => false]);
 if ($featured->have_posts()) : ?>
 <section class="lead-section" aria-label="Öne çıkan haberler">
-    <div class="site-wrap lead-layout">
+    <div class="site-wrap lead-layout lead-count-<?php echo esc_attr($featured->post_count); ?>">
         <?php $featured->the_post(); $category = sanatcin_primary_category(); ?>
-        <article class="lead-story">
+        <article class="lead-story category-<?php echo esc_attr(sanatcin_category_slug()); ?>">
             <a class="lead-image" href="<?php the_permalink(); ?>"><?php sanatcin_story_image('sanatcin-hero', true); ?></a>
             <div class="lead-copy">
                 <span class="eyebrow"><?php echo esc_html($category ? $category->name : 'SanatÇin'); ?></span>
@@ -16,7 +16,7 @@ if ($featured->have_posts()) : ?>
         </article>
         <?php if ($featured->have_posts()) : ?>
         <div class="lead-secondary">
-            <?php while ($featured->have_posts()) : $featured->the_post(); sanatcin_story_card('h2'); endwhile; ?>
+            <?php while ($featured->have_posts()) : $featured->the_post(); sanatcin_story_card('h2', 'story-card-compact'); endwhile; ?>
         </div>
         <?php endif; ?>
     </div>
@@ -34,6 +34,17 @@ if ($latest->have_posts()) : ?>
         <div class="news-grid">
             <?php while ($latest->have_posts()) : $latest->the_post(); sanatcin_story_card(); endwhile; wp_reset_postdata(); ?>
         </div>
+    </div>
+</section>
+<?php endif; ?>
+
+<?php if ($featured->found_posts > 4) : ?>
+<section class="category-ribbon" aria-label="SanatÇin yayın başlıkları">
+    <div class="site-wrap category-ribbon-grid">
+        <div><strong>Kültür</strong><span>Sanat, edebiyat ve miras</span></div>
+        <div><strong>Sinema</strong><span>Film, dizi ve ekran</span></div>
+        <div><strong>Tasarım</strong><span>Moda, mimari ve yaratıcı dünya</span></div>
+        <div><strong>Şehir</strong><span>Mekânlar, yaşam ve rotalar</span></div>
     </div>
 </section>
 <?php endif; ?>

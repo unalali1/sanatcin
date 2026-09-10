@@ -31,8 +31,8 @@ export function translationIssues({ title = '', excerpt = '', text = '', paragra
   const words = text.match(/\p{L}+/gu) ?? [];
   const turkishSignals = text.match(TURKISH_WORD_PATTERN)?.length ?? 0;
   if (words.length >= 80 && turkishSignals < 4) issues.push('Metin akıcı Türkçe haber dili olarak doğrulanamadı.');
-  if (title.trim().length < 35 || title.trim().length > 105) issues.push('Başlık uzunluğu uygun değil.');
-  if (excerpt.trim().length < 100 || excerpt.trim().length > 220) issues.push('Spot uzunluğu uygun değil.');
+  if (title.trim().length < 35 || title.trim().length > 95) issues.push('Başlık 35-95 karakter aralığında değil.');
+  if (excerpt.trim().length < 110 || excerpt.trim().length > 190) issues.push('Spot 110-190 karakter aralığında değil.');
   if (OUTPUT_BOILERPLATE_PATTERNS.some((pattern) => pattern.test(combined))) {
     issues.push('Türkçe metinde navigasyon, üyelik veya yasal site artığı bulunuyor.');
   }
@@ -65,20 +65,23 @@ export function assertSourceContentQuality(text) {
 
 export function imageDimensions(buffer, contentType = '') {
   const mime = contentType.split(';')[0].trim().toLowerCase();
-  if (mime === 'image/png' && buffer.length >= 24) {
+  if (mime === 'image/png' && buffer.length >= 24 && buffer.toString('hex', 0, 8) === '89504e470d0a1a0a') {
     return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
   }
-  if (mime === 'image/jpeg') {
+  if (mime === 'image/jpeg' && buffer.length >= 4 && buffer[0] === 0xff && buffer[1] === 0xd8) {
     let offset = 2;
-    while (offset + 9 < buffer.length) {
-      if (buffer[offset] !== 0xff) { offset += 1; continue; }
+    while (offset + 4 < buffer.length) {
+      if (buffer[offset] !== 0xff) return null;
       const marker = buffer[offset + 1];
       if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker)) {
+        if (offset + 9 >= buffer.length) return null;
         return { height: buffer.readUInt16BE(offset + 5), width: buffer.readUInt16BE(offset + 7) };
       }
-      if (marker === 0xd8 || marker === 0xd9) { offset += 2; continue; }
+      if (marker === 0xd9 || marker === 0xda) break;
+      if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { offset += 2; continue; }
+      if (offset + 4 > buffer.length) return null;
       const length = buffer.readUInt16BE(offset + 2);
-      if (length < 2) break;
+      if (length < 2 || offset + 2 + length > buffer.length) return null;
       offset += 2 + length;
     }
   }
@@ -103,11 +106,11 @@ export function imageDimensions(buffer, contentType = '') {
 export function assertImageDimensions(buffer, contentType) {
   const dimensions = imageDimensions(buffer, contentType);
   if (!dimensions) throw new Error('Kaynak görsel boyutları doğrulanamadı.');
-  if (dimensions.width < 1000 || dimensions.height < 560) {
+  if (dimensions.width < 900 || dimensions.height < 500) {
     throw new Error(`Kaynak görsel çözünürlüğü yetersiz: ${dimensions.width}x${dimensions.height}.`);
   }
   const ratio = dimensions.width / dimensions.height;
-  if (ratio < 1.15 || ratio > 2.4) throw new Error(`Kaynak görsel oranı haber kartlarına uygun değil: ${dimensions.width}x${dimensions.height}.`);
+  if (ratio < 1 || ratio > 2.6) throw new Error(`Kaynak görsel oranı haber kartlarına uygun değil: ${dimensions.width}x${dimensions.height}.`);
   return dimensions;
 }
 
