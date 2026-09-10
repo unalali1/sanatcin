@@ -7,7 +7,7 @@
             <span class="eyebrow"><?php echo esc_html($category ? $category->name : 'SanatÇin'); ?></span>
             <h1><?php the_title(); ?></h1>
             <div class="article-deck"><?php the_excerpt(); ?></div>
-            <div class="story-meta"><?php echo esc_html(get_the_date('j F Y')); ?> · <?php echo esc_html(sanatcin_reading_time()); ?> dakikalık okuma</div>
+            <div class="story-meta"><?php echo esc_html(get_the_date('j F Y')); ?></div>
         </header>
         <?php if (has_post_thumbnail()) : ?><figure class="article-figure">
             <?php sanatcin_story_image('sanatcin-hero', true); ?>

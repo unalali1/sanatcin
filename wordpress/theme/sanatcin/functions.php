@@ -96,7 +96,7 @@ function sanatcin_story_card($heading = 'h3', $variant = '') {
         <div class="story-body">
             <span class="eyebrow"><?php echo esc_html($category ? $category->name : 'SanatÇin'); ?></span>
             <<?php echo tag_escape($heading); ?>><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></<?php echo tag_escape($heading); ?>>
-            <div class="story-meta"><?php echo esc_html(get_the_date('j F Y')); ?> · <?php echo esc_html(sanatcin_reading_time()); ?> dakika</div>
+            <div class="story-meta"><?php echo esc_html(get_the_date('j F Y')); ?></div>
         </div>
     </article>
     <?php
