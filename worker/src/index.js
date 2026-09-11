@@ -4,7 +4,7 @@ import { discover, extractArticle, sourceHash } from './fetch.js';
 import { log } from './logger.js';
 import { scoreCandidate } from './score.js';
 import { rerankCandidates } from './rank.js';
-import { CATEGORIES, SOURCES } from './sources.js';
+import { CATEGORIES, SOURCES, SOURCE_SET_VERSION } from './sources.js';
 import { translateArticle } from './translate.js';
 import { assertNoSimilarPublishedTitle, knownHashes, prepareFeaturedImage, publishArticle } from './wordpress.js';
 
@@ -36,7 +36,13 @@ function increment(record, key) {
 
 async function run() {
   validateConfig();
-  log('info', 'Günlük SanatÇin taraması başladı', { sources: SOURCES.length, status: config.publishStatus, dryRun: config.dryRun });
+  log('info', 'Günlük SanatÇin taraması başladı', {
+    sourceSet: SOURCE_SET_VERSION,
+    sources: SOURCES.length,
+    enabledSources: SOURCES.filter((source) => source.enabled).length,
+    status: config.publishStatus,
+    dryRun: config.dryRun
+  });
 
   const sourceStats = Object.fromEntries(SOURCES.filter((source) => source.enabled).map((source) => [source.id, { discovered: 0, attempted: 0, published: 0, rejected: 0 }]));
   const rejectedReasons = {};

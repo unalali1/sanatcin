@@ -8,6 +8,12 @@ Bu depo iki parçadan oluşur:
 - `wordpress/plugin/sanatcin-automation`: Kaynak bilgilerini saklayan ve otomasyon için REST uçları sağlayan WordPress eklentisi.
 - `worker`: Railway'de her gün bir kez çalışan haber tarama, puanlama, editoryal doğrulama ve yayın işleyicisi.
 
+## Haber kaynakları
+
+Worker 0.5, `2026-09-10-en-01` İngilizce kaynak havuzunu kullanır. Havuzda 6 native RSS rotası (CGTN, Sixth Tone, RADII Art, RADII Fashion, Dao Insights ve ArtAsiaPacific) ile China Daily, Xinhua, Jing Daily, SmartShanghai, City News Service, The World of Chinese ve Chinaculture.org için kaynak-özel HTML/hybrid adaptörleri bulunur. Ocula, Cloudflare insan doğrulaması nedeniyle yapılandırmada kayıtlıdır ancak kapalıdır. Önceki Çince ve karma kaynak havuzu tamamen kaldırılmıştır.
+
+RSS ve HTML adayları canonical URL, başlık ve yayın tarihiyle tekilleştirilir. Kaynağa özgü konu/coğrafya filtreleri alakasız adayları erken eler; ödeme duvarı, üyelik, CAPTCHA ve insan doğrulaması aşılmaz. Chinaculture RSS akışı yeterli sayıda güncel ve tarihli öğe vermediğinde worker kamuya açık HTML sayfasına düşer.
+
 ## Yayın kuralı
 
 Dört kategori kullanılır:

@@ -1,3 +1,5 @@
+export const SOURCE_SET_VERSION = '2026-09-10-en-01';
+
 export const CATEGORIES = [
   { slug: 'kultur-sanat', name: 'Kültür & Sanat' },
   { slug: 'sinema', name: 'Sinema' },
@@ -5,47 +7,150 @@ export const CATEGORIES = [
   { slug: 'sehir-yasam', name: 'Şehir & Yaşam' }
 ];
 
-const rss = (id, name, feedUrl, url, quality, defaultCategory = null, enabled = true) => ({
-  id, name, mode: 'rss', feedUrl, url, quality, defaultCategory, enabled
+const rss = (id, name, feedUrl, url, quality, options = {}) => ({
+  id,
+  name,
+  mode: 'rss',
+  adapter: 'rss_generic',
+  feedUrl,
+  url,
+  quality,
+  enabled: true,
+  priority: 'P1',
+  intervalMinutes: 60,
+  ...options
 });
 
-const html = (id, name, url, quality, defaultCategory = null, browser = false, enabled = true) => ({
-  id, name, mode: 'html', url, quality, defaultCategory, browser, enabled
+const html = (id, name, url, quality, options = {}) => ({
+  id,
+  name,
+  mode: 'html',
+  adapter: 'html_generic',
+  url,
+  quality,
+  enabled: true,
+  priority: 'P2',
+  intervalMinutes: 360,
+  ...options
 });
+
+const cultureTerms = [
+  'art', 'artist', 'culture', 'museum', 'exhibition', 'heritage', 'literature', 'book',
+  'theatre', 'theater', 'opera', 'music', 'film', 'cinema', 'fashion', 'design',
+  'architecture', 'photography', 'festival', 'creative', 'craft'
+];
+
+const chinaTerms = [
+  'china', 'chinese', 'hong kong', 'taiwan', 'beijing', 'shanghai', 'shenzhen',
+  'guangzhou', 'chengdu', 'hangzhou', 'chongqing', 'xi’an', "xi'an"
+];
 
 export const SOURCES = [
-  html('china-daily-culture', 'China Daily – Culture', 'https://www.chinadaily.com.cn/culture', 10),
-  html('xinhua-en-culture', 'Xinhua – Culture English', 'https://english.news.cn/culture/index.htm', 10),
-  html('xinhua-zh-culture', 'Xinhua – Culture (Chinese)', 'https://www.news.cn/culture/', 10),
-  html('global-times-arts', 'Global Times – Arts', 'https://www.globaltimes.cn/arts/', 8, null, true),
-  html('scmp-arts-culture', 'SCMP – Arts & Culture', 'https://www.scmp.com/lifestyle/arts-culture', 9, 'kultur-sanat', true),
-  rss('china-news-culture', 'China News Service – Culture', 'https://www.chinanews.com.cn/rss/culture.xml', 'https://www.chinanews.com.cn/wy/', 10),
-  html('gmw-culture', 'Guangming Daily – Culture', 'https://culture.gmw.cn/', 9, 'kultur-sanat'),
-  html('people-zh-culture', 'People’s Daily – Culture (Chinese)', 'https://culture.people.com.cn/', 9, 'kultur-sanat', true, false),
-  html('people-en-culture', 'People’s Daily Online – Culture', 'https://en.people.cn/90782/index.html', 8, 'kultur-sanat'),
-  html('cgtn-culture', 'CGTN – Culture', 'https://www.cgtn.com/culture', 9),
-  html('chinaculture', 'Chinaculture.org – News', 'https://en.chinaculture.org/news', 10, null),
-  rss('sixth-tone', 'Sixth Tone', 'https://api.sixthtone.com/cont/output/rssApi', 'https://www.sixthtone.com/', 9, null, false),
-  rss('1905-film', '1905.com – Film', 'https://www.1905.com/rss.php?rssid=54', 'https://www.1905.com/news/', 10, 'sinema'),
-  html('film-administration', 'China Film Administration', 'https://www.chinafilm.gov.cn/', 10, 'sinema'),
-  html('vogue-china', 'VOGUE China', 'https://www.vogue.com.cn/', 9, 'moda-tasarim'),
-  html('nowre', 'NOWRE', 'https://nowre.com/', 9, 'moda-tasarim'),
-  html('beijing-latest', 'Beijing Official – Latest', 'https://english.beijing.gov.cn/latest/news/', 9, 'sehir-yasam'),
-  html('beijing-events', 'Beijing Official – Events', 'https://english.beijing.gov.cn/whatson/events/index.html', 9, 'sehir-yasam'),
-  html('shanghai-latest', 'Shanghai Official – Latest', 'https://english.shanghai.gov.cn/en-Latest-WhatsNew/', 9, 'sehir-yasam'),
-  html('shanghai-events', 'Shanghai Official – Events', 'https://english.shanghai.gov.cn/en-Events/index.html', 9, 'sehir-yasam'),
-  rss('ichongqing', 'iChongqing', 'https://www.ichongqing.info/feed/', 'https://www.ichongqing.info/culture/', 9, 'sehir-yasam'),
-  html('city-news-service', 'City News Service / Shanghai Daily', 'https://www.citynewsservice.cn/news/', 8, 'sehir-yasam'),
-  html('artron', 'Artron Art', 'https://news.artron.net/', 9, 'kultur-sanat'),
-  html('art-journal-cn', 'The Art Newspaper China', 'https://www.theartjournal.cn/', 8, 'kultur-sanat'),
-  html('lifeweek', 'Sanlian Lifeweek', 'https://www.lifeweek.com.cn/', 8, null, false, false),
-  html('the-paper', 'The Paper', 'https://www.thepaper.cn/', 8, null, true),
-  html('china-film-news', 'China Film News', 'https://www.chinafilmnews.cn/', 9, 'sinema', false, false),
-  html('modern-weekly', 'Modern Weekly', 'https://www.modernweekly.com/', 8, 'moda-tasarim'),
-  html('gq-china', 'GQ China', 'https://www.gq.com.cn/', 8, 'moda-tasarim'),
-  html('hangzhou', 'Hangzhou Official', 'https://www.ehangzhou.gov.cn/', 9, 'sehir-yasam'),
-  html('gochengdu', 'GoChengdu', 'https://www.gochengdu.cn/', 7, 'sehir-yasam', true),
-  html('jiangsu-now', 'JiangsuNow / JSChina', 'https://english.jschina.com.cn/', 7, 'sehir-yasam', false, false),
-  html('hunan', 'Hunan Government – News & Events', 'https://www.enghunan.gov.cn/News/', 7, 'sehir-yasam', false, false),
-  html('ecns-culture', 'ECNS – Culture', 'https://www.ecns.cn/culture/', 7, 'kultur-sanat', false, false)
+  rss('cgtn-culture', 'CGTN – Culture', 'https://www.cgtn.com/subscribe/rss/section/culture.xml', 'https://www.cgtn.com/culture', 9),
+  rss('sixth-tone', 'Sixth Tone', 'https://www.sixthtone.com/rss/index.xml', 'https://www.sixthtone.com/', 9, {
+    includeTerms: cultureTerms
+  }),
+  rss('radii-art', 'RADII – Art', 'https://radii.co/tags/art/feed', 'https://radii.co/tags/art', 9, {
+    defaultCategory: 'kultur-sanat',
+    intervalMinutes: 180
+  }),
+  rss('radii-fashion', 'RADII – Fashion', 'https://radii.co/tags/fashion/feed', 'https://radii.co/tags/fashion', 9, {
+    defaultCategory: 'moda-tasarim',
+    intervalMinutes: 180
+  }),
+  rss('dao-fashion-retail', 'Dao Insights – Fashion & Retail', 'https://daoinsights.com/tag/industries-fashion-retail/feed/', 'https://daoinsights.com/tag/industries-fashion-retail/', 8, {
+    defaultCategory: 'moda-tasarim',
+    excludeTerms: ['sponsored', 'advertorial', 'partner content'],
+    intervalMinutes: 180
+  }),
+  rss('artasiapacific-news', 'ArtAsiaPacific – News', 'https://www.artasiapacific.com/rss/', 'https://www.artasiapacific.com/news/', 9, {
+    defaultCategory: 'kultur-sanat',
+    includeTerms: chinaTerms,
+    intervalMinutes: 120
+  }),
+  html('china-daily-culture', 'China Daily – Culture', 'https://www.chinadaily.com.cn/culture', 10, {
+    adapter: 'html_chinadaily',
+    priority: 'P1',
+    intervalMinutes: 60,
+    linkSelector: "a[href*='/a/20']",
+    itemSelector: 'article, li, .item, .news-item, .card, .mb10, .tw3_01_2_t'
+  }),
+  html('china-daily-fashion', 'China Daily – Fashion', 'https://www.chinadaily.com.cn/life/fashion', 9, {
+    adapter: 'html_chinadaily',
+    priority: 'P1',
+    intervalMinutes: 120,
+    defaultCategory: 'moda-tasarim',
+    linkSelector: "a[href*='/a/20']",
+    itemSelector: 'article, li, .item, .news-item, .card'
+  }),
+  html('xinhua-culture', 'Xinhua – Culture & Lifestyle', 'https://english.news.cn/culture/index.htm', 10, {
+    adapter: 'html_xinhua',
+    priority: 'P1',
+    intervalMinutes: 60,
+    linkSelector: "a[href$='/c.html']",
+    pathPattern: /\/20\d{6}\/[^?#]+\/c\.html$/i
+  }),
+  html('jingdaily-fashion', 'Jing Daily – Fashion', 'https://jingdaily.com/sectors/fashion', 8, {
+    adapter: 'html_jingdaily',
+    priority: 'P1',
+    intervalMinutes: 120,
+    defaultCategory: 'moda-tasarim',
+    linkSelector: "a[href*='/posts/']",
+    pathPattern: /\/posts\//i,
+    rejectBodyPatterns: [/subscription required/i, /subscribe to continue/i, /members only/i]
+  }),
+  html('smartshanghai-exhibitions', 'SmartShanghai – Art Exhibitions', 'https://www.smartshanghai.com/events/exhibitions/', 8, {
+    adapter: 'html_smartshanghai',
+    defaultCategory: 'kultur-sanat',
+    linkSelector: "a[href*='/event/']",
+    pathPattern: /\/event\//i,
+    itemSelector: 'article, .event, .event-row, .card'
+  }),
+  html('smartshanghai-stage', 'SmartShanghai – Stage & Dance', 'https://www.smartshanghai.com/events/stage/', 8, {
+    adapter: 'html_smartshanghai',
+    defaultCategory: 'kultur-sanat',
+    linkSelector: "a[href*='/event/']",
+    pathPattern: /\/event\//i,
+    itemSelector: 'article, .event, .event-row, .card'
+  }),
+  html('cns-lifestyle', 'City News Service – Lifestyle', 'https://www.citynewsservice.cn/articles/cns/lifestyle', 8, {
+    adapter: 'next_cns_articles',
+    intervalMinutes: 180,
+    defaultCategory: 'sehir-yasam',
+    includeTerms: [...cultureTerms, 'lifestyle', 'city', 'food'],
+    browser: true,
+    waitSelector: 'article, a[href]'
+  }),
+  html('cns-exhibitions', 'City News Service – Exhibition Events', 'https://www.citynewsservice.cn/events/exhibition', 8, {
+    adapter: 'html_cns_events',
+    defaultCategory: 'kultur-sanat',
+    linkSelector: 'main a[href]',
+    itemSelector: 'main article, main a:has(article)'
+  }),
+  html('world-of-chinese', 'The World of Chinese', 'https://www.theworldofchinese.com/', 8, {
+    adapter: 'html_twoc',
+    includeTerms: cultureTerms,
+    pathPattern: /\/20\d{2}\/\d{1,2}\//,
+    rejectBodyPatterns: [/membership required/i, /subscribe to continue/i]
+  }),
+  {
+    ...html('chinaculture', 'Chinaculture.org – News, Trends & Events', 'https://en.chinaculture.org/', 10, {
+      adapter: 'html_chinaculture',
+      defaultCategory: 'kultur-sanat',
+      linkSelector: "a[href*='/a/20']",
+      pathPattern: /\/a\/20\d{4}\/\d{2}\//,
+      articleLimit: 60
+    }),
+    mode: 'hybrid',
+    feedUrl: 'https://en.chinaculture.org/Chinaculture-RSS.xml',
+    feedMinimumFreshItems: 3
+  },
+  html('ocula-magazine', 'Ocula – Magazine', 'https://ocula.com/magazine/', 8, {
+    adapter: 'excluded_cloudflare',
+    priority: 'P3',
+    intervalMinutes: 0,
+    defaultCategory: 'kultur-sanat',
+    enabled: false,
+    disabledReason: 'Cloudflare insan doğrulaması; otomasyona alınmayacak.'
+  })
 ];
