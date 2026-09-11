@@ -9,6 +9,10 @@ function boolean(name, fallback = false) {
   return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 }
 
+function boundedInteger(name, fallback, minimum, maximum) {
+  return Math.max(minimum, Math.min(integer(name, fallback), maximum));
+}
+
 export const config = {
   openaiApiKey: process.env.OPENAI_API_KEY ?? '',
   openaiModel: process.env.OPENAI_MODEL ?? 'gpt-5-mini',
@@ -22,11 +26,15 @@ export const config = {
   publishStatus: process.env.PUBLISH_STATUS ?? 'draft',
   dryRun: boolean('DRY_RUN'),
   requirePublishedDate: boolean('REQUIRE_PUBLISHED_DATE', true),
-  maxPerCategory: Math.max(1, Math.min(integer('MAX_PER_CATEGORY', 2), 2)),
-  minDailyTarget: Math.max(1, Math.min(integer('MIN_DAILY_TARGET', 4), 8)),
-  maxDailyTotal: Math.max(1, Math.min(integer('MAX_DAILY_TOTAL', 8), 8)),
-  maxAiCandidates: Math.max(40, Math.min(integer('MAX_AI_CANDIDATES', 200), 320)),
-  aiBatchSize: Math.max(20, Math.min(integer('AI_BATCH_SIZE', 40), 60)),
+  maxPerCategory: boundedInteger('MAX_PER_CATEGORY', 2, 1, 2),
+  maxAttemptsPerCategory: boundedInteger('MAX_ATTEMPTS_PER_CATEGORY', 5, 1, 10),
+  minDailyTarget: boundedInteger('MIN_DAILY_TARGET', 4, 1, 8),
+  maxDailyTotal: boundedInteger('MAX_DAILY_TOTAL', 8, 1, 8),
+  maxRunMinutes: boundedInteger('MAX_RUN_MINUTES', 30, 5, 60),
+  maxAiCandidates: boundedInteger('MAX_AI_CANDIDATES', 200, 40, 320),
+  aiBatchSize: boundedInteger('AI_BATCH_SIZE', 40, 20, 60),
+  aiRequestTimeoutMs: boundedInteger('AI_REQUEST_TIMEOUT_MS', 90_000, 15_000, 180_000),
+  aiMaxRetries: boundedInteger('AI_MAX_RETRIES', 1, 0, 2),
   primaryLookbackHours: integer('PRIMARY_LOOKBACK_HOURS', 72),
   fallbackLookbackDays: integer('FALLBACK_LOOKBACK_DAYS', 7),
   discoveryConcurrency: integer('DISCOVERY_CONCURRENCY', 5),

@@ -2,7 +2,11 @@ import OpenAI from 'openai';
 import { config } from './config.js';
 import { freshnessPoints } from './score.js';
 
-const client = new OpenAI({ apiKey: config.openaiApiKey });
+const client = new OpenAI({
+  apiKey: config.openaiApiKey,
+  timeout: config.aiRequestTimeoutMs,
+  maxRetries: config.aiMaxRetries
+});
 const allowedCategories = new Set(['kultur-sanat', 'sinema', 'moda-tasarim', 'sehir-yasam']);
 
 export function applyAiScores(candidates, items, now = new Date()) {
@@ -50,7 +54,7 @@ export function buildBalancedShortlist(candidates, maxCandidates = config.maxAiC
   return selected.slice(0, maxCandidates);
 }
 
-async function rerankBatch(batch) {
+async function rerankBatch(batch, signal) {
   const response = await client.responses.create({
     model: config.openaiModel,
     input: [
@@ -63,13 +67,13 @@ async function rerankBatch(batch) {
         content: `Her adayı bağımsız değerlendir; hiçbir adayı atlama. Yalnız gerçek kültür-sanat, sinema, moda-tasarım ve şehir yaşamı haberleri eligible=true olabilir. Finans/ekonomi/siyaset/spor/protokol/kurumsal PR için eligible=false ve category="uygunsuz" ver. Uygun adayları kultur-sanat, sinema, moda-tasarim veya sehir-yasam kategorisine koy. Kaynağın varsayılan kategorisini gerektiğinde değiştir. interest ve relevance alanlarını 0-100 puanla. Aynı olayı tekrar eden adaylara düşük interest ver. JSON biçimi: {"items":[{"id":"...","eligible":true,"category":"...","interest":0,"relevance":0,"reason":"kısa gerekçe"}]}. Adaylar:\n${JSON.stringify(batch)}`
       }
     ]
-  });
+  }, { signal });
   const raw = response.output_text.replace(/^```json\s*|\s*```$/g, '').trim();
   const parsed = JSON.parse(raw);
   return Array.isArray(parsed.items) ? parsed.items : [];
 }
 
-export async function rerankCandidates(candidates) {
+export async function rerankCandidates(candidates, { signal } = {}) {
   if (!candidates.length) return [];
   const shortlist = buildBalancedShortlist(candidates);
   const input = shortlist.map((candidate) => ({
@@ -82,7 +86,7 @@ export async function rerankCandidates(candidates) {
     }));
   const items = [];
   for (let offset = 0; offset < input.length; offset += config.aiBatchSize) {
-    items.push(...await rerankBatch(input.slice(offset, offset + config.aiBatchSize)));
+    items.push(...await rerankBatch(input.slice(offset, offset + config.aiBatchSize), signal));
   }
   return applyAiScores(shortlist, items);
 }

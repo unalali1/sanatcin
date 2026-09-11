@@ -8,13 +8,17 @@ import { assertImageDimensions, isUsableImageUrl, titleSimilarity } from './qual
 const auth = `Basic ${Buffer.from(`${config.wpUsername}:${config.wpAppPassword}`).toString('base64')}`;
 const categoryIds = new Map();
 const runImageHashes = new Set();
-const ai = new OpenAI({ apiKey: config.openaiApiKey });
+const ai = new OpenAI({
+  apiKey: config.openaiApiKey,
+  timeout: config.aiRequestTimeoutMs,
+  maxRetries: config.aiMaxRetries
+});
 
 function escapeHtml(value = '') {
   return String(value).replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' })[char]);
 }
 
-async function validateEditorialImage(article, image) {
+async function validateEditorialImage(article, image, signal) {
   const response = await ai.responses.create({
     model: config.openaiModel,
     input: [{
@@ -38,7 +42,7 @@ async function validateEditorialImage(article, image) {
         { type: 'input_image', image_url: `data:${image.contentType};base64,${image.buffer.toString('base64')}`, detail: 'low' }
       ]
     }]
-  });
+  }, { signal });
   const raw = response.output_text.replace(/^\`\`\`json\s*|\s*\`\`\`$/g, '').trim();
   const result = JSON.parse(raw);
   if (result.usable !== true) throw new Error(`Görsel editoryal olarak uygun değil: ${result.reason ?? 'gerekçe belirtilmedi'}`);
@@ -60,9 +64,11 @@ export function canonicalImageUrl(value = '') {
 }
 
 async function wp(path, options = {}) {
+  const { headers = {}, signal = AbortSignal.timeout(config.requestTimeoutMs), ...requestOptions } = options;
   const response = await fetch(`${config.wpBaseUrl}/wp-json${path}`, {
-    ...options,
-    headers: { authorization: auth, 'content-type': 'application/json', ...(options.headers ?? {}) }
+    ...requestOptions,
+    signal,
+    headers: { authorization: auth, 'content-type': 'application/json', ...headers }
   });
   if (!response.ok) throw new Error(`WordPress ${response.status}: ${(await response.text()).slice(0, 700)}`);
   return response.status === 204 ? null : response.json();
@@ -78,9 +84,9 @@ export async function knownHashes(hashes) {
   return known;
 }
 
-async function categoryId(slug) {
+async function categoryId(slug, signal) {
   if (categoryIds.has(slug)) return categoryIds.get(slug);
-  const categories = await wp(`/wp/v2/categories?slug=${encodeURIComponent(slug)}`);
+  const categories = await wp(`/wp/v2/categories?slug=${encodeURIComponent(slug)}`, { signal });
   if (!categories.length) throw new Error(`WordPress kategorisi bulunamadı: ${slug}`);
   categoryIds.set(slug, categories[0].id);
   return categories[0].id;
@@ -113,14 +119,14 @@ function visualPrompt(article) {
   ].filter(Boolean).join('\n');
 }
 
-async function generateEditorialImage(article) {
+async function generateEditorialImage(article, signal) {
   const result = await ai.images.generate({
     model: config.openaiImageModel,
     prompt: visualPrompt(article),
     size: '1536x1024',
     quality: config.openaiImageQuality,
     output_format: 'jpeg'
-  });
+  }, { signal });
   const encoded = result.data?.[0]?.b64_json;
   if (!encoded) throw new Error('OpenAI görsel üretimi boş sonuç döndürdü.');
   const buffer = Buffer.from(encoded, 'base64');
@@ -130,7 +136,7 @@ async function generateEditorialImage(article) {
   const imageHash = crypto.createHash('sha256').update(buffer).digest('hex');
   const imageSourceHash = sourceHash(`openai:${article.url}`);
   if (runImageHashes.has(imageHash)) throw new Error('Üretilen görsel bu çalışmada başka bir haber için zaten kullanıldı.');
-  const existing = await wp(`/sanatcin/v1/image-known?hash=${encodeURIComponent(imageHash)}&source_hash=${encodeURIComponent(imageSourceHash)}`);
+  const existing = await wp(`/sanatcin/v1/image-known?hash=${encodeURIComponent(imageHash)}&source_hash=${encodeURIComponent(imageSourceHash)}`, { signal });
   if (existing.known) throw new Error('Bu haber için üretilen görsel daha önce kullanılmış.');
   const image = {
     buffer,
@@ -144,25 +150,25 @@ async function generateEditorialImage(article) {
     model: config.openaiImageModel,
     kind: 'illustration'
   };
-  const validation = await validateEditorialImage(article, image);
+  const validation = await validateEditorialImage(article, image, signal);
   image.kind = 'illustration';
   image.altText = validation.altText;
   return image;
 }
 
-export async function prepareFeaturedImage(article) {
+export async function prepareFeaturedImage(article, { signal } = {}) {
   const candidates = sourceImageReuseAllowed(article)
     ? (article.sourceImageUrls?.length ? article.sourceImageUrls : [article.sourceImageUrl])
     : [];
   const errors = [];
   for (const imageUrl of candidates) {
     if (!isUsableImageUrl(imageUrl)) continue;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
     try {
       const response = await fetch(imageUrl, {
       redirect: 'follow',
-      signal: controller.signal,
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMs)])
+        : AbortSignal.timeout(config.requestTimeoutMs),
       headers: { 'user-agent': config.userAgent, accept: 'image/jpeg,image/png,image/webp,image/*;q=0.8', referer: article.url }
       });
       if (!response.ok) throw new Error(`Kaynak görsel indirilemedi: HTTP ${response.status}`);
@@ -176,17 +182,15 @@ export async function prepareFeaturedImage(article) {
       const imageHash = crypto.createHash('sha256').update(buffer).digest('hex');
       const imageSourceHash = sourceHash(canonicalImageUrl(imageUrl));
       if (runImageHashes.has(imageHash)) throw new Error('Aynı görsel bu çalışmada başka bir haber için zaten kullanıldı.');
-      const existing = await wp(`/sanatcin/v1/image-known?hash=${encodeURIComponent(imageHash)}&source_hash=${encodeURIComponent(imageSourceHash)}`);
+      const existing = await wp(`/sanatcin/v1/image-known?hash=${encodeURIComponent(imageHash)}&source_hash=${encodeURIComponent(imageSourceHash)}`, { signal });
       if (existing.known) throw new Error('Aynı görsel daha önce başka bir haberde kullanılmış.');
       const image = { buffer, contentType: contentType.split(';')[0], extension, imageHash, imageSourceHash, sourceUrl: imageUrl, dimensions, origin: 'licensed-source' };
-      const validation = await validateEditorialImage(article, image);
+      const validation = await validateEditorialImage(article, image, signal);
       image.kind = validation.kind;
       image.altText = validation.altText;
       return image;
     } catch (error) {
       errors.push(error.message);
-    } finally {
-      clearTimeout(timer);
     }
   }
   if (config.generateFallbackImages) {
@@ -197,7 +201,7 @@ export async function prepareFeaturedImage(article) {
       attempted: candidates.filter(Boolean).length,
       errors: errors.slice(0, 5)
     });
-    return generateEditorialImage(article);
+    return generateEditorialImage(article, signal);
   }
   log('error', 'Haber için zorunlu görsel hazırlanamadı', {
     source: article.source.id,
@@ -208,7 +212,7 @@ export async function prepareFeaturedImage(article) {
   throw new Error('Haber için lisansı ve uygunluğu doğrulanmış bir görsel hazırlanamadı.');
 }
 
-async function uploadFeaturedImage(article, image) {
+async function uploadFeaturedImage(article, image, signal) {
   const filename = `sanatcin-${image.imageHash.slice(0, 20)}.${image.extension}`;
   const media = await wp('/wp/v2/media', {
     method: 'POST',
@@ -216,7 +220,8 @@ async function uploadFeaturedImage(article, image) {
     headers: {
       'content-type': image.contentType,
       'content-disposition': `attachment; filename="${filename}"`
-    }
+    },
+    signal
   });
   await wp(`/wp/v2/media/${media.id}`, {
     method: 'POST',
@@ -229,17 +234,18 @@ async function uploadFeaturedImage(article, image) {
       description: image.origin === 'openai-generated'
         ? 'Bu görsel haberin konusu için yapay zekâ ile üretilmiş temsili bir illüstrasyondur.'
         : `Kaynak görsel: ${image.sourceUrl}`
-    })
+    }),
+    signal
   });
   runImageHashes.add(image.imageHash);
   return media.id;
 }
 
-export async function publishArticle(article, preparedImage = undefined) {
+export async function publishArticle(article, preparedImage = undefined, { signal } = {}) {
   const sourceUrl = new URL(article.url).href;
   const sourceLine = `<aside class="sanatcin-source"><strong>Kaynak:</strong> <a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(article.source.name)}</a><span> · Kaynak haber temel alınarak Türkçe yeniden yazıldı</span></aside>`;
-  const category = await categoryId(article.category);
-  const image = preparedImage === undefined ? await prepareFeaturedImage(article) : preparedImage;
+  const category = await categoryId(article.category, signal);
+  const image = preparedImage === undefined ? await prepareFeaturedImage(article, { signal }) : preparedImage;
   if (!image) throw new Error('Öne çıkan görsel zorunludur; haber yayımlanmadı.');
   if (config.dryRun) {
     if (image) runImageHashes.add(image.imageHash);
@@ -251,7 +257,7 @@ export async function publishArticle(article, preparedImage = undefined) {
     };
   }
 
-  const featuredMedia = image ? await uploadFeaturedImage(article, image) : null;
+  const featuredMedia = image ? await uploadFeaturedImage(article, image, signal) : null;
   const payload = {
     title: article.title,
     excerpt: article.excerpt,
@@ -275,9 +281,9 @@ export async function publishArticle(article, preparedImage = undefined) {
     }
   };
   payload.featured_media = featuredMedia;
-  let post = await wp('/wp/v2/posts', { method: 'POST', body: JSON.stringify(payload) });
+  let post = await wp('/wp/v2/posts', { method: 'POST', body: JSON.stringify(payload), signal });
   if (config.publishStatus === 'publish') {
-    post = await wp(`/wp/v2/posts/${post.id}`, { method: 'POST', body: JSON.stringify({ status: 'publish' }) });
+    post = await wp(`/wp/v2/posts/${post.id}`, { method: 'POST', body: JSON.stringify({ status: 'publish' }), signal });
   }
   return post;
 }
@@ -294,8 +300,8 @@ function decodeTitle(value = '') {
     .trim();
 }
 
-export async function assertNoSimilarPublishedTitle(title) {
-  const posts = await wp('/wp/v2/posts?status=publish&per_page=100&orderby=date&order=desc&_fields=id,link,title');
+export async function assertNoSimilarPublishedTitle(title, { signal } = {}) {
+  const posts = await wp('/wp/v2/posts?status=publish&per_page=100&orderby=date&order=desc&_fields=id,link,title', { signal });
   for (const post of posts) {
     const existingTitle = decodeTitle(post.title?.rendered);
     const similarity = titleSimilarity(title, existingTitle);

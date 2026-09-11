@@ -2,7 +2,11 @@ import OpenAI from 'openai';
 import { config } from './config.js';
 import { assertTranslationQuality, translationIssues } from './quality.js';
 
-const client = new OpenAI({ apiKey: config.openaiApiKey });
+const client = new OpenAI({
+  apiKey: config.openaiApiKey,
+  timeout: config.aiRequestTimeoutMs,
+  maxRetries: config.aiMaxRetries
+});
 
 function parseJson(value) {
   return JSON.parse(String(value).replace(/^```json\s*|\s*```$/g, '').trim());
@@ -39,7 +43,7 @@ function sourceExcerpt(text, maxChars = 24_000) {
   return `${head}\n\n[KAYNAK METNİN ORTA BÖLÜMÜ UZUNLUK NEDENİYLE KISALTILDI]\n\n${tail}`;
 }
 
-async function extractFactSheet(article) {
+async function extractFactSheet(article, signal) {
   const response = await client.responses.create({
     model: config.openaiModel,
     input: [
@@ -68,7 +72,7 @@ async function extractFactSheet(article) {
         ].join('\n\n')
       }
     ]
-  });
+  }, { signal });
   const sheet = parseJson(response.output_text);
   const list = (value, limit = 20) => (Array.isArray(value) ? value : []).map(cleanString).filter(Boolean).slice(0, limit);
   return {
@@ -86,7 +90,7 @@ async function extractFactSheet(article) {
   };
 }
 
-async function writeNewsroomDraft(article, factSheet, feedback = []) {
+async function writeNewsroomDraft(article, factSheet, feedback = [], signal) {
   const response = await client.responses.create({
     model: config.openaiModel,
     input: [
@@ -96,7 +100,9 @@ async function writeNewsroomDraft(article, factSheet, feedback = []) {
           'SanatÇin için çalışan kıdemli bir Türkçe kültür-sanat haber editörüsün.',
           'Çeviri yapma; doğrulanmış olgu fişini kullanarak doğal Türkçe haber yaz.',
           'Türkçe cümle kuruluşunu kullan; kaynak dilin sözdizimini ve kalıplarını taşıma.',
-          'Çin yer adlarında yerleşik Türkçe karşılıkları kullan: Beijing yerine Pekin gibi. Türkçede karşılığı olan kurum adlarını çevir; gerekli olduğunda özgün adı ilk kullanımda parantez içinde bir kez ver.',
+          'Kişi adlarını kaynakta kullanılan Latin yazımıyla koru. Çin yer adlarında yerleşik Türkçe karşılıkları kullan: Beijing yerine Pekin gibi; yerleşik karşılığı yoksa kaynak yazımını koru.',
+          'Kurum ve etkinlik adlarını doğal Türkçeyle aktar; doğrulama için özgün adı ilk kullanımda parantez içinde bir kez verebilirsin. Bu, olgunun değiştirilmesi değildir.',
+          'Doğrudan alıntıları anlamını, konuşanı ve ihtiyat düzeyini değiştirmeden doğal Türkçeye çevir; İngilizce alıntıyı gövdede tekrar etme.',
           'Ham Pinyin kurum zincirleri, kaynak metni yorumlayan editör notları ve “metinde belirtilmiyor”, “daha fazla bilgi için kaynak” gibi ifadeler kullanma.',
           'İlk paragrafta kim-ne-nerede-ne zaman bilgisini ver, sonraki paragraflarda önem ve bağlamı açıkla.',
           'Olgu fişinde bulunmayan bilgi, sıfat, neden-sonuç ilişkisi, duygu, alıntı veya hüküm ekleme.',
@@ -118,11 +124,11 @@ async function writeNewsroomDraft(article, factSheet, feedback = []) {
         ].filter(Boolean).join('\n\n')
       }
     ]
-  });
+  }, { signal });
   return normalizeDraft(article, parseJson(response.output_text));
 }
 
-async function copyEditDraft(article, factSheet, draft, feedback = []) {
+async function copyEditDraft(article, factSheet, draft, feedback = [], signal) {
   const response = await client.responses.create({
     model: config.openaiModel,
     input: [
@@ -132,7 +138,8 @@ async function copyEditDraft(article, factSheet, draft, feedback = []) {
           'Ulusal bir kültür-sanat yayınında çalışan Türkçe haber redaktörüsün.',
           'Taslağı kelime kelime çevrilmiş hissini tamamen giderecek biçimde yeniden yaz.',
           'Akıcı, açık, tarafsız ve yaşayan Türkiye Türkçesi kullan; devrik, yapay ve zincirleme tamlamaları düzelt.',
-          'Pekin gibi yerleşik Türkçe adları kullan; ham Pinyin kurum adlarını doğal Türkçe karşılıklarıyla açıkla.',
+          'Kişi adlarını kaynak yazımıyla koru; Pekin gibi yerleşik Türkçe yer adlarını kullan; kurum ve etkinlik adlarını doğal Türkçeyle aktar ve gerekirse özgün adını ilk kullanımda paranteze al.',
+          'Doğrudan alıntıları kaynak dilinde bırakma; anlamını ve konuşanın ihtiyat düzeyini koruyarak doğal Türkçeye çevir.',
           'Kaynak metne ilişkin editör notu, eksik bilgi uyarısı, okura yönlendirme veya süreç açıklaması yazma.',
           'Başlık, spot ve ilk paragraftaki tekrarları kaldır. Paragraflar arasında mantıklı akış kur.',
           'Özel ad, tarih, sayı, alıntı ve olayları olgu fişinin dışına çıkarma; yeni bilgi ekleme.',
@@ -150,11 +157,11 @@ async function copyEditDraft(article, factSheet, draft, feedback = []) {
         ].filter(Boolean).join('\n\n')
       }
     ]
-  });
+  }, { signal });
   return normalizeDraft(article, parseJson(response.output_text));
 }
 
-async function auditDraft(factSheet, draft) {
+async function auditDraft(factSheet, draft, signal) {
   const response = await client.responses.create({
     model: config.openaiModel,
     input: [
@@ -164,7 +171,10 @@ async function auditDraft(factSheet, draft) {
           'Türkçe haber taslağını doğrulanmış olgu fişiyle karşılaştıran son yayın denetçisisin.',
           'Şu koşulların hepsi sağlanmadıkça accepted=false ver:',
           'başlık, spot ve gövdedeki her somut iddia olgu fişince desteklenir;',
-          'kişi, kurum, yer, tarih, sayı ve alıntılar değiştirilmemiştir;',
+          'kişi adları kaynak yazımıyla korunur; yerleşik Türkçe yer adları ve doğal Türkçe kurum/etkinlik karşılıkları olgu değişikliği sayılmaz;',
+          'tarih ve sayılar olgusal olarak aynıdır; yazımları Türkçe yayın kurallarına göre düzenlenebilir;',
+          'doğrudan alıntılar İngilizce bırakılmak yerine anlam, konuşan ve ihtiyat düzeyi korunarak doğal Türkçeye çevrilmiştir;',
+          'kaynak künyesi, muhabir satırı ve İngilizce dateline gövdede tekrarlanmak zorunda değildir; bunlar WordPress kaynak alanında ayrıca gösterilir;',
           'metin doğal Türkiye Türkçesiyle yazılmıştır ve çeviri kokusu taşımaz;',
           'açıklanmamış Pinyin kurum zinciri, kaynak-metin yorumu veya editoryal süreç notu yoktur;',
           'başlık somuttur, spot başlığı tekrarlamaz, giriş temel haberi açıklar;',
@@ -177,7 +187,7 @@ async function auditDraft(factSheet, draft) {
         content: `OLGU FİŞİ:\n${JSON.stringify(factSheet)}\n\nTÜRKÇE TASLAK:\n${JSON.stringify({ title: draft.title, excerpt: draft.excerpt, paragraphs: draft.paragraphs })}\n\nJSON şeması: {"accepted":true,"issues":["kısa ve somut sorun"]}`
       }
     ]
-  });
+  }, { signal });
   const result = parseJson(response.output_text);
   return {
     accepted: result.accepted === true,
@@ -185,7 +195,7 @@ async function auditDraft(factSheet, draft) {
   };
 }
 
-async function auditTurkishNewsStyle(draft) {
+async function auditTurkishNewsStyle(draft, signal) {
   const response = await client.responses.create({
     model: config.openaiModel,
     input: [
@@ -204,7 +214,7 @@ async function auditTurkishNewsStyle(draft) {
         content: `TASLAK:\n${JSON.stringify({ title: draft.title, excerpt: draft.excerpt, paragraphs: draft.paragraphs })}\n\nJSON şeması: {"accepted":true,"issues":["kısa ve uygulanabilir sorun"]}`
       }
     ]
-  });
+  }, { signal });
   const result = parseJson(response.output_text);
   return {
     accepted: result.accepted === true,
@@ -212,23 +222,27 @@ async function auditTurkishNewsStyle(draft) {
   };
 }
 
-export async function translateArticle(article) {
-  const factSheet = await extractFactSheet(article);
+export async function translateArticle(article, { signal } = {}) {
+  const factSheet = await extractFactSheet(article, signal);
   if (!factSheet.publishable || !factSheet.angle || !factSheet.newsValue || factSheet.facts.length < 5) {
     throw new Error('Kaynak metin tam, güncel ve olgusal bir haber yazmak için yeterli değil.');
   }
 
-  const firstDraft = await writeNewsroomDraft(article, factSheet);
-  let draft = await copyEditDraft(article, factSheet, firstDraft, translationIssues(firstDraft));
-  let audit = await auditDraft(factSheet, draft);
-  let styleAudit = await auditTurkishNewsStyle(draft);
+  const firstDraft = await writeNewsroomDraft(article, factSheet, [], signal);
+  let draft = await copyEditDraft(article, factSheet, firstDraft, translationIssues(firstDraft), signal);
+  let [audit, styleAudit] = await Promise.all([
+    auditDraft(factSheet, draft, signal),
+    auditTurkishNewsStyle(draft, signal)
+  ]);
   let mechanicalIssues = translationIssues(draft);
 
   if (!audit.accepted || !styleAudit.accepted || mechanicalIssues.length) {
     const feedback = [...new Set([...audit.issues, ...styleAudit.issues, ...mechanicalIssues])];
-    draft = await copyEditDraft(article, factSheet, draft, feedback.length ? feedback : ['Daha doğal ve kaynakla tam uyumlu bir Türkçe haber olarak yeniden yaz.']);
-    audit = await auditDraft(factSheet, draft);
-    styleAudit = await auditTurkishNewsStyle(draft);
+    draft = await copyEditDraft(article, factSheet, draft, feedback.length ? feedback : ['Daha doğal ve kaynakla tam uyumlu bir Türkçe haber olarak yeniden yaz.'], signal);
+    [audit, styleAudit] = await Promise.all([
+      auditDraft(factSheet, draft, signal),
+      auditTurkishNewsStyle(draft, signal)
+    ]);
     mechanicalIssues = translationIssues(draft);
   }
 
