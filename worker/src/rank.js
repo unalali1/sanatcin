@@ -1,11 +1,15 @@
 import OpenAI from 'openai';
 import { config } from './config.js';
+import { mapLimit } from './concurrency.js';
+import { log } from './logger.js';
 import { freshnessPoints } from './score.js';
 
 const client = new OpenAI({
   apiKey: config.openaiApiKey,
   timeout: config.aiRequestTimeoutMs,
-  maxRetries: config.aiMaxRetries
+  // Büyük bir sıralama isteğini aynı boyutta tekrar etmek yerine, başarısız
+  // partiyi aşağıda iki küçük parçaya ayırarak bir kez daha deniyoruz.
+  maxRetries: 0
 });
 const allowedCategories = new Set(['kultur-sanat', 'sinema', 'moda-tasarim', 'sehir-yasam']);
 
@@ -73,6 +77,105 @@ async function rerankBatch(batch, signal) {
   return Array.isArray(parsed.items) ? parsed.items : [];
 }
 
+function chunks(items, size) {
+  const result = [];
+  for (let offset = 0; offset < items.length; offset += size) {
+    result.push(items.slice(offset, offset + size));
+  }
+  return result;
+}
+
+function errorMessage(error) {
+  return String(error?.message ?? error).slice(0, 500);
+}
+
+export async function rerankInputsResilient(input, {
+  signal,
+  batchSize = config.aiBatchSize,
+  concurrency = config.aiRerankConcurrency,
+  rerank = rerankBatch,
+  logger = log
+} = {}) {
+  const batches = chunks(input, batchSize);
+  let failedParts = 0;
+  let recoveredParts = 0;
+
+  const results = await mapLimit(batches, concurrency, async (batch, batchIndex) => {
+    const batchNumber = batchIndex + 1;
+    logger('info', 'AI sıralama partisi başladı', {
+      batch: batchNumber,
+      totalBatches: batches.length,
+      candidates: batch.length
+    });
+
+    try {
+      const items = await rerank(batch, signal);
+      logger('info', 'AI sıralama partisi tamamlandı', {
+        batch: batchNumber,
+        totalBatches: batches.length,
+        candidates: batch.length,
+        evaluated: items.length
+      });
+      return items;
+    } catch (error) {
+      if (signal?.aborted) throw error;
+
+      const midpoint = Math.ceil(batch.length / 2);
+      const retryParts = batch.length > 1
+        ? [batch.slice(0, midpoint), batch.slice(midpoint)].filter((part) => part.length)
+        : [batch];
+      logger('warn', 'AI sıralama partisi başarısız; küçük parçalara bölünerek yeniden denenecek', {
+        batch: batchNumber,
+        totalBatches: batches.length,
+        candidates: batch.length,
+        retryParts: retryParts.length,
+        error: errorMessage(error)
+      });
+
+      const recovered = [];
+      for (let retryIndex = 0; retryIndex < retryParts.length; retryIndex += 1) {
+        const retryPart = retryParts[retryIndex];
+        try {
+          const items = await rerank(retryPart, signal);
+          recovered.push(...items);
+          recoveredParts += 1;
+          logger('info', 'AI sıralama alt partisi tamamlandı', {
+            batch: batchNumber,
+            retryPart: retryIndex + 1,
+            retryParts: retryParts.length,
+            candidates: retryPart.length,
+            evaluated: items.length
+          });
+        } catch (retryError) {
+          if (signal?.aborted) throw retryError;
+          failedParts += 1;
+          logger('error', 'AI sıralama alt partisi başarısız; yalnız bu adaylar atlanacak', {
+            batch: batchNumber,
+            retryPart: retryIndex + 1,
+            retryParts: retryParts.length,
+            candidates: retryPart.length,
+            error: errorMessage(retryError)
+          });
+        }
+      }
+      return recovered;
+    }
+  });
+
+  const items = results.flat();
+  if (input.length > 0 && items.length === 0) {
+    throw new Error('Tüm yapay zekâ sıralama partileri başarısız oldu.');
+  }
+  logger(failedParts > 0 ? 'warn' : 'info', 'AI sıralama aşaması tamamlandı', {
+    candidates: input.length,
+    evaluated: items.length,
+    batches: batches.length,
+    recoveredParts,
+    failedParts
+  });
+  return items;
+}
+
 export async function rerankCandidates(candidates, { signal } = {}) {
   if (!candidates.length) return [];
   const shortlist = buildBalancedShortlist(candidates);
@@ -84,9 +187,6 @@ export async function rerankCandidates(candidates, { signal } = {}) {
       preliminary_category: candidate.category,
       published_at: candidate.publishedAt
     }));
-  const items = [];
-  for (let offset = 0; offset < input.length; offset += config.aiBatchSize) {
-    items.push(...await rerankBatch(input.slice(offset, offset + config.aiBatchSize), signal));
-  }
+  const items = await rerankInputsResilient(input, { signal });
   return applyAiScores(shortlist, items);
 }

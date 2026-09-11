@@ -51,7 +51,10 @@ async function run() {
     status: config.publishStatus,
     dryRun: config.dryRun,
     maxAttemptsPerCategory: config.maxAttemptsPerCategory,
-    maxRunMinutes: config.maxRunMinutes
+    maxRunMinutes: config.maxRunMinutes,
+    maxAiCandidates: config.maxAiCandidates,
+    aiBatchSize: config.aiBatchSize,
+    aiRerankConcurrency: config.aiRerankConcurrency
   });
 
   const sourceStats = Object.fromEntries(SOURCES.filter((source) => source.enabled).map((source) => [source.id, { discovered: 0, attempted: 0, published: 0, rejected: 0 }]));
