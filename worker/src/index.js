@@ -55,7 +55,10 @@ async function run() {
     maxAiCandidates: config.maxAiCandidates,
     aiBatchSize: config.aiBatchSize,
     aiRerankConcurrency: config.aiRerankConcurrency,
-    articleConcurrency: config.articleConcurrency
+    articleConcurrency: config.articleConcurrency,
+    selectionModel: config.openaiSelectionModel,
+    factModel: config.openaiFactModel,
+    editorModel: config.openaiEditorModel
   });
 
   const sourceStats = Object.fromEntries(SOURCES.filter((source) => source.enabled).map((source) => [source.id, { discovered: 0, attempted: 0, published: 0, rejected: 0 }]));

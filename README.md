@@ -25,7 +25,7 @@ Dört kategori kullanılır:
 
 Her kategori için en fazla iki haber seçilir. Matematiksel günlük üst sınır sekiz haberdir; kalite kapısını geçen aday yoksa ilgili kategoride yayın yapılmaz. Bir kategoride en fazla beş aday denenir ve tüm çalışma 30 dakikalık güvenlik sınırıyla korunur. İşleyici son yedi günü değerlendirir, yayın tarihi doğrulanamayan adayları atlar ve aynı kaynak URL'sini ya da yüksek ölçüde benzer başlığı ikinci kez yayımlamaz. Finans, ekonomi, siyaset, spor, protokol ve kurumsal PR içerikleri kapsam dışıdır. AI sıralaması dengeli biçimde seçilmiş en fazla 40 aday üzerinde, 20'şer adaylık en fazla iki eşzamanlı partiyle yapılır. Zaman aşımına uğrayan parti daha küçük iki parçaya bölünür; bir partinin hatası diğer başarılı sonuçları silmez. Kategori kuyrukları tek bir yayıncı tarafından doldurulmaz; kaynaklar dönüşümlü sıralanır. Haberler kategori kategori seri işlenmek yerine dengeli turlarda ve en fazla iki eşzamanlı adayla hazırlanır.
 
-Kaynak metin bire bir çevrilmez. 0.6 yayın zinciri olgu çıkarımı ile doğal Türkçe ilk taslağı tek aşamada hazırlar. İkinci ve son aşama taslağı özgün kaynakla karşılaştırır; kişi adlarını, sayıları, tarihleri, eser/etkinlik adlarını ve alıntı anlamını korurken çeviri kokusunu doğrudan düzeltir. Düzeltilebilir dil ve özetleme sorunları artık haberi reddetme nedeni değildir. Yalnız giderilemeyen önemli bir çelişki veya yetersiz kaynak reddedilir. Başlık/spot uzunluğu, Pinyin zincirleri, editoryal süreç notları ve cümle tekrarları ayrıca yerel olarak denetlenir; gerekirse yalnız bir hedefli düzeltme yapılır.
+Kaynak metin bire bir çevrilmez. 0.6.1 yayın zincirinde ekonomik model önce yalnız doğrulanabilir olguları, kişi ve kurum adlarını, tarihleri, sayıları ve alıntıları çıkarır; bu aşama Türkçe taslak üretmez. Güçlü Türkçe editör modeli özgün kaynak ile olgu fişini birlikte okuyup haberi Türkiye Türkçesinde sıfırdan yazar. Başlık/spot uzunluğu, Pinyin zincirleri, editoryal süreç notları ve cümle tekrarları yerel olarak denetlenir; sorun varsa editör modeli aynı metne yalnız bir hedefli düzeltme uygular. Düzeltilebilir dil ve biçim sorunları adayı elemez. Yalnız yetersiz kaynak, giderilemeyen önemli olgu çelişkisi veya kaynakta bulunmayan bilgi yayını engeller.
 
 Kaynak görselleri yalnız ilgili kaynak için yeniden kullanım izni, lisans bağlantısı ve atıf bilgisi açıkça tanımlandığında içeri alınır. Uygun ve izinli fotoğraf yoksa OpenAI ile konuya özel, temsili bir editoryal illüstrasyon üretilir; bu görsel başlıkla ilişki, çözünürlük ve tekrar denetiminden geçer. Görsel hazırlanamayan haber yayımlanmaz.
 
@@ -44,7 +44,7 @@ Eklenti dört haber kategorisini ve `Editörden` kategorisini otomatik oluşturu
 
 ### Railway worker
 
-`worker/.env.example` dosyasındaki değişkenleri Railway servis değişkenleri olarak tanımlayın. Depo kökündeki `Dockerfile` ve `railway.toml`, Railway'in monorepo içindeki worker'ı doğrudan kurmasını sağlar.
+`worker/.env.example` dosyasındaki değişkenleri Railway servis değişkenleri olarak tanımlayın. `OPENAI_SELECTION_MODEL` aday sıralamasını ve görsel uygunluk denetimini, `OPENAI_FACT_MODEL` olgu çıkarımını, `OPENAI_EDITOR_MODEL` ise nihai Türkçe haber yazımı ile tek seferlik dil düzeltmesini yönetir. Depo kökündeki `Dockerfile` ve `railway.toml`, Railway'in monorepo içindeki worker'ı doğrudan kurmasını sağlar.
 
 İşleyici tek sefer çalışır ve çıkar. Railway cron ifadesi `0 2 * * *` olup her gün 02.00 UTC'de çalışır. Canlı ortamda `PUBLISH_STATUS=publish`, `DRY_RUN=false` ve `REQUIRE_PUBLISHED_DATE=true` kullanılır.
 

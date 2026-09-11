@@ -85,7 +85,7 @@ export function diversifyBySource(candidates) {
 
 async function rerankBatch(batch, signal) {
   const response = await client.responses.create({
-    model: config.openaiModel,
+    model: config.openaiSelectionModel,
     input: [
       {
         role: 'system',

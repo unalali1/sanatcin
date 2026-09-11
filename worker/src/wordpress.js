@@ -20,7 +20,7 @@ function escapeHtml(value = '') {
 
 async function validateEditorialImage(article, image, signal) {
   const response = await ai.responses.create({
-    model: config.openaiModel,
+    model: config.openaiSelectionModel,
     input: [{
       role: 'user',
       content: [

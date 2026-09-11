@@ -15,7 +15,9 @@ function boundedInteger(name, fallback, minimum, maximum) {
 
 export const config = {
   openaiApiKey: process.env.OPENAI_API_KEY ?? '',
-  openaiModel: process.env.OPENAI_MODEL ?? 'gpt-5-mini',
+  openaiSelectionModel: process.env.OPENAI_SELECTION_MODEL ?? process.env.OPENAI_MODEL ?? 'gpt-5.6-luna',
+  openaiFactModel: process.env.OPENAI_FACT_MODEL ?? process.env.OPENAI_MODEL ?? 'gpt-5.6-luna',
+  openaiEditorModel: process.env.OPENAI_EDITOR_MODEL ?? process.env.OPENAI_MODEL ?? 'gpt-5.6-terra',
   openaiImageModel: process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-2.5-flare',
   openaiImageQuality: process.env.OPENAI_IMAGE_QUALITY ?? 'medium',
   generateFallbackImages: boolean('GENERATE_FALLBACK_IMAGES', true),

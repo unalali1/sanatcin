@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { config } from './config.js';
 import { log } from './logger.js';
-import { assertTranslationQuality, translationIssues } from './quality.js';
+import { translationIssues } from './quality.js';
 
 // A failed editorial request should move to the next candidate quickly. The old
 // pipeline retried every one of its many AI calls and could spend minutes on one
@@ -71,24 +71,28 @@ function normalizeFactSheet(sheet = {}) {
   };
 }
 
-async function buildGroundedNewsPackage(article, signal) {
+async function requestJson({ model, input, signal }) {
   const response = await client.responses.create({
-    model: config.openaiModel,
+    model,
+    input
+  }, { signal });
+  return parseJson(response.output_text);
+}
+
+async function extractFactSheet(article, signal, completeJson = requestJson) {
+  const result = await completeJson({
+    model: config.openaiFactModel,
+    signal,
     input: [
       {
         role: 'system',
         content: [
-          'SanatÇin için çalışan kıdemli Türkçe kültür-sanat haber editörü ve çevirmenisin.',
-          'İngilizce veya Çince kaynak metni önce doğrulanabilir olgulara ayır, ardından aynı yanıtta doğal Türkiye Türkçesiyle özgün bir haber yaz.',
-          'Kelime kelime çeviri yapma; Türkçe haber cümlesi kur. Kaynak dilin sözdizimini, yapay tamlamalarını ve tanıtım tonunu taşıma.',
-          'Kişi adlarını eksiksiz ve kaynakta kullanılan Latin yazımıyla koru; soyada veya ada kısaltma. Sayı, tarih, yer, kurum, eser ve alıntı anlamlarını değiştirme.',
-          'Beijing için Pekin gibi yerleşik Türkçe yer adlarını kullan. Zorunlu olmayan İngilizce etkinlik/kurum adlarını ve “immersif” gibi yabancı sözcükleri metinde bırakma.',
-          'Alıntıları anlamını, konuşanını ve ihtiyat düzeyini koruyarak doğal Türkçeye çevir. Kaynakta olmayan alıntı, duygu, sıfat, neden-sonuç veya yorum ekleme.',
+          'Bir kültür-sanat haberinin olgu fişini hazırlayan dikkatli bir araştırma editörüsün.',
+          'Bu aşamada haber, çeviri, başlık, spot veya Türkçe taslak YAZMA. Yalnız kaynakta açıkça bulunan doğrulanabilir bilgileri çıkar.',
+          'Kişi adlarını kaynakta kullanılan tam Latin yazımıyla koru; ad veya soyadı kısaltma. Tarihleri, sayıları, yerleri, kurumları, eser ve etkinlik adlarını değiştirme.',
+          'Alıntıları konuşanı ve ihtiyat düzeyiyle birlikte kaydet. Kaynakta olmayan yorum, neden-sonuç, duygu, sıfat veya arka plan ekleme.',
           'Kaynak tam bir haber, röportaj, eleştiri, etkinlik haberi ya da açıklayıcı fotoğraf haberiyse; somut bir gelişme ve en az dört doğrulanabilir olgu varsa publishable=true ver.',
           'Kısa ama yeterli bir kültür-sanat haberi yalnız uzun olmadığı için reddedilmemeli. Navigasyon, reklam, salt takvim kaydı veya olgusuz tanıtım metni publishable=false olmalı.',
-          'Başlık somut gelişmeyi anlatsın ve 32-82 karakter olsun. Spot başlığı tekrarlamayan 105-180 karakterlik tek cümle olsun.',
-          'Gövde 4-7 kısa paragraf ve en az 650 karakter olsun; ilk paragrafta temel haberi açıkla, devamında önem ve kaynakta bulunan bağlamı ver.',
-          'Hiçbir Çince karakter, editör notu, süreç açıklaması veya okuru kaynağa yönlendiren dolgu kullanma.',
           'Yalnız geçerli JSON ver.'
         ].join(' ')
       },
@@ -100,33 +104,40 @@ async function buildGroundedNewsPackage(article, signal) {
           `Kaynak başlığı: ${article.title}`,
           `Önerilen kategori: ${article.category}`,
           `Kaynak metin:\n${sourceExcerpt(article.text)}`,
-          'JSON şeması: {"factSheet":{"publishable":true,"sourceType":"article|interview|review|announcement|gallery","newsValue":"somut haber değeri","angle":"somut gelişme","facts":["doğrulanmış olgu"],"people":["tam kişi adı"],"organisations":["kurum"],"places":["yer"],"numbers":["sayı veya tarih"],"quotes":[{"speaker":"konuşan","text":"kaynak dilindeki kısa alıntı"}],"context":["kaynakta bulunan bağlam"]},"draft":{"title":"32-82 karakter","excerpt":"105-180 karakter","paragraphs":["paragraf 1","paragraf 2","paragraf 3","paragraf 4"],"tags":["en fazla 5 Türkçe etiket"]}}'
+          'JSON şeması: {"factSheet":{"publishable":true,"sourceType":"article|interview|review|announcement|gallery","newsValue":"somut haber değeri","angle":"somut gelişme","facts":["doğrulanmış olgu"],"people":["tam kişi adı"],"organisations":["kurum"],"places":["yer"],"numbers":["sayı veya tarih"],"quotes":[{"speaker":"konuşan","text":"kaynak dilindeki kısa alıntı"}],"context":["kaynakta bulunan bağlam"]}}'
         ].join('\n\n')
       }
     ]
-  }, { signal });
-  const result = parseJson(response.output_text);
-  return {
-    factSheet: normalizeFactSheet(result.factSheet),
-    draft: normalizeDraft(article, result.draft)
-  };
+  });
+  return normalizeFactSheet(result.factSheet);
 }
 
-async function finalizeAndVerify(article, factSheet, draft, feedback, signal) {
-  const response = await client.responses.create({
-    model: config.openaiModel,
+async function writeTurkishNews(article, factSheet, { draft = null, feedback = [], signal, completeJson = requestJson } = {}) {
+  const repairing = Boolean(draft);
+  const result = await completeJson({
+    model: config.openaiEditorModel,
+    signal,
     input: [
       {
         role: 'system',
         content: [
-          'SanatÇin son okuma masasındaki kıdemli Türkçe editör ve olgu denetçisisin.',
-          'Taslağı kaynak metin ve olgu fişiyle karşılaştır. Düzeltilebilir bir sorun gördüğünde reddetme; metni doğrudan düzelt ve accepted=true ver.',
-          'Yalnız kaynağın haber yazmaya gerçekten yetmediği veya giderilemeyen önemli bir çelişki bulunduğu durumda accepted=false ver.',
+          'SanatÇin haber merkezinde çalışan kıdemli bir Türkiye Türkçesi editörü ve olgu denetçisisin.',
+          repairing
+            ? 'Verilen Türkçe metindeki denetim notlarını gider; metni kaynak ve olgu fişine bağlı kalarak yeniden düzenle.'
+            : 'Kaynak metni cümle cümle çevirmeden, özgün kaynak ile olgu fişini okuyup Türkçe haberi sıfırdan yaz.',
+          'Olgu fişi doğruluk sınırıdır, paragraf planı değildir. Haber örgüsünü Türkçe gazetecilikteki önem sırasına göre kur.',
+          'İlk paragraf kim-ne-nerede-ne zaman sorularından kaynakta yanıtı bulunanları doğal biçimde vermeli. Sonraki paragraflar önem, ayrıntı ve bağlam sırasıyla ilerlemeli.',
+          'Kısa, açık ve çoğunlukla etkin cümleler kullan. Kaynak dilin sözdizimini, zincirleme tamlamalarını, tanıtım tonunu ve kelime kelime çeviri kokusunu taşıma.',
+          'Türkiye Türkçesinde yerleşik karşılığı olan şehir ve kavramları Türkçeleştir; Pekin ve Şanghay yazımlarını kullan. Yerleşik karşılığı olmayan eser ve etkinlik adlarını uydurma biçimde çevirmeden özgün adıyla koru ve gerektiğinde kısa Türkçe açıklama ekle.',
           'Özel adları eksiksiz koru; Lu ya da Liu gibi kısaltmalar yapma. Sayıları, tarihleri, eser/etkinlik adlarını ve alıntı anlamlarını değiştirme.',
           'Kaynakta geçen her ayrıntıyı kullanmak zorunda değilsin; anlamı bozmayan özetleme, sadeleştirme ve seçme olgu hatası değildir.',
-          'Başlığı somutlaştır; spot, başlık ve giriş tekrarlarını gider. Kelime kelime çeviri kokusunu, yapay tamlamaları, yabancı sözcükleri ve propaganda dilini temizle.',
-          'Türkiye Türkçesinde akıcı, tarafsız ve yayıma hazır 4-7 kısa paragraf üret. Kaynakta olmayan bilgi ekleme.',
-          'Başlık 32-82, spot 105-180 karakter; gövde en az 650 karakter olmalı ve Çince karakter içermemeli.',
+          'Başlığı somutlaştır; spot, başlık ve giriş tekrarlarını gider. Zorunlu olmayan İngilizce sözcükleri, yapay tamlamaları, ham Pinyin zincirlerini ve propaganda dilini temizle.',
+          'Başlık doğal ve somut bir Türkçe cümle olsun; kaynak başlığı kopyalanmasın. 32-82 karakter kullan, mümkünse 45-75 karakterde kal.',
+          'Spot başlığı tekrarlamayan, haberin önemini açıklayan tek cümle olsun; 105-180 karakter kullan, mümkünse 115-165 karakterde kal.',
+          'Türkiye Türkçesinde akıcı, tarafsız ve yayıma hazır 4-7 kısa paragraf üret. Gövde en az 650 karakter olmalı ve Çince karakter içermemeli.',
+          'Kaynakta olmayan bilgi, alıntı, yorum veya kesinlik ekleme. Doğrulanamayan bir boşluğu tahminle doldurma.',
+          'Düzeltilebilir dil, uzunluk veya biçim sorunu gördüğünde reddetme; metni düzelt ve accepted=true ver.',
+          'Yalnız kaynak haber yazmaya gerçekten yetmiyorsa, önemli bir olgu çelişkisi giderilemiyorsa veya güvenilir metin kaynak dışı bilgi eklemeden kurulamıyorsa accepted=false ver.',
           'Yalnız geçerli JSON ver.'
         ].join(' ')
       },
@@ -134,16 +145,16 @@ async function finalizeAndVerify(article, factSheet, draft, feedback, signal) {
         role: 'user',
         content: [
           `Kaynak başlığı: ${article.title}`,
-          `Kaynak metin:\n${sourceExcerpt(article.text, 14_000)}`,
+          `Önerilen kategori: ${article.category}`,
+          `Kaynak metin:\n${sourceExcerpt(article.text, 16_000)}`,
           `Olgu fişi:\n${JSON.stringify(factSheet)}`,
-          `Düzeltilecek Türkçe taslak:\n${JSON.stringify({ title: draft.title, excerpt: draft.excerpt, paragraphs: draft.paragraphs, tags: draft.tags })}`,
+          repairing ? `Düzeltilecek Türkçe metin:\n${JSON.stringify({ title: draft.title, excerpt: draft.excerpt, paragraphs: draft.paragraphs, tags: draft.tags })}` : '',
           feedback.length ? `Mekanik denetim notları:\n${feedback.join(' | ')}` : '',
           'JSON şeması: {"accepted":true,"issues":[],"title":"başlık","excerpt":"spot","paragraphs":["paragraf"],"tags":["etiket"]}'
         ].filter(Boolean).join('\n\n')
       }
     ]
-  }, { signal });
-  const result = parseJson(response.output_text);
+  });
   return {
     accepted: result.accepted === true,
     issues: (Array.isArray(result.issues) ? result.issues : [result.reason]).map(cleanString).filter(Boolean).slice(0, 8),
@@ -151,29 +162,40 @@ async function finalizeAndVerify(article, factSheet, draft, feedback, signal) {
   };
 }
 
+function assertUsableEditorialOutput(draft) {
+  if (!draft.title || !draft.excerpt || draft.paragraphs.length < 4 || draft.text.length < 500) {
+    throw new Error('Editoryal model eksik veya kullanılamaz bir haber yapısı döndürdü.');
+  }
+}
+
 function elapsedSeconds(startedAt) {
   return Math.round((Date.now() - startedAt) / 100) / 10;
 }
 
-export async function translateArticle(article, { signal } = {}) {
+export async function translateArticle(article, { signal, completeJson = requestJson } = {}) {
   const startedAt = Date.now();
   log('info', 'Türkçe haber hazırlığı başladı', { source: article.source.id, url: article.url });
 
-  const newsPackage = await buildGroundedNewsPackage(article, signal);
-  const { factSheet } = newsPackage;
+  const factSheet = await extractFactSheet(article, signal, completeJson);
   if (!factSheet.publishable || !factSheet.angle || !factSheet.newsValue || factSheet.facts.length < 4) {
     throw new Error('Kaynak metin güncel ve olgusal bir haber yazmak için yeterli değil.');
   }
-  log('info', 'Olgu fişi ve ilk Türkçe taslak hazırlandı', {
+  log('info', 'Olgu fişi hazırlandı', {
     source: article.source.id,
     facts: factSheet.facts.length,
     elapsedSeconds: elapsedSeconds(startedAt)
   });
 
-  let final = await finalizeAndVerify(article, factSheet, newsPackage.draft, translationIssues(newsPackage.draft), signal);
+  let final = await writeTurkishNews(article, factSheet, { signal, completeJson });
   if (!final.accepted) {
-    throw new Error(`Editoryal doğrulama başarısız: ${final.issues.join(' ') || 'kaynak ile giderilemeyen çelişki'}`);
+    throw new Error(`Editoryal doğrulama başarısız: ${final.issues.join(' ') || 'yetersiz kaynak veya giderilemeyen olgu çelişkisi'}`);
   }
+  assertUsableEditorialOutput(final.draft);
+  log('info', 'Türkçe haber sıfırdan yazıldı', {
+    source: article.source.id,
+    title: final.draft.title,
+    elapsedSeconds: elapsedSeconds(startedAt)
+  });
 
   let mechanicalIssues = translationIssues(final.draft);
   if (mechanicalIssues.length) {
@@ -181,7 +203,12 @@ export async function translateArticle(article, { signal } = {}) {
       source: article.source.id,
       issues: mechanicalIssues
     });
-    final = await finalizeAndVerify(article, factSheet, final.draft, mechanicalIssues, signal);
+    final = await writeTurkishNews(article, factSheet, {
+      draft: final.draft,
+      feedback: mechanicalIssues,
+      signal,
+      completeJson
+    });
     mechanicalIssues = translationIssues(final.draft);
   }
 
@@ -189,13 +216,16 @@ export async function translateArticle(article, { signal } = {}) {
     throw new Error(`Editoryal doğrulama başarısız: ${final.issues.join(' ') || 'gerekçe belirtilmedi'}`);
   }
   if (mechanicalIssues.length) {
-    throw new Error(`Türkçe mekanik kalite kontrolü başarısız: ${mechanicalIssues.join(' ')}`);
+    log('warn', 'Tek düzeltme sonrasında kalan dil/biçim notları yayını engellemeyecek', {
+      source: article.source.id,
+      issues: mechanicalIssues
+    });
   }
-  assertTranslationQuality(final.draft);
+  assertUsableEditorialOutput(final.draft);
   log('info', 'Türkçe haber yayıma hazır', {
     source: article.source.id,
     title: final.draft.title,
     elapsedSeconds: elapsedSeconds(startedAt)
   });
-  return { ...final.draft, factSheet, editorialMode: 'grounded-turkish-newsroom-v4' };
+  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v5' };
 }
