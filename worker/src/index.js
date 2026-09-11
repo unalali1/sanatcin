@@ -3,7 +3,7 @@ import { mapLimit } from './concurrency.js';
 import { discover, extractArticle, sourceHash } from './fetch.js';
 import { log } from './logger.js';
 import { scoreCandidate } from './score.js';
-import { rerankCandidates } from './rank.js';
+import { diversifyBySource, rerankCandidates } from './rank.js';
 import { createRunBudget } from './run-budget.js';
 import { CATEGORIES, SOURCES, SOURCE_SET_VERSION } from './sources.js';
 import { translateArticle } from './translate.js';
@@ -54,7 +54,8 @@ async function run() {
     maxRunMinutes: config.maxRunMinutes,
     maxAiCandidates: config.maxAiCandidates,
     aiBatchSize: config.aiBatchSize,
-    aiRerankConcurrency: config.aiRerankConcurrency
+    aiRerankConcurrency: config.aiRerankConcurrency,
+    articleConcurrency: config.articleConcurrency
   });
 
   const sourceStats = Object.fromEntries(SOURCES.filter((source) => source.enabled).map((source) => [source.id, { discovered: 0, attempted: 0, published: 0, rejected: 0 }]));
@@ -86,7 +87,10 @@ async function run() {
     ranked = [];
     log('error', 'Yapay zekâ puanlaması başarısız; güvenlik gereği bu çalışmada yayın yapılmayacak', { error: error.message });
   }
-  const queues = Object.fromEntries(CATEGORIES.map(({ slug }) => [slug, ranked.filter((item) => item.eligible !== false && item.category === slug).sort((a, b) => b.score - a.score)]));
+  const queues = Object.fromEntries(CATEGORIES.map(({ slug }) => [
+    slug,
+    diversifyBySource(ranked.filter((item) => item.eligible !== false && item.category === slug))
+  ]));
   log('info', 'Aday seçimi tamamlandı', {
     discovered: candidates.length,
     newCandidates: newCandidates.length,
@@ -94,54 +98,71 @@ async function run() {
   });
 
   const results = [];
+  const categoryPublished = Object.fromEntries(CATEGORIES.map(({ slug }) => [slug, 0]));
+  const queueOffsets = Object.fromEntries(CATEGORIES.map(({ slug }) => [slug, 0]));
   let timeLimitReached = budget.isExpired() || runController.signal.aborted;
-  categoryLoop: for (const { slug } of CATEGORIES) {
-    if (timeLimitReached) break;
-    if (results.length >= config.maxDailyTotal) break;
-    let categoryPublished = 0;
-    for (const candidate of queues[slug]) {
-      if (categoryPublished >= config.maxPerCategory || results.length >= config.maxDailyTotal) break;
-      if (!budget.canAttempt(slug)) {
-        if (budget.isExpired()) {
-          timeLimitReached = true;
-          log('warn', 'Toplam çalışma süresi sınırına ulaşıldı; kalan adaylar işlenmeyecek', {
-            maxRunMinutes: config.maxRunMinutes,
-            category: slug,
-            processed: results.length
-          });
-          break categoryLoop;
-        }
-        log('warn', 'Kategori aday deneme sınırına ulaştı; kalan adaylar işlenmeyecek', {
-          category: slug,
-          attempts: budget.attemptsFor(slug),
-          limit: config.maxAttemptsPerCategory
-        });
-        break;
-      }
-      const attempt = budget.noteAttempt(slug);
+  for (let round = 1; round <= config.maxAttemptsPerCategory; round += 1) {
+    if (timeLimitReached || results.length >= config.maxDailyTotal) break;
+    if (budget.isExpired() || runController.signal.aborted) {
+      timeLimitReached = true;
+      break;
+    }
+
+    const remainingSlots = config.maxDailyTotal - results.length;
+    const attempts = [];
+    for (const { slug } of CATEGORIES) {
+      if (attempts.length >= remainingSlots) break;
+      if (categoryPublished[slug] >= config.maxPerCategory || !budget.canAttempt(slug)) continue;
+      const candidate = queues[slug][queueOffsets[slug]++];
+      if (!candidate) continue;
+      attempts.push({ slug, candidate, attempt: budget.noteAttempt(slug) });
+    }
+    if (!attempts.length) break;
+
+    log('info', 'Kategori dengeli aday turu başladı', {
+      round,
+      candidates: attempts.map(({ slug, candidate }) => ({ category: slug, source: candidate.source.id }))
+    });
+    const outcomes = await mapLimit(attempts, config.articleConcurrency, async ({ slug, candidate, attempt }) => {
       sourceStats[candidate.source.id].attempted += 1;
+      log('info', 'Haber adayı işleniyor', {
+        round,
+        category: slug,
+        attempt,
+        source: candidate.source.id,
+        url: candidate.url
+      });
       try {
         const article = await extractArticle(candidate);
         if (budget.isExpired()) throw new Error('Toplam çalışma süresi sınırına ulaşıldı.');
         if (article.publishedAt && new Date(article.publishedAt).getTime() < cutoff) {
           log('info', 'Eski makale atlandı', { source: candidate.source.id, url: candidate.url, publishedAt: article.publishedAt });
-          continue;
+          return { slug, skipped: true };
         }
         if (config.requirePublishedDate && !article.publishedAt) {
           log('info', 'Yayın tarihi doğrulanamayan makale atlandı', { source: candidate.source.id, url: candidate.url });
-          continue;
+          return { slug, skipped: true };
         }
         const translated = await translateArticle({ ...article, originalTitle: article.title }, { signal: runController.signal });
         await assertNoSimilarPublishedTitle(translated.title, { signal: runController.signal });
         const image = await prepareFeaturedImage(translated, { signal: runController.signal });
         const post = await publishArticle(translated, image, { signal: runController.signal });
-        results.push({ source: candidate.source.id, category: candidate.category, score: candidate.score, scoreReason: candidate.scoreReason, postId: post.id, link: post.link, hasImage: true, imageOrigin: image.origin, mode: config.dryRun ? 'dry-run' : config.publishStatus });
-        categoryPublished += 1;
+        const result = {
+          source: candidate.source.id,
+          category: candidate.category,
+          score: candidate.score,
+          scoreReason: candidate.scoreReason,
+          postId: post.id,
+          link: post.link,
+          hasImage: true,
+          imageOrigin: image.origin,
+          mode: config.dryRun ? 'dry-run' : config.publishStatus
+        };
         sourceStats[candidate.source.id].published += 1;
-        log('info', config.dryRun ? 'Haber simülasyonu tamamlandı' : config.publishStatus === 'draft' ? 'Haber taslak olarak kaydedildi' : 'Haber yayımlandı', results.at(-1));
+        log('info', config.dryRun ? 'Haber simülasyonu tamamlandı' : config.publishStatus === 'draft' ? 'Haber taslak olarak kaydedildi' : 'Haber yayımlandı', result);
+        return { slug, result };
       } catch (error) {
         if (runController.signal.aborted || budget.isExpired()) {
-          timeLimitReached = true;
           log('warn', 'Toplam çalışma süresi sınırına ulaşıldı; etkin aday iptal edildi', {
             maxRunMinutes: config.maxRunMinutes,
             category: slug,
@@ -149,14 +170,38 @@ async function run() {
             source: candidate.source.id,
             url: candidate.url
           });
-          break categoryLoop;
+          return { slug, timedOut: true };
         }
         sourceStats[candidate.source.id].rejected += 1;
         increment(rejectedReasons, rejectionReason(error));
-        log('error', 'Haber işlenemedi; sıradaki aday denenecek', { source: candidate.source.id, url: candidate.url, error: error.message });
+        log('error', 'Haber işlenemedi; sıradaki aday denenecek', { category: slug, source: candidate.source.id, url: candidate.url, error: error.message });
+        return { slug, rejected: true };
       }
+    });
+
+    for (const outcome of outcomes) {
+      if (outcome.timedOut) timeLimitReached = true;
+      if (!outcome.result) continue;
+      results.push(outcome.result);
+      categoryPublished[outcome.slug] += 1;
     }
-    if (categoryPublished === 0) log('warn', 'Kategori için yayımlanabilir yeni haber bulunamadı', { category: slug });
+    if (timeLimitReached) break;
+  }
+
+  if (timeLimitReached) {
+    log('warn', 'Toplam çalışma süresi sınırına ulaşıldı; kalan adaylar işlenmeyecek', {
+      maxRunMinutes: config.maxRunMinutes,
+      processed: results.length
+    });
+  }
+  for (const { slug } of CATEGORIES) {
+    if (categoryPublished[slug] === 0) {
+      log('warn', 'Kategori için yayımlanabilir yeni haber bulunamadı', {
+        category: slug,
+        attempts: budget.attemptsFor(slug),
+        candidates: queues[slug].length
+      });
+    }
   }
 
   if (results.length < config.minDailyTarget) {
@@ -167,6 +212,7 @@ async function run() {
     target: `${config.minDailyTarget}-${config.maxDailyTotal}`,
     timeLimitReached,
     elapsedMinutes: Math.round((Date.now() - budget.startedAt) / 6000) / 10,
+    categoryPublished,
     rejectedReasons,
     sourceStats,
     results

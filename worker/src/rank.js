@@ -58,6 +58,31 @@ export function buildBalancedShortlist(candidates, maxCandidates = config.maxAiC
   return selected.slice(0, maxCandidates);
 }
 
+export function diversifyBySource(candidates) {
+  const groups = new Map();
+  for (const candidate of candidates) {
+    const sourceId = candidate.source?.id ?? 'unknown';
+    if (!groups.has(sourceId)) groups.set(sourceId, []);
+    groups.get(sourceId).push(candidate);
+  }
+
+  const queues = [...groups.values()]
+    .map((items) => items.sort((left, right) => right.score - left.score))
+    .sort((left, right) => right[0].score - left[0].score);
+  const diversified = [];
+  let added = true;
+  while (added) {
+    added = false;
+    for (const queue of queues) {
+      const candidate = queue.shift();
+      if (!candidate) continue;
+      diversified.push(candidate);
+      added = true;
+    }
+  }
+  return diversified;
+}
+
 async function rerankBatch(batch, signal) {
   const response = await client.responses.create({
     model: config.openaiModel,

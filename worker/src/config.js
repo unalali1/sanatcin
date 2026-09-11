@@ -31,7 +31,7 @@ export const config = {
   minDailyTarget: boundedInteger('MIN_DAILY_TARGET', 4, 1, 8),
   maxDailyTotal: boundedInteger('MAX_DAILY_TOTAL', 8, 1, 8),
   maxRunMinutes: boundedInteger('MAX_RUN_MINUTES', 30, 5, 60),
-  maxAiCandidates: boundedInteger('MAX_AI_CANDIDATES', 80, 20, 160),
+  maxAiCandidates: boundedInteger('MAX_AI_CANDIDATES', 40, 20, 160),
   aiBatchSize: boundedInteger('AI_BATCH_SIZE', 20, 10, 40),
   aiRerankConcurrency: boundedInteger('AI_RERANK_CONCURRENCY', 2, 1, 3),
   aiRequestTimeoutMs: boundedInteger('AI_REQUEST_TIMEOUT_MS', 90_000, 15_000, 180_000),
@@ -39,7 +39,7 @@ export const config = {
   primaryLookbackHours: integer('PRIMARY_LOOKBACK_HOURS', 72),
   fallbackLookbackDays: integer('FALLBACK_LOOKBACK_DAYS', 7),
   discoveryConcurrency: integer('DISCOVERY_CONCURRENCY', 5),
-  articleConcurrency: integer('ARTICLE_CONCURRENCY', 2),
+  articleConcurrency: boundedInteger('ARTICLE_CONCURRENCY', 2, 1, 3),
   requestTimeoutMs: integer('REQUEST_TIMEOUT_MS', 25000),
   userAgent: process.env.USER_AGENT ?? 'SanatCinBot/1.0'
 };

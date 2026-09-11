@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { rerankInputsResilient } from '../src/rank.js';
+import { diversifyBySource, rerankInputsResilient } from '../src/rank.js';
 
 const silentLogger = () => {};
 
@@ -51,5 +51,22 @@ test('bütün partiler ve alt parçalar başarısızsa güvenli biçimde durur',
       logger: silentLogger
     }),
     /Tüm yapay zekâ sıralama partileri başarısız/
+  );
+});
+
+test('kategori kuyruğunu puanı koruyarak kaynaklar arasında dönüşümlü kurar', () => {
+  const source = (id) => ({ id });
+  const input = [
+    { id: 'a1', score: 100, source: source('a') },
+    { id: 'a2', score: 99, source: source('a') },
+    { id: 'a3', score: 98, source: source('a') },
+    { id: 'b1', score: 90, source: source('b') },
+    { id: 'c1', score: 80, source: source('c') },
+    { id: 'b2', score: 70, source: source('b') }
+  ];
+
+  assert.deepEqual(
+    diversifyBySource(input).map((item) => item.id),
+    ['a1', 'b1', 'c1', 'a2', 'b2', 'a3']
   );
 });
