@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { diversifyBySource, rerankInputsResilient } from '../src/rank.js';
+import { diversifyBySource, diversifyByTopic, rerankInputsResilient } from '../src/rank.js';
 
 const silentLogger = () => {};
 
@@ -69,4 +69,13 @@ test('kategori kuyruğunu puanı koruyarak kaynaklar arasında dönüşümlü ku
     diversifyBySource(input).map((item) => item.id),
     ['a1', 'b1', 'c1', 'a2', 'b2', 'a3']
   );
+});
+
+test('aynı konudaki adayları elemeden kuyruğa dağıtır', () => {
+  const input = [
+    { id: 'a', title: 'Şanghay çağdaş sanat sergisi yeni eserlerle açıldı' },
+    { id: 'b', title: 'Şanghay çağdaş sanat sergisi yeni yapıtlarla açıldı' },
+    { id: 'c', title: 'Pekin film festivali uluslararası seçkisini açıkladı' }
+  ];
+  assert.deepEqual(diversifyByTopic(input).map((item) => item.id), ['a', 'c', 'b']);
 });

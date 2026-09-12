@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dateFromUrl, discoverFromFeedXml, discoverFromHtml, normalizeUrl } from '../src/fetch.js';
+import { dateFromUrl, discoverFromFeedXml, discoverFromHtml, extractBestArticleTextFromHtml, normalizeUrl } from '../src/fetch.js';
 import { SOURCES, SOURCE_SET_VERSION } from '../src/sources.js';
 
 test('Excel kaynak havuzu eksiksiz ve eski havuzdan bağımsızdır', () => {
@@ -60,4 +60,10 @@ test('RSS adaptörü kaynak konu filtresini uygular', async () => {
   const items = await discoverFromFeedXml(xml, source);
   assert.equal(items.length, 1);
   assert.match(items[0].title, /museum/i);
+});
+
+test('Readability kısa kaldığında JSON-LD haber gövdesini kullanır', () => {
+  const body = 'Şanghay’daki sergi yeni yapıtları ziyaretçiyle buluşturuyor. '.repeat(15);
+  const html = `<html><head><script type="application/ld+json">${JSON.stringify({ '@type': 'NewsArticle', articleBody: body })}</script></head><body><main><p>Kısa özet.</p></main></body></html>`;
+  assert.equal(extractBestArticleTextFromHtml(html).trim(), body.trim());
 });

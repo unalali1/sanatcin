@@ -109,6 +109,23 @@ function sanatcin_story_meta($show_author = false) {
     }
 }
 
+function sanatcin_author_data($post_id = null) {
+    $post_id = $post_id ?: get_the_ID();
+    if (get_post_meta($post_id, 'sanatcin_source_url', true)) {
+        return [
+            'name' => 'SanatÇin Haber Merkezi',
+            'url' => home_url('/hakkimizda/'),
+            'type' => 'Organization'
+        ];
+    }
+    $author_id = (int) get_post_field('post_author', $post_id);
+    return [
+        'name' => get_the_author_meta('display_name', $author_id) ?: 'SanatÇin',
+        'url' => get_author_posts_url($author_id),
+        'type' => 'Person'
+    ];
+}
+
 function sanatcin_story_card($heading = 'h3', $variant = '') {
     $category = sanatcin_primary_category();
     ?>
@@ -168,6 +185,8 @@ function sanatcin_head_metadata() {
     printf("\n<meta name=\"twitter:card\" content=\"summary_large_image\">\n");
 
     if (is_singular('post')) {
+        $post_id = get_queried_object_id();
+        $author = sanatcin_author_data($post_id);
         $schema = [
             '@context' => 'https://schema.org',
             '@type' => 'NewsArticle',
@@ -177,7 +196,7 @@ function sanatcin_head_metadata() {
             'dateModified' => get_the_modified_date(DATE_W3C),
             'mainEntityOfPage' => get_permalink(),
             'image' => [$image],
-            'author' => ['@type' => 'Person', 'name' => get_the_author()],
+            'author' => ['@type' => $author['type'], 'name' => $author['name'], 'url' => $author['url']],
             'publisher' => ['@type' => 'Organization', 'name' => 'SanatÇin', 'logo' => ['@type' => 'ImageObject', 'url' => get_template_directory_uri() . '/assets/images/logo.webp']]
         ];
     } else {

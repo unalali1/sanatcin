@@ -118,14 +118,19 @@ export function imageDimensions(buffer, contentType = '') {
   return null;
 }
 
-export function assertImageDimensions(buffer, contentType) {
+export function assertImageDimensions(buffer, contentType, {
+  minWidth = 900,
+  minHeight = 500,
+  minRatio = 1,
+  maxRatio = 2.6
+} = {}) {
   const dimensions = imageDimensions(buffer, contentType);
   if (!dimensions) throw new Error('Kaynak görsel boyutları doğrulanamadı.');
-  if (dimensions.width < 900 || dimensions.height < 500) {
+  if (dimensions.width < minWidth || dimensions.height < minHeight) {
     throw new Error(`Kaynak görsel çözünürlüğü yetersiz: ${dimensions.width}x${dimensions.height}.`);
   }
   const ratio = dimensions.width / dimensions.height;
-  if (ratio < 1 || ratio > 2.6) throw new Error(`Kaynak görsel oranı haber kartlarına uygun değil: ${dimensions.width}x${dimensions.height}.`);
+  if (ratio < minRatio || ratio > maxRatio) throw new Error(`Kaynak görsel oranı haber kartlarına uygun değil: ${dimensions.width}x${dimensions.height}.`);
   return dimensions;
 }
 

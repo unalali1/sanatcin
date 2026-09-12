@@ -1,13 +1,14 @@
 import { config, validateConfig } from './config.js';
 import { mapLimit } from './concurrency.js';
 import { discover, extractArticle, sourceHash } from './fetch.js';
-import { log } from './logger.js';
+import { classifyError } from './errors.js';
+import { log, setLogContext } from './logger.js';
 import { scoreCandidate } from './score.js';
-import { diversifyBySource, rerankCandidates } from './rank.js';
+import { diversifyBySource, diversifyByTopic, rerankCandidates } from './rank.js';
 import { createRunBudget } from './run-budget.js';
 import { CATEGORIES, SOURCES, SOURCE_SET_VERSION } from './sources.js';
 import { translateArticle } from './translate.js';
-import { assertNoSimilarPublishedTitle, knownHashes, prepareFeaturedImage, publishArticle } from './wordpress.js';
+import { assertNoSimilarPublishedTitle, knownHashes, prepareFeaturedImage, publishArticle, syncSiteContent } from './wordpress.js';
 
 function uniqueCandidates(items) {
   const urls = new Set();
@@ -21,22 +22,25 @@ function uniqueCandidates(items) {
   });
 }
 
-function rejectionReason(error) {
-  const message = String(error?.message ?? error);
-  if (/tarih|Eski makale/i.test(message)) return 'date';
-  if (/olgu|Editoryal|Çeviri|Türkçe|başlık|spot/i.test(message)) return 'editorial';
-  if (/görsel|image|HTTP 403|çözünürlük|oranı/i.test(message)) return 'image';
-  if (/benzer haber|known|daha önce/i.test(message)) return 'duplicate';
-  if (/HTTP|fetch|abort|timeout|Makale gövdesi|site navigasyonu/i.test(message)) return 'source';
-  return 'other';
-}
-
 function increment(record, key) {
   record[key] = (record[key] ?? 0) + 1;
 }
 
 async function run() {
   validateConfig();
+  const runId = `sanatcin-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${process.pid}`;
+  setLogContext({ runId, workerVersion: '0.7.0' });
+
+  if (config.syncSitePages) {
+    log('info', 'Site kurumsal içerik eşitlemesi başladı', { maintenanceOnly: config.maintenanceOnly });
+    const syncResult = await syncSiteContent();
+    log('info', 'Site kurumsal içerik eşitlemesi tamamlandı', syncResult);
+  }
+  if (config.maintenanceOnly) {
+    log('info', 'Bakım çalışması tamamlandı; haber taraması başlatılmadı');
+    return;
+  }
+
   const budget = createRunBudget({
     maxAttemptsPerCategory: config.maxAttemptsPerCategory,
     maxRunMinutes: config.maxRunMinutes
@@ -71,7 +75,7 @@ async function run() {
       return items;
     } catch (error) {
       sourceStats[source.id].error = error.message;
-      log('error', 'Kaynak taranamadı', { source: source.id, error: error.message });
+      log('error', 'Kaynak taranamadı', { source: source.id, errorCode: classifyError(error).code, error: error.message });
       return [];
     }
   });
@@ -87,12 +91,16 @@ async function run() {
   try {
     ranked = await rerankCandidates(newCandidates, { signal: runController.signal });
   } catch (error) {
-    ranked = [];
-    log('error', 'Yapay zekâ puanlaması başarısız; güvenlik gereği bu çalışmada yayın yapılmayacak', { error: error.message });
+    ranked = [...newCandidates].sort((left, right) => right.score - left.score);
+    log('warn', 'Yapay zekâ puanlaması başarısız; deterministik puanlarla devam edilecek', {
+      errorCode: 'AI_RANKING_FALLBACK',
+      error: error.message,
+      candidates: ranked.length
+    });
   }
   const queues = Object.fromEntries(CATEGORIES.map(({ slug }) => [
     slug,
-    diversifyBySource(ranked.filter((item) => item.eligible !== false && item.category === slug))
+    diversifyByTopic(diversifyBySource(ranked.filter((item) => item.eligible !== false && item.category === slug)))
   ]));
   log('info', 'Aday seçimi tamamlandı', {
     discovered: candidates.length,
@@ -165,8 +173,10 @@ async function run() {
         log('info', config.dryRun ? 'Haber simülasyonu tamamlandı' : config.publishStatus === 'draft' ? 'Haber taslak olarak kaydedildi' : 'Haber yayımlandı', result);
         return { slug, result };
       } catch (error) {
+        const classified = classifyError(error);
         if (runController.signal.aborted || budget.isExpired()) {
           log('warn', 'Toplam çalışma süresi sınırına ulaşıldı; etkin aday iptal edildi', {
+            errorCode: 'RUN_TIME_LIMIT',
             maxRunMinutes: config.maxRunMinutes,
             category: slug,
             attempt,
@@ -176,8 +186,14 @@ async function run() {
           return { slug, timedOut: true };
         }
         sourceStats[candidate.source.id].rejected += 1;
-        increment(rejectedReasons, rejectionReason(error));
-        log('error', 'Haber işlenemedi; sıradaki aday denenecek', { category: slug, source: candidate.source.id, url: candidate.url, error: error.message });
+        increment(rejectedReasons, classified.group);
+        log('error', 'Haber işlenemedi; sıradaki aday denenecek', {
+          category: slug,
+          source: candidate.source.id,
+          url: candidate.url,
+          errorCode: classified.code,
+          error: error.message
+        });
         return { slug, rejected: true };
       }
     });
@@ -211,6 +227,7 @@ async function run() {
     log('warn', 'Günlük asgari yayın hedefinin altında kalındı', { target: config.minDailyTarget, processed: results.length });
   }
   log('info', 'Günlük SanatÇin taraması tamamlandı', {
+    runStatus: results.length === 0 ? 'failed' : Object.keys(rejectedReasons).length ? 'partial' : 'success',
     processed: results.length,
     target: `${config.minDailyTarget}-${config.maxDailyTotal}`,
     timeLimitReached,
@@ -224,6 +241,6 @@ async function run() {
 }
 
 run().catch((error) => {
-  log('fatal', 'İşleyici durdu', { error: error.stack ?? error.message });
+  log('fatal', 'İşleyici durdu', { errorCode: classifyError(error).code, error: error.stack ?? error.message });
   process.exitCode = 1;
 });

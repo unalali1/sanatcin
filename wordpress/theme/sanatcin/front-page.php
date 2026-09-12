@@ -4,8 +4,19 @@ $regular_exclusions = sanatcin_regular_category_exclusions();
 $featured = new WP_Query([
     'posts_per_page' => 3,
     'ignore_sticky_posts' => false,
-    'category__not_in' => $regular_exclusions
+    'category__not_in' => $regular_exclusions,
+    'meta_key' => 'sanatcin_score',
+    'orderby' => ['meta_value_num' => 'DESC', 'date' => 'DESC'],
+    'date_query' => [['after' => '7 days ago']]
 ]);
+if (!$featured->have_posts()) {
+    $featured = new WP_Query([
+        'posts_per_page' => 3,
+        'ignore_sticky_posts' => false,
+        'category__not_in' => $regular_exclusions
+    ]);
+}
+$featured_ids = wp_list_pluck($featured->posts, 'ID');
 if ($featured->have_posts()) : ?>
 <section class="lead-section" aria-label="Öne çıkan haberler">
     <div class="site-wrap lead-layout lead-count-<?php echo esc_attr($featured->post_count); ?>">
@@ -58,7 +69,7 @@ if ($editor_posts && $editor_posts->have_posts()) : ?>
 <?php
 $latest = new WP_Query([
     'posts_per_page' => 9,
-    'offset' => 3,
+    'post__not_in' => $featured_ids,
     'ignore_sticky_posts' => true,
     'category__not_in' => $regular_exclusions
 ]);

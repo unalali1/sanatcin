@@ -223,6 +223,55 @@ export async function discover(source) {
   return discoverFromHtml(html, source);
 }
 
+function jsonLdArticles($) {
+  const articles = [];
+  $('script[type="application/ld+json"]').each((_, element) => {
+    try {
+      const parsed = JSON.parse($(element).text());
+      const queue = Array.isArray(parsed) ? parsed : [parsed];
+      while (queue.length) {
+        const item = queue.shift();
+        if (!item || typeof item !== 'object') continue;
+        if (Array.isArray(item['@graph'])) queue.push(...item['@graph']);
+        const types = Array.isArray(item['@type']) ? item['@type'] : [item['@type']];
+        if (types.some((type) => ['Article', 'NewsArticle', 'ReportageNewsArticle'].includes(type)) && item.articleBody) {
+          articles.push(String(item.articleBody));
+        }
+      }
+    } catch {
+      // Bozuk JSON-LD, diğer çıkarım yöntemlerini engellememeli.
+    }
+  });
+  return articles;
+}
+
+export function extractBestArticleTextFromHtml(html, url = 'https://example.com/') {
+  const $ = cheerio.load(html);
+  const dom = new JSDOM(html, { url });
+  const readable = new Readability(dom.window.document).parse();
+  const selectors = [
+    'article [itemprop="articleBody"] p',
+    '[itemprop="articleBody"] p',
+    'article .article-content p',
+    'article .post-content p',
+    'article .entry-content p',
+    'article p',
+    'main article p'
+  ];
+  const candidates = [readable?.textContent ?? '', ...jsonLdArticles($)];
+  for (const selector of selectors) {
+    const text = $(selector).map((_, element) => $(element).text().replace(/\s+/g, ' ').trim()).get().filter(Boolean).join('\n\n');
+    if (text) candidates.push(text);
+  }
+  return candidates
+    .map((value) => String(value).replace(/\n{3,}/g, '\n\n').replace(/[ \t]+/g, ' ').trim())
+    .sort((left, right) => right.length - left.length)[0] ?? '';
+}
+
+function imagesFromSrcset(value = '') {
+  return String(value).split(',').map((entry) => entry.trim().split(/\s+/)[0]).filter(Boolean);
+}
+
 export async function extractArticle(candidate) {
   let html;
   try {
@@ -232,10 +281,9 @@ export async function extractArticle(candidate) {
     html = await fetchText(candidate.url, { browser: true, waitSelector: 'article, main' });
   }
 
-  const dom = new JSDOM(html, { url: candidate.url });
-  const document = dom.window.document;
-  const article = new Readability(document).parse();
   const $ = cheerio.load(html);
+  const dom = new JSDOM(html, { url: candidate.url });
+  const article = new Readability(dom.window.document).parse();
   const publishedAt = candidate.publishedAt || dateValue(
     $('meta[property="article:published_time"]').attr('content') ||
     $('meta[name="publishdate"]').attr('content') ||
@@ -243,7 +291,7 @@ export async function extractArticle(candidate) {
     $('meta[itemprop="datePublished"]').attr('content') ||
     $('time').first().attr('datetime')
   ) || dateFromText($('body').text().slice(0, 5000)) || dateFromUrl(candidate.url);
-  const text = (article?.textContent ?? '').replace(/\n{3,}/g, '\n\n').trim();
+  const text = extractBestArticleTextFromHtml(html, candidate.url);
   if (candidate.source.rejectBodyPatterns?.some((pattern) => pattern.test(text))) {
     throw new Error('Ödeme duvarlı veya üyelik gerektiren haber gövdesi atlandı.');
   }
@@ -252,9 +300,11 @@ export async function extractArticle(candidate) {
   const readable = cheerio.load(article?.content ?? '');
   const rawImages = [
     ...readable('img').map((_, element) => readable(element).attr('data-src') || readable(element).attr('data-lazy-src') || readable(element).attr('data-original') || readable(element).attr('src')).get(),
+    ...readable('img').map((_, element) => imagesFromSrcset(readable(element).attr('srcset') || readable(element).attr('data-srcset'))).get().flat(),
     $('meta[property="og:image"]').attr('content'),
     $('meta[name="twitter:image"]').attr('content'),
-    ...$('article img, main img, .article img, .content img').map((_, element) => $(element).attr('data-src') || $(element).attr('data-lazy-src') || $(element).attr('data-original') || $(element).attr('src')).get()
+    ...$('article img, main img, .article img, .content img').map((_, element) => $(element).attr('data-src') || $(element).attr('data-lazy-src') || $(element).attr('data-original') || $(element).attr('src')).get(),
+    ...$('article img, main img, .article img, .content img').map((_, element) => imagesFromSrcset($(element).attr('srcset') || $(element).attr('data-srcset'))).get().flat()
   ];
   const sourceImageUrls = [...new Set(rawImages
     .filter(Boolean)

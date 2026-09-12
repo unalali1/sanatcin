@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { mapLimit } from './concurrency.js';
 import { log } from './logger.js';
 import { freshnessPoints } from './score.js';
+import { titleSimilarity } from './quality.js';
 
 const client = new OpenAI({
   apiKey: config.openaiApiKey,
@@ -81,6 +82,20 @@ export function diversifyBySource(candidates) {
     }
   }
   return diversified;
+}
+
+export function diversifyByTopic(candidates) {
+  const remaining = [...candidates];
+  const selected = [];
+  while (remaining.length) {
+    let index = remaining.findIndex((candidate) => selected.every((prior) => {
+      const similarity = titleSimilarity(candidate.title, prior.title);
+      return similarity.shared < 2 || similarity.score < 0.45;
+    }));
+    if (index < 0) index = 0;
+    selected.push(remaining.splice(index, 1)[0]);
+  }
+  return selected;
 }
 
 async function rerankBatch(batch, signal) {

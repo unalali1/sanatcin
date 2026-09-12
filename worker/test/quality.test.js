@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { countCjk, imageDimensions, isUsableImageUrl, sourceContentIssues, titleSimilarity, translationIssues } from '../src/quality.js';
+import { assertImageDimensions, countCjk, imageDimensions, isUsableImageUrl, sourceContentIssues, titleSimilarity, translationIssues } from '../src/quality.js';
 
 test('Çince karakterleri yakalar', () => {
   assert.equal(countCjk('Türkçe metin 龟兹'), 2);
@@ -70,6 +70,14 @@ test('PNG boyutlarını okur', () => {
   buffer.writeUInt32BE(1280, 16);
   buffer.writeUInt32BE(720, 20);
   assert.deepEqual(imageDimensions(buffer, 'image/png'), { width: 1280, height: 720 });
+});
+
+test('kaynak görsellerinde daha esnek çözünürlük ve oran kabul eder', () => {
+  const buffer = Buffer.alloc(24);
+  Buffer.from('89504e470d0a1a0a', 'hex').copy(buffer, 0);
+  buffer.writeUInt32BE(720, 16);
+  buffer.writeUInt32BE(900, 20);
+  assert.deepEqual(assertImageDimensions(buffer, 'image/png', { minWidth: 640, minHeight: 360, minRatio: 0.75, maxRatio: 3.2 }), { width: 720, height: 900 });
 });
 
 test('geçersiz JPEG içindeki rastgele baytları boyut sanmaz', () => {

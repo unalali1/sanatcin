@@ -8,7 +8,11 @@
             <h1><?php the_title(); ?></h1>
             <div class="article-deck"><?php the_excerpt(); ?></div>
             <div class="article-byline">
-                <a class="author-link" href="<?php echo esc_url(get_author_posts_url(get_the_author_meta('ID'))); ?>"><?php echo get_avatar(get_the_author_meta('ID'), 42, '', '', ['class' => 'author-avatar']); ?><span><small>Yazan</small><strong><?php the_author(); ?></strong></span></a>
+                <?php $author = sanatcin_author_data(); ?>
+                <a class="author-link" href="<?php echo esc_url($author['url']); ?>">
+                    <?php if ($author['type'] === 'Person') echo get_avatar(get_the_author_meta('ID'), 42, '', '', ['class' => 'author-avatar']); ?>
+                    <span><small><?php echo $author['type'] === 'Organization' ? 'Hazırlayan' : 'Yazan'; ?></small><strong><?php echo esc_html($author['name']); ?></strong></span>
+                </a>
                 <div class="story-meta"><?php sanatcin_story_meta(); ?></div>
             </div>
         </header>
