@@ -2,14 +2,14 @@
 /**
  * Plugin Name: SanatÇin Otomasyon Köprüsü
  * Description: Railway haber işleyicisi için kaynak alanlarını ve tekrar kontrolü REST uçlarını sağlar.
- * Version: 0.4.0
+ * Version: 0.5.0
  * Requires at least: 6.5
  * Requires PHP: 8.1
  */
 
 if (!defined('ABSPATH')) exit;
 
-const SANATCIN_AUTOMATION_VERSION = '0.4.0';
+const SANATCIN_AUTOMATION_VERSION = '0.5.0';
 
 const SANATCIN_META_FIELDS = [
     'sanatcin_source_url' => 'string',
@@ -62,8 +62,54 @@ function sanatcin_ensure_categories() {
         if (!term_exists($slug, 'category')) wp_insert_term($name, 'category', ['slug' => $slug]);
     }
 }
+
+function sanatcin_ensure_pages() {
+    $pages = [
+        'hakkimizda' => ['Hakkımızda', 'SanatÇin’in yayın amacı, kapsamı ve çalışma yöntemi.'],
+        'yayin-ilkeleri' => ['Yayın İlkeleri', 'SanatÇin’in doğruluk, kaynak, çeviri, yapay zekâ ve düzeltme ilkeleri.'],
+        'iletisim' => ['İletişim', 'SanatÇin’e görüş, düzeltme ve içerik bildirimleri için ulaşın.']
+    ];
+    foreach ($pages as $slug => [$title, $excerpt]) {
+        if (get_page_by_path($slug, OBJECT, 'page')) continue;
+        $path = __DIR__ . '/content/' . $slug . '.html';
+        $content = is_readable($path) ? file_get_contents($path) : '';
+        if (!$content) continue;
+        wp_insert_post([
+            'post_type' => 'page',
+            'post_status' => 'publish',
+            'post_name' => $slug,
+            'post_title' => $title,
+            'post_excerpt' => $excerpt,
+            'post_content' => wp_kses_post($content),
+            'meta_input' => ['_sanatcin_managed_page' => '1']
+        ]);
+    }
+}
+
+function sanatcin_backfill_ai_image_captions() {
+    $posts = get_posts([
+        'post_type' => 'post',
+        'post_status' => 'publish',
+        'posts_per_page' => 100,
+        'fields' => 'ids',
+        'meta_key' => 'sanatcin_image_origin',
+        'meta_value' => 'openai-generated'
+    ]);
+    foreach ($posts as $post_id) {
+        $attachment_id = get_post_thumbnail_id($post_id);
+        if (!$attachment_id) continue;
+        wp_update_post([
+            'ID' => $attachment_id,
+            'post_excerpt' => 'AI ile üretilmiş temsili editoryal illüstrasyon.',
+            'post_content' => 'Bu görsel haberin konusu için AI ile üretilmiş temsili bir editoryal illüstrasyondur.'
+        ]);
+    }
+}
+
 function sanatcin_activate() {
     sanatcin_ensure_categories();
+    sanatcin_ensure_pages();
+    sanatcin_backfill_ai_image_captions();
     update_option('sanatcin_automation_version', SANATCIN_AUTOMATION_VERSION, false);
 }
 register_activation_hook(__FILE__, 'sanatcin_activate');
@@ -71,6 +117,8 @@ register_activation_hook(__FILE__, 'sanatcin_activate');
 function sanatcin_maybe_upgrade() {
     if (get_option('sanatcin_automation_version') === SANATCIN_AUTOMATION_VERSION) return;
     sanatcin_ensure_categories();
+    sanatcin_ensure_pages();
+    sanatcin_backfill_ai_image_captions();
     update_option('sanatcin_automation_version', SANATCIN_AUTOMATION_VERSION, false);
 }
 add_action('init', 'sanatcin_maybe_upgrade', 5);
