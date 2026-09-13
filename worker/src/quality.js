@@ -146,22 +146,52 @@ export function isUsableImageUrl(value) {
   }
 }
 
-const TITLE_STOP_WORDS = new Set(['ve', 'ile', 'bir', 'bu', 'için', 'da', 'de', 'mi', 'mı', 'mu', 'mü', 'the', 'and', 'of', 'in', 'to']);
+const TITLE_STOP_WORDS = new Set([
+  've', 'ile', 'bir', 'bu', 'için', 'da', 'de', 'mi', 'mı', 'mu', 'mü',
+  'the', 'and', 'of', 'in', 'to', 'çin', 'cin', 'china', 'chinese'
+]);
 
-export function normalizedTitleTokens(value = '') {
-  return new Set(value
+function normalizedTitleTokenList(value = '') {
+  return value
     .toLocaleLowerCase('tr-TR')
     .normalize('NFKD')
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/)
-    .filter((token) => token.length > 2 && !TITLE_STOP_WORDS.has(token)));
+    .filter((token) => token.length > 2 && !TITLE_STOP_WORDS.has(token));
+}
+
+export function normalizedTitleTokens(value = '') {
+  return new Set(normalizedTitleTokenList(value));
+}
+
+function longestSharedRun(leftTokens, rightTokens) {
+  let longest = 0;
+  for (let left = 0; left < leftTokens.length; left += 1) {
+    for (let right = 0; right < rightTokens.length; right += 1) {
+      let run = 0;
+      while (
+        left + run < leftTokens.length
+        && right + run < rightTokens.length
+        && leftTokens[left + run] === rightTokens[right + run]
+      ) run += 1;
+      if (run > longest) longest = run;
+    }
+  }
+  return longest;
 }
 
 export function titleSimilarity(left, right) {
-  const a = normalizedTitleTokens(left);
-  const b = normalizedTitleTokens(right);
+  const leftList = normalizedTitleTokenList(left);
+  const rightList = normalizedTitleTokenList(right);
+  const a = new Set(leftList);
+  const b = new Set(rightList);
   if (!a.size || !b.size) return { score: 0, shared: 0 };
   const shared = [...a].filter((token) => b.has(token)).length;
   const union = new Set([...a, ...b]).size;
-  return { score: shared / union, shared };
+  const longestRun = longestSharedRun(leftList, rightList);
+  const sequenceBoost = longestRun >= 3 ? 0.7 : longestRun === 2 ? 0.45 : 0;
+  return {
+    score: Math.max(shared / union, sequenceBoost),
+    shared: longestRun >= 3 ? Math.max(shared, 4) : shared
+  };
 }
