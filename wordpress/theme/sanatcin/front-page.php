@@ -102,13 +102,12 @@ if ($latest->have_posts()) : ?>
         <div class="sanatcin-newsletter__form-wrap">
             <p>Haftanın gürültüsünü değil, editörün seçtiklerini gönderiyoruz.</p>
             <form id="sib-form" class="sanatcin-newsletter__form" method="POST" action="https://c2ad19f3.sibforms.com/serve/MUIFAN_BNboJQLneToEiIMtP9c44DszV0a-TCE_inJZ-3wKrncWaFwtMPPZneHMwSu2rn9EBbi7kOGwJWKMKtFqliqEWVE7ns_7OF2v9qNGh7Z5AO_WwJIPilf5dD22maJRGJDklkmRPhjDstSpbRUYHcjk-1hsvpvs3jSIoOQWcSbHiwyXCt8YCT6w23PsEo0A6-vHrenlShf9uig==" data-type="subscription" accept-charset="UTF-8">
-                <label class="screen-reader-text" for="sanatcin-newsletter-email">E-posta adresiniz</label>
-                <input type="email" id="sanatcin-newsletter-email" name="EMAIL" placeholder="E-posta adresiniz" autocomplete="email" required>
+                <label class="screen-reader-text" for="EMAIL">E-posta adresiniz</label>
+                <input type="email" id="EMAIL" name="EMAIL" placeholder="E-posta adresiniz" autocomplete="email" required>
                 <input type="text" name="email_address_check" value="" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
                 <input type="hidden" name="locale" value="tr">
                 <button type="submit">Bültene Abone Ol →</button>
             </form>
-            <p class="sanatcin-newsletter__note">Abonelik işlemi Brevo üzerinden güvenli biçimde tamamlanır.</p>
         </div>
     </div>
 </section>
