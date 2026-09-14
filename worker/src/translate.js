@@ -128,6 +128,8 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
           'Olgu fişi doğruluk sınırıdır, paragraf planı değildir. Haber örgüsünü Türkçe gazetecilikteki önem sırasına göre kur.',
           'İlk paragraf kim-ne-nerede-ne zaman sorularından kaynakta yanıtı bulunanları doğal biçimde vermeli. Sonraki paragraflar önem, ayrıntı ve bağlam sırasıyla ilerlemeli.',
           'Kısa, açık ve çoğunlukla etkin cümleler kullan. Kaynak dilin sözdizimini, zincirleme tamlamalarını, tanıtım tonunu ve kelime kelime çeviri kokusunu taşıma.',
+          'İngilizcedeki isimleştirmeleri Türkçeye aynen aktarma. “karakterlerin gelişimi”, “mesleklerinin ilk yılları”, “iş birliğinin ilerletilmesi” gibi yapıları gerektiğinde fiilli ve doğal Türkçe cümlelere dönüştür.',
+          'Kaynak metnin cümle ve paragraf sırasını körü körüne izleme. Türkçe bir editör aynı olguları hangi sırayla ve hangi fiillerle yazardıysa o şekilde yeniden kur.',
           'Paragrafları birbirinden kopuk özet maddeleri gibi kurma. Her paragraf bir öncekinin bıraktığı bilgiye doğal biçimde bağlansın; yapay geçiş kalıpları ve aynı ritimde yinelenen cümlelerden kaçın.',
           '“Dikkat çekiyor”, “öne çıkıyor”, “gözler önüne seriyor”, “önemli bir adım” ve “büyük ilgi gördü” gibi hazır ifadeleri ancak kaynakta somut dayanağı varsa kullan.',
           'Kurum açıklamalarındaki övgü ve iddiaları haberin kendi hükmü gibi yazma; söyleyeni açıkça belirt. Kaynaktaki neden-sonuç ilişkisini güçlendirme veya yeni bir önem atfetme.',
@@ -160,6 +162,40 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
   });
   return {
     accepted: result.accepted === true,
+    issues: (Array.isArray(result.issues) ? result.issues : [result.reason]).map(cleanString).filter(Boolean).slice(0, 8),
+    draft: normalizeDraft(article, result)
+  };
+}
+
+async function polishTurkishNews(article, factSheet, draft, { signal, completeJson = requestJson } = {}) {
+  const result = await completeJson({
+    model: config.openaiEditorModel,
+    signal,
+    input: [
+      {
+        role: 'system',
+        content: [
+          'Sen kaynak dilden çeviri yapan biri değil, Türkçe bir haber merkezinin son okuma editörüsün.',
+          'Görevin verilen taslağı yeniden çevirmek değil; metindeki çeviri kokusunu, yabancı sözdizimini, gereksiz isimleştirmeleri ve mekanik cümle ritmini temizlemektir.',
+          'Metin, ilk kez Türkçe yazılmış bir kültür-sanat haberi gibi okunmalı. Fiilleri doğal kullan; uzun tamlamaları böl; özne-yüklem ilişkisini Türkçe haber diline göre yeniden kur.',
+          'Başlık, spot ve giriş aynı bilgiyi tekrar etmesin. Paragraflar arasında doğal akış kur. Gereksiz açıklama, yorum, sıfat ve tanıtım dili ekleme.',
+          'Olgu fişindeki gerçekleri, özel adları, tarihleri, sayıları, eser adlarını ve alıntı anlamlarını kesinlikle değiştirme. Kaynakta olmayan hiçbir bilgi ekleme.',
+          'Bir ifade zaten doğal Türkçeyse sırf değişiklik yapmak için değiştirme. Ama İngilizce veya Çince cümle iskeletini taşıyan ifadeleri yeniden kur.',
+          'Sonuç 4-7 kısa paragraf, doğal bir başlık ve tek cümlelik spot içersin. Yalnız geçerli JSON ver.'
+        ].join(' ')
+      },
+      {
+        role: 'user',
+        content: [
+          `Olgu fişi:\n${JSON.stringify(factSheet)}`,
+          `Son okuma yapılacak taslak:\n${JSON.stringify({ title: draft.title, excerpt: draft.excerpt, paragraphs: draft.paragraphs, tags: draft.tags })}`,
+          'JSON şeması: {"accepted":true,"issues":[],"title":"başlık","excerpt":"spot","paragraphs":["paragraf"],"tags":["etiket"]}'
+        ].join('\n\n')
+      }
+    ]
+  });
+  return {
+    accepted: result.accepted !== false,
     issues: (Array.isArray(result.issues) ? result.issues : [result.reason]).map(cleanString).filter(Boolean).slice(0, 8),
     draft: normalizeDraft(article, result)
   };
@@ -218,8 +254,41 @@ export async function translateArticle(article, { signal, completeJson = request
   if (!final.accepted) {
     throw new Error(`Editoryal doğrulama başarısız: ${final.issues.join(' ') || 'gerekçe belirtilmedi'}`);
   }
+
+  // Son Türkçe editör geçişi kaliteyi artırır; ancak bu isteğin başarısız olması
+  // çalışan sistemi durdurmaz. Daha önce doğrulanmış taslak güvenli fallback'tir.
+  const prePolish = final;
+  const prePolishIssues = translationIssues(prePolish.draft);
+  try {
+    const polished = await polishTurkishNews(article, factSheet, prePolish.draft, { signal, completeJson });
+    if (polished.accepted) {
+      assertUsableEditorialOutput(polished.draft);
+      const polishedIssues = translationIssues(polished.draft);
+      if (polishedIssues.length <= prePolishIssues.length) {
+        final = polished;
+        mechanicalIssues = polishedIssues;
+        log('info', 'Türkçe son okuma tamamlandı', {
+          source: article.source.id,
+          title: final.draft.title,
+          elapsedSeconds: elapsedSeconds(startedAt)
+        });
+      } else {
+        log('warn', 'Türkçe son okuma mekanik kaliteyi düşürdü; önceki taslak korundu', {
+          source: article.source.id,
+          beforeIssues: prePolishIssues,
+          afterIssues: polishedIssues
+        });
+      }
+    }
+  } catch (error) {
+    log('warn', 'Türkçe son okuma tamamlanamadı; doğrulanmış önceki taslakla devam edilecek', {
+      source: article.source.id,
+      error: String(error?.message ?? error).slice(0, 500)
+    });
+  }
+
   if (mechanicalIssues.length) {
-    log('warn', 'Tek düzeltme sonrasında kalan dil/biçim notları yayını engellemeyecek', {
+    log('warn', 'Son metinde kalan dil/biçim notları yayını engellemeyecek', {
       source: article.source.id,
       issues: mechanicalIssues
     });
@@ -230,5 +299,5 @@ export async function translateArticle(article, { signal, completeJson = request
     title: final.draft.title,
     elapsedSeconds: elapsedSeconds(startedAt)
   });
-  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v5' };
+  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v6-final-copydesk' };
 }
