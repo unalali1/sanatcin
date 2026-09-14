@@ -26,10 +26,27 @@ function increment(record, key) {
   record[key] = (record[key] ?? 0) + 1;
 }
 
+function publishedScoreStats(results) {
+  if (!results.length) return { min: null, max: null, average: null };
+  const scores = results.map((item) => Number(item.score) || 0);
+  return {
+    min: Math.min(...scores),
+    max: Math.max(...scores),
+    average: Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 10) / 10
+  };
+}
+
+function distribution(items, key) {
+  return items.reduce((record, item) => {
+    increment(record, item[key]);
+    return record;
+  }, {});
+}
+
 async function run() {
   validateConfig();
   const runId = `sanatcin-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${process.pid}`;
-  setLogContext({ runId, workerVersion: '0.7.0' });
+  setLogContext({ runId, workerVersion: '0.8.0' });
 
   if (config.syncSitePages) {
     log('info', 'Site kurumsal içerik eşitlemesi başladı', { maintenanceOnly: config.maintenanceOnly });
@@ -56,6 +73,8 @@ async function run() {
     dryRun: config.dryRun,
     maxAttemptsPerCategory: config.maxAttemptsPerCategory,
     maxRunMinutes: config.maxRunMinutes,
+    minPublishScore: config.minPublishScore,
+    secondSlotMinScore: config.secondSlotMinScore,
     maxAiCandidates: config.maxAiCandidates,
     aiBatchSize: config.aiBatchSize,
     aiRerankConcurrency: config.aiRerankConcurrency,
@@ -67,6 +86,7 @@ async function run() {
 
   const sourceStats = Object.fromEntries(SOURCES.filter((source) => source.enabled).map((source) => [source.id, { discovered: 0, attempted: 0, published: 0, rejected: 0 }]));
   const rejectedReasons = {};
+  const selectionStats = { lowScoreSkipped: 0, topicPenalized: 0 };
   const discovered = await mapLimit(SOURCES.filter((source) => source.enabled), config.discoveryConcurrency, async (source) => {
     try {
       const items = await discover(source);
@@ -102,10 +122,13 @@ async function run() {
     slug,
     diversifyByTopic(diversifyBySource(ranked.filter((item) => item.eligible !== false && item.category === slug)))
   ]));
+  selectionStats.topicPenalized = Object.values(queues).flat().filter((item) => item.topicPenalty > 0).length;
   log('info', 'Aday seçimi tamamlandı', {
     discovered: candidates.length,
     newCandidates: newCandidates.length,
-    queues: Object.fromEntries(Object.entries(queues).map(([key, value]) => [key, value.length]))
+    aiEvaluated: ranked.length,
+    queues: Object.fromEntries(Object.entries(queues).map(([key, value]) => [key, value.length])),
+    topicPenalized: selectionStats.topicPenalized
   });
 
   const results = [];
@@ -124,7 +147,26 @@ async function run() {
     for (const { slug } of CATEGORIES) {
       if (attempts.length >= remainingSlots) break;
       if (categoryPublished[slug] >= config.maxPerCategory || !budget.canAttempt(slug)) continue;
-      const candidate = queues[slug][queueOffsets[slug]++];
+
+      const minimumScore = categoryPublished[slug] === 0
+        ? config.minPublishScore
+        : Math.max(config.minPublishScore, config.secondSlotMinScore);
+      let candidate = null;
+      while (queueOffsets[slug] < queues[slug].length) {
+        const next = queues[slug][queueOffsets[slug]++];
+        if (next.score >= minimumScore) {
+          candidate = next;
+          break;
+        }
+        selectionStats.lowScoreSkipped += 1;
+        log('info', 'Aday kalite eşiğinin altında kaldı; daha güçlü aday aranacak', {
+          category: slug,
+          source: next.source.id,
+          score: next.score,
+          minimumScore,
+          title: next.title
+        });
+      }
       if (!candidate) continue;
       attempts.push({ slug, candidate, attempt: budget.noteAttempt(slug) });
     }
@@ -132,7 +174,7 @@ async function run() {
 
     log('info', 'Kategori dengeli aday turu başladı', {
       round,
-      candidates: attempts.map(({ slug, candidate }) => ({ category: slug, source: candidate.source.id }))
+      candidates: attempts.map(({ slug, candidate }) => ({ category: slug, source: candidate.source.id, score: candidate.score }))
     });
     const outcomes = await mapLimit(attempts, config.articleConcurrency, async ({ slug, candidate, attempt }) => {
       sourceStats[candidate.source.id].attempted += 1;
@@ -141,6 +183,9 @@ async function run() {
         category: slug,
         attempt,
         source: candidate.source.id,
+        score: candidate.score,
+        sourceBoost: candidate.sourceBoost ?? 0,
+        topicPenalty: candidate.topicPenalty ?? 0,
         url: candidate.url
       });
       try {
@@ -163,6 +208,8 @@ async function run() {
           category: candidate.category,
           score: candidate.score,
           scoreReason: candidate.scoreReason,
+          sourceBoost: candidate.sourceBoost ?? 0,
+          topicPenalty: candidate.topicPenalty ?? 0,
           postId: post.id,
           link: post.link,
           hasImage: true,
@@ -226,13 +273,27 @@ async function run() {
   if (results.length < config.minDailyTarget) {
     log('warn', 'Günlük asgari yayın hedefinin altında kalındı', { target: config.minDailyTarget, processed: results.length });
   }
+
+  const targetReached = results.length >= config.minDailyTarget;
+  const hadRejections = Object.keys(rejectedReasons).length > 0 || selectionStats.lowScoreSkipped > 0;
+  const runStatus = results.length === 0
+    ? 'failed'
+    : !targetReached || timeLimitReached
+      ? 'partial'
+      : hadRejections
+        ? 'success_with_rejections'
+        : 'success';
+
   log('info', 'Günlük SanatÇin taraması tamamlandı', {
-    runStatus: results.length === 0 ? 'failed' : Object.keys(rejectedReasons).length ? 'partial' : 'success',
+    runStatus,
     processed: results.length,
     target: `${config.minDailyTarget}-${config.maxDailyTotal}`,
     timeLimitReached,
     elapsedMinutes: Math.round((Date.now() - budget.startedAt) / 6000) / 10,
     categoryPublished,
+    sourcePublished: distribution(results, 'source'),
+    scoreStats: publishedScoreStats(results),
+    selectionStats,
     rejectedReasons,
     sourceStats,
     results
