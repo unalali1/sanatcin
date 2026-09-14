@@ -1,6 +1,13 @@
+// Newsletter selection and scheduled-send safety tests.
+// Railway build gate must pass this file before autosend is enabled.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { renderNewsletterHtml, selectNewsletterPosts } from '../src/newsletter.js';
+import {
+  isNewsletterSendWindow,
+  newsletterCampaignDate,
+  renderNewsletterHtml,
+  selectNewsletterPosts
+} from '../src/newsletter.js';
 
 function post(id, slug, score, date, title = `Haber ${id}`) {
   return {
@@ -56,4 +63,16 @@ test('newsletter HTML görsel, başlık ve link içerir', () => {
   assert.match(html, /img-10-large\.jpg/);
   assert.match(html, /haber-10/);
   assert.match(html, /SanatÇin Bülteni/);
+});
+
+test('newsletter kampanya tarihi UTC takvim tarihini kullanır', () => {
+  assert.equal(newsletterCampaignDate(new Date('2026-09-20T06:00:00Z')), '2026-09-20');
+});
+
+test('otomatik gönderim yalnız pazar 06:00-06:19 UTC penceresinde açıktır', () => {
+  assert.equal(isNewsletterSendWindow(new Date('2026-09-20T06:00:00Z')), true);
+  assert.equal(isNewsletterSendWindow(new Date('2026-09-20T06:19:59Z')), true);
+  assert.equal(isNewsletterSendWindow(new Date('2026-09-20T06:20:00Z')), false);
+  assert.equal(isNewsletterSendWindow(new Date('2026-09-19T06:00:00Z')), false);
+  assert.equal(isNewsletterSendWindow(new Date('2026-09-20T05:59:59Z')), false);
 });

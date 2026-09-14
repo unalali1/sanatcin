@@ -126,6 +126,14 @@ async function brevo(path, apiKey, options = {}) {
   return response.status === 204 ? null : response.json();
 }
 
+export function newsletterCampaignDate(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+export function isNewsletterSendWindow(date = new Date(), { utcDay = 0, utcHour = 6, windowMinutes = 20 } = {}) {
+  return date.getUTCDay() === utcDay && date.getUTCHours() === utcHour && date.getUTCMinutes() < windowMinutes;
+}
+
 export async function createBrevoDraft({ apiKey, listId, senderEmail, senderName = 'SanatÇin', subject, campaignName, htmlContent }) {
   if (!apiKey) throw new Error('BREVO_API_KEY eksik.');
   if (!Number.isInteger(Number(listId)) || Number(listId) <= 0) throw new Error('BREVO_LIST_ID geçerli değil.');
@@ -143,8 +151,18 @@ export async function createBrevoDraft({ apiKey, listId, senderEmail, senderName
   });
 }
 
+export async function findBrevoCampaignByName({ apiKey, campaignName }) {
+  if (!apiKey) return null;
+  const data = await brevo('/emailCampaigns?type=classic&limit=100&offset=0&sort=desc', apiKey);
+  return (data?.campaigns || []).find((campaign) => campaign.name === campaignName) || null;
+}
+
 export async function campaignNameExists({ apiKey, campaignName }) {
-  if (!apiKey) return false;
-  const data = await brevo('/emailCampaigns?type=classic&status=draft&limit=50&offset=0&sort=desc', apiKey);
-  return (data?.campaigns || []).some((campaign) => campaign.name === campaignName);
+  return Boolean(await findBrevoCampaignByName({ apiKey, campaignName }));
+}
+
+export async function sendBrevoCampaign({ apiKey, campaignId }) {
+  if (!apiKey) throw new Error('BREVO_API_KEY eksik.');
+  if (!Number.isInteger(Number(campaignId)) || Number(campaignId) <= 0) throw new Error('Brevo campaignId geçerli değil.');
+  return brevo(`/emailCampaigns/${Number(campaignId)}/sendNow`, apiKey, { method: 'POST' });
 }
