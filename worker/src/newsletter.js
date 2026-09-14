@@ -3,6 +3,7 @@ import { titleSimilarity } from './quality.js';
 
 const REGULAR_CATEGORY_SLUGS = ['kultur-sanat', 'sinema', 'moda-tasarim', 'sehir-yasam'];
 const NEWSLETTER_TITLE_SIMILARITY_THRESHOLD = 0.45;
+const DEFAULT_MASTHEAD_URL = 'https://sanatcin.com/wp-content/uploads/2026/09/arka-plan-2-1024x341.png';
 
 function text(value = '') {
   return load(`<div>${value}</div>`).text().replace(/\s+/g, ' ').trim();
@@ -133,10 +134,11 @@ function renderCompactCard(post, siteUrl) {
     </tr>`;
 }
 
-export function renderNewsletterHtml(posts, { siteUrl = 'https://sanatcin.com', logoUrl = '' } = {}) {
+export function renderNewsletterHtml(posts, { siteUrl = 'https://sanatcin.com', logoUrl = '', mastheadUrl = DEFAULT_MASTHEAD_URL } = {}) {
   const [hero, ...rest] = posts;
   const heroCard = hero ? renderHeroCard(hero, siteUrl) : '';
   const compactCards = rest.map((post) => renderCompactCard(post, siteUrl)).join('');
+  const masthead = escapeHtml(mastheadUrl || DEFAULT_MASTHEAD_URL);
 
   return `<!doctype html>
 <html>
@@ -150,7 +152,8 @@ export function renderNewsletterHtml(posts, { siteUrl = 'https://sanatcin.com', 
   @media only screen and (max-width:640px){
     .sc-shell{width:100%!important;max-width:100%!important;}
     .sc-pad{padding-left:20px!important;padding-right:20px!important;}
-    .sc-logo{width:220px!important;max-width:78%!important;height:auto!important;}
+    .sc-masthead-pad{padding:24px 20px 22px!important;}
+    .sc-logo{width:210px!important;max-width:72%!important;height:auto!important;}
     .sc-title{font-size:29px!important;}
     .sc-story-img,.sc-story-copy{display:block!important;width:100%!important;max-width:100%!important;}
     .sc-story-img{padding:0 0 16px!important;}
@@ -159,23 +162,42 @@ export function renderNewsletterHtml(posts, { siteUrl = 'https://sanatcin.com', 
   }
 </style>
 </head>
-<body style="margin:0;padding:0;background:#f2e7d3;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#f2e7d3;">
+<body style="margin:0;padding:0;background:#f3eee5;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#f3eee5;">
     <tr>
-      <td align="center" style="padding:22px 12px;">
+      <td align="center" style="padding:20px 12px;">
         <table class="sc-shell" role="presentation" width="720" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:720px;background:#fffdf9;box-shadow:0 1px 0 rgba(9,41,64,.06);">
           <tr>
-            <td class="sc-pad" style="padding:30px 34px 28px;border-top:5px solid #e0aa3c;background:#041d30;color:#fffdf9;">
-              ${logoUrl ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td align="left" style="padding:0 0 22px;line-height:0;"><img class="sc-logo" src="${escapeHtml(logoUrl)}" alt="SanatÇin" width="260" style="display:block;width:260px;max-width:260px;height:auto;border:0;margin:0;"></td></tr></table>` : '<div style="font-family:Georgia,serif;font-size:38px;font-weight:700;margin:0 0 18px;">SanatÇin</div>'}
-              <div style="font-family:Arial,sans-serif;font-size:12px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#ffe89a;margin:0 0 8px;">Haftalık Seçki</div>
-              <div class="sc-title" style="font-family:Georgia,'Times New Roman',serif;font-size:34px;line-height:1.12;margin:0 0 9px;">SanatÇin Bülteni</div>
-              <div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.55;color:#d6e0e5;max-width:600px;">Çin’in kültür, sanat, sinema, moda ve yaşam dünyasından editörün seçtikleri.</div>
+            <td background="${masthead}" bgcolor="#f8f4ec" style="background-color:#f8f4ec;background-image:url('${masthead}');background-repeat:no-repeat;background-position:center right;background-size:cover;border-top:5px solid #d3a34a;">
+              <!--[if gte mso 9]>
+              <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:720px;height:220px;">
+                <v:fill type="frame" src="${masthead}" color="#f8f4ec" />
+                <v:textbox inset="0,0,0,0">
+              <![endif]-->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td class="sc-masthead-pad" style="padding:30px 34px 28px;">
+                    ${logoUrl ? `<img class="sc-logo" src="${escapeHtml(logoUrl)}" alt="SanatÇin" width="270" style="display:block;width:270px;max-width:270px;height:auto;border:0;margin:0 0 24px;">` : '<div style="font-family:Georgia,serif;font-size:38px;font-weight:700;color:#092940;margin:0 0 20px;">SanatÇin</div>'}
+                    <div style="font-family:Georgia,'Times New Roman',serif;font-size:17px;line-height:1.45;color:#526672;max-width:330px;">Çin kültür ve sanatına Türkçe bir bakış.</div>
+                  </td>
+                </tr>
+              </table>
+              <!--[if gte mso 9]>
+                </v:textbox>
+              </v:rect>
+              <![endif]-->
+            </td>
+          </tr>
+          <tr>
+            <td class="sc-pad" style="padding:26px 34px 24px;background:#fffaf2;border-bottom:1px solid #eadfce;">
+              <div class="sc-title" style="font-family:Georgia,'Times New Roman',serif;font-size:34px;line-height:1.12;color:#092940;margin:0 0 9px;">SanatÇin Bülteni</div>
+              <div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.55;color:#5c6e77;max-width:620px;">Çin’in kültür, sanat, sinema, moda ve yaşam dünyasından editörün seçtikleri.</div>
             </td>
           </tr>
           ${heroCard}
           ${compactCards}
           <tr>
-            <td class="sc-pad" style="padding:24px 34px;background:#082a43;color:#cbd7dc;font-family:Arial,sans-serif;font-size:12px;line-height:1.6;">SanatÇin · Çin kültür ve sanatına Türkçe bir bakış.<br><a href="${escapeHtml(siteUrl)}" style="color:#ffe89a;text-decoration:none;">sanatcin.com</a></td>
+            <td class="sc-pad" style="padding:24px 34px;background:#f5efe4;border-top:1px solid #e4d8c7;color:#53666f;font-family:Arial,sans-serif;font-size:12px;line-height:1.6;">SanatÇin · Çin kültür ve sanatına Türkçe bir bakış.<br><a href="${escapeHtml(siteUrl)}" style="color:#a91529;text-decoration:none;">sanatcin.com</a></td>
           </tr>
         </table>
       </td>
