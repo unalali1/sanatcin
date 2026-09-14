@@ -1,9 +1,15 @@
 import { load } from 'cheerio';
+import { titleSimilarity } from './quality.js';
 
 const REGULAR_CATEGORY_SLUGS = ['kultur-sanat', 'sinema', 'moda-tasarim', 'sehir-yasam'];
+const NEWSLETTER_TITLE_SIMILARITY_THRESHOLD = 0.45;
 
 function text(value = '') {
   return load(`<div>${value}</div>`).text().replace(/\s+/g, ' ').trim();
+}
+
+function titleText(post) {
+  return text(post?.title?.rendered || '');
 }
 
 function score(post) {
@@ -27,19 +33,36 @@ function sortPosts(posts) {
   return [...posts].sort((a, b) => score(b) - score(a) || dateValue(b) - dateValue(a));
 }
 
+function isDuplicateTopic(candidate, selected) {
+  const candidateTitle = titleText(candidate);
+  if (!candidateTitle) return true;
+  return selected.some((existing) => {
+    const similarity = titleSimilarity(candidateTitle, titleText(existing));
+    return similarity.score >= NEWSLETTER_TITLE_SIMILARITY_THRESHOLD && similarity.shared >= 2;
+  });
+}
+
 export function selectNewsletterPosts(posts, maxItems = 6) {
   const selected = [];
   const selectedIds = new Set();
   const pick = (candidate) => {
-    if (!candidate || selectedIds.has(candidate.id) || selected.length >= maxItems) return;
+    if (!candidate || selectedIds.has(candidate.id) || selected.length >= maxItems) return false;
+    if (isDuplicateTopic(candidate, selected)) return false;
     selected.push(candidate);
     selectedIds.add(candidate.id);
+    return true;
+  };
+  const pickBest = (candidates) => {
+    for (const candidate of sortPosts(candidates)) {
+      if (pick(candidate)) return candidate;
+    }
+    return null;
   };
 
-  pick(sortPosts(posts.filter((post) => hasCategory(post, 'editorden')))[0]);
+  pickBest(posts.filter((post) => hasCategory(post, 'editorden')));
 
   for (const slug of REGULAR_CATEGORY_SLUGS) {
-    pick(sortPosts(posts.filter((post) => hasCategory(post, slug) && !selectedIds.has(post.id)))[0]);
+    pickBest(posts.filter((post) => hasCategory(post, slug) && !selectedIds.has(post.id)));
   }
 
   for (const post of sortPosts(posts.filter((post) => !selectedIds.has(post.id)))) pick(post);
@@ -62,7 +85,7 @@ function escapeHtml(value = '') {
 
 export function renderNewsletterHtml(posts, { siteUrl = 'https://sanatcin.com', logoUrl = '' } = {}) {
   const cards = posts.map((post) => {
-    const title = text(post?.title?.rendered || '');
+    const title = titleText(post);
     const excerpt = text(post?.excerpt?.rendered || '').slice(0, 240);
     const image = featuredImage(post);
     const link = post?.link || siteUrl;
