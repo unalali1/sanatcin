@@ -83,24 +83,106 @@ function escapeHtml(value = '') {
   return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[char]);
 }
 
-export function renderNewsletterHtml(posts, { siteUrl = 'https://sanatcin.com', logoUrl = '' } = {}) {
-  const cards = posts.map((post) => {
-    const title = titleText(post);
-    const excerpt = text(post?.excerpt?.rendered || '').slice(0, 240);
-    const image = featuredImage(post);
-    const link = post?.link || siteUrl;
-    const label = text(categoryLabel(post));
-    return `
-      <tr><td style="padding:0 0 30px;">
-        ${image ? `<a href="${escapeHtml(link)}"><img src="${escapeHtml(image)}" alt="" width="600" style="display:block;width:100%;height:auto;border:0;margin:0 0 14px;"></a>` : ''}
-        <div style="font-family:Arial,sans-serif;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#a91529;margin:0 0 7px;">${escapeHtml(label)}</div>
-        <div style="font-family:Georgia,serif;font-size:25px;line-height:1.18;color:#092940;margin:0 0 9px;"><a href="${escapeHtml(link)}" style="color:#092940;text-decoration:none;">${escapeHtml(title)}</a></div>
-        <div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.55;color:#576c78;margin:0 0 12px;">${escapeHtml(excerpt)}</div>
-        <a href="${escapeHtml(link)}" style="font-family:Arial,sans-serif;font-size:14px;font-weight:700;color:#a91529;text-decoration:none;">Haberi oku →</a>
-      </td></tr>`;
-  }).join('');
+function postCardData(post, siteUrl, excerptLength = 200) {
+  return {
+    title: titleText(post),
+    excerpt: text(post?.excerpt?.rendered || '').slice(0, excerptLength),
+    image: featuredImage(post),
+    link: post?.link || siteUrl,
+    label: text(categoryLabel(post))
+  };
+}
 
-  return `<!doctype html><html><body style="margin:0;padding:0;background:#f5ead7;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f5ead7;"><tr><td align="center" style="padding:24px 12px;"><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background:#fffdf9;"><tr><td style="padding:30px 30px 18px;border-top:5px solid #e0aa3c;background:#041d30;color:#fffdf9;">${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="SanatÇin" width="190" style="display:block;max-width:190px;height:auto;margin:0 0 16px;">` : '<div style="font-family:Georgia,serif;font-size:34px;font-weight:700;margin:0 0 12px;">SanatÇin</div>'}<div style="font-family:Arial,sans-serif;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#ffe89a;margin:0 0 8px;">Haftalık Seçki</div><div style="font-family:Georgia,serif;font-size:30px;line-height:1.15;margin:0 0 8px;">SanatÇin Bülteni</div><div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#d6e0e5;">Çin’in kültür, sanat, sinema, moda ve yaşam dünyasından editörün seçtikleri.</div></td></tr><tr><td style="padding:30px;">${cards}</td></tr><tr><td style="padding:22px 30px;background:#082a43;color:#cbd7dc;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;">SanatÇin · Çin kültür ve sanatına Türkçe bir bakış.<br><a href="${escapeHtml(siteUrl)}" style="color:#ffe89a;">sanatcin.com</a></td></tr></table></td></tr></table></body></html>`;
+function renderHeroCard(post, siteUrl) {
+  const { title, excerpt, image, link, label } = postCardData(post, siteUrl, 230);
+  return `
+    <tr>
+      <td style="padding:0;background:#fffdf9;">
+        ${image ? `<a href="${escapeHtml(link)}" style="text-decoration:none;"><img src="${escapeHtml(image)}" alt="" width="720" style="display:block;width:100%;max-width:720px;height:auto;border:0;margin:0;"></a>` : ''}
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+          <tr>
+            <td class="sc-pad" style="padding:24px 34px 30px;">
+              <div style="font-family:Arial,sans-serif;font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#a91529;margin:0 0 8px;">${escapeHtml(label)}</div>
+              <div style="font-family:Georgia,'Times New Roman',serif;font-size:30px;line-height:1.16;color:#092940;margin:0 0 10px;"><a href="${escapeHtml(link)}" style="color:#092940;text-decoration:none;">${escapeHtml(title)}</a></div>
+              <div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.58;color:#576c78;margin:0 0 14px;">${escapeHtml(excerpt)}</div>
+              <a href="${escapeHtml(link)}" style="font-family:Arial,sans-serif;font-size:14px;font-weight:700;color:#a91529;text-decoration:none;">Haberi oku →</a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>`;
+}
+
+function renderCompactCard(post, siteUrl) {
+  const { title, excerpt, image, link, label } = postCardData(post, siteUrl, 175);
+  return `
+    <tr>
+      <td class="sc-pad" style="padding:26px 34px;border-top:1px solid #eadfce;background:#fffdf9;">
+        <table class="sc-story-table" role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+          <tr>
+            ${image ? `<td class="sc-story-img" width="250" valign="top" style="width:250px;padding:0;"><a href="${escapeHtml(link)}" style="text-decoration:none;"><img src="${escapeHtml(image)}" alt="" width="250" style="display:block;width:250px;max-width:100%;height:auto;border:0;margin:0;"></a></td>` : ''}
+            <td class="sc-story-copy" valign="top" style="padding:${image ? '0 0 0 22px' : '0'};">
+              <div style="font-family:Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#a91529;margin:0 0 7px;">${escapeHtml(label)}</div>
+              <div style="font-family:Georgia,'Times New Roman',serif;font-size:23px;line-height:1.2;color:#092940;margin:0 0 9px;"><a href="${escapeHtml(link)}" style="color:#092940;text-decoration:none;">${escapeHtml(title)}</a></div>
+              <div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.52;color:#576c78;margin:0 0 11px;">${escapeHtml(excerpt)}</div>
+              <a href="${escapeHtml(link)}" style="font-family:Arial,sans-serif;font-size:13px;font-weight:700;color:#a91529;text-decoration:none;">Haberi oku →</a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>`;
+}
+
+export function renderNewsletterHtml(posts, { siteUrl = 'https://sanatcin.com', logoUrl = '' } = {}) {
+  const [hero, ...rest] = posts;
+  const heroCard = hero ? renderHeroCard(hero, siteUrl) : '';
+  const compactCards = rest.map((post) => renderCompactCard(post, siteUrl)).join('');
+
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body,table,td,a{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;}
+  table,td{mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;}
+  img{-ms-interpolation-mode:bicubic;}
+  @media only screen and (max-width:640px){
+    .sc-shell{width:100%!important;max-width:100%!important;}
+    .sc-pad{padding-left:20px!important;padding-right:20px!important;}
+    .sc-logo{width:220px!important;max-width:78%!important;height:auto!important;}
+    .sc-title{font-size:29px!important;}
+    .sc-story-img,.sc-story-copy{display:block!important;width:100%!important;max-width:100%!important;}
+    .sc-story-img{padding:0 0 16px!important;}
+    .sc-story-copy{padding:0!important;}
+    .sc-story-img img{width:100%!important;max-width:100%!important;height:auto!important;}
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#f2e7d3;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#f2e7d3;">
+    <tr>
+      <td align="center" style="padding:22px 12px;">
+        <table class="sc-shell" role="presentation" width="720" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:720px;background:#fffdf9;box-shadow:0 1px 0 rgba(9,41,64,.06);">
+          <tr>
+            <td class="sc-pad" style="padding:30px 34px 28px;border-top:5px solid #e0aa3c;background:#041d30;color:#fffdf9;">
+              ${logoUrl ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr><td align="left" style="padding:0 0 22px;line-height:0;"><img class="sc-logo" src="${escapeHtml(logoUrl)}" alt="SanatÇin" width="260" style="display:block;width:260px;max-width:260px;height:auto;border:0;margin:0;"></td></tr></table>` : '<div style="font-family:Georgia,serif;font-size:38px;font-weight:700;margin:0 0 18px;">SanatÇin</div>'}
+              <div style="font-family:Arial,sans-serif;font-size:12px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#ffe89a;margin:0 0 8px;">Haftalık Seçki</div>
+              <div class="sc-title" style="font-family:Georgia,'Times New Roman',serif;font-size:34px;line-height:1.12;margin:0 0 9px;">SanatÇin Bülteni</div>
+              <div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.55;color:#d6e0e5;max-width:600px;">Çin’in kültür, sanat, sinema, moda ve yaşam dünyasından editörün seçtikleri.</div>
+            </td>
+          </tr>
+          ${heroCard}
+          ${compactCards}
+          <tr>
+            <td class="sc-pad" style="padding:24px 34px;background:#082a43;color:#cbd7dc;font-family:Arial,sans-serif;font-size:12px;line-height:1.6;">SanatÇin · Çin kültür ve sanatına Türkçe bir bakış.<br><a href="${escapeHtml(siteUrl)}" style="color:#ffe89a;text-decoration:none;">sanatcin.com</a></td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 }
 
 export async function fetchRecentWordPressPosts({ siteUrl, lookbackDays = 7, perPage = 50, signal } = {}) {
