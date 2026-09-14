@@ -1,9 +1,20 @@
+import {
+  fetchRecentWordPressPosts,
+  renderNewsletterHtml,
+  selectNewsletterPosts
+} from '../src/newsletter.js';
+
 const action = String(process.env.BREVO_ADMIN_ACTION || 'idle').trim();
 const apiKey = process.env.BREVO_API_KEY || '';
 
 function fail(message) {
   console.error(message);
   process.exitCode = 1;
+}
+
+function integer(name, fallback) {
+  const value = Number.parseInt(process.env[name] ?? '', 10);
+  return Number.isFinite(value) ? value : fallback;
 }
 
 async function brevo(path, options = {}) {
@@ -52,6 +63,51 @@ async function main() {
       createdAt: campaign.createdAt,
       modifiedAt: campaign.modifiedAt
     })), null, 2));
+    return;
+  }
+
+  if (action === 'refresh-draft') {
+    if (process.env.BREVO_ADMIN_CONFIRM !== 'REFRESH_DRAFT') {
+      throw new Error('BREVO_ADMIN_CONFIRM=REFRESH_DRAFT olmadan kampanya güncellenmez.');
+    }
+    const campaignId = integer('BREVO_CAMPAIGN_ID', 0);
+    if (campaignId <= 0) throw new Error('BREVO_CAMPAIGN_ID geçerli değil.');
+
+    const campaign = await brevo(`/emailCampaigns/${campaignId}`);
+    if (campaign?.status !== 'draft') {
+      throw new Error(`Yalnız taslak kampanya güncellenebilir. Mevcut durum: ${campaign?.status || 'bilinmiyor'}`);
+    }
+
+    const siteUrl = (process.env.WP_BASE_URL || 'https://sanatcin.com').replace(/\/$/, '');
+    const lookbackDays = Math.max(1, Math.min(integer('NEWSLETTER_LOOKBACK_DAYS', 7), 21));
+    const maxItems = Math.max(4, Math.min(integer('NEWSLETTER_MAX_ITEMS', 6), 8));
+    const logoUrl = process.env.NEWSLETTER_LOGO_URL || `${siteUrl}/wp-content/uploads/2026/09/SanatCin-Logo.png`;
+
+    const posts = await fetchRecentWordPressPosts({
+      siteUrl,
+      lookbackDays,
+      perPage: 100,
+      signal: AbortSignal.timeout(30000)
+    });
+    const selected = selectNewsletterPosts(posts, maxItems);
+    if (selected.length < 4) throw new Error(`Newsletter için yeterli içerik yok: ${selected.length}`);
+
+    const htmlContent = renderNewsletterHtml(selected, { siteUrl, logoUrl });
+    await brevo(`/emailCampaigns/${campaignId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ htmlContent })
+    });
+
+    const verify = await brevo(`/emailCampaigns/${campaignId}`);
+    console.log(JSON.stringify({
+      refreshed: true,
+      campaignId,
+      name: verify?.name,
+      subject: verify?.subject,
+      status: verify?.status,
+      htmlBytes: Buffer.byteLength(htmlContent),
+      selected: selected.map((post) => ({ id: post.id, title: post.title?.rendered, link: post.link }))
+    }, null, 2));
     return;
   }
 
