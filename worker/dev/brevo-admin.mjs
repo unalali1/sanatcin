@@ -41,6 +41,20 @@ async function main() {
     return;
   }
 
+  if (action === 'list-campaigns') {
+    const data = await brevo('/emailCampaigns?type=classic&limit=100&offset=0&sort=desc');
+    console.log(JSON.stringify((data?.campaigns || []).slice(0, 20).map((campaign) => ({
+      id: campaign.id,
+      name: campaign.name,
+      subject: campaign.subject,
+      status: campaign.status,
+      scheduledAt: campaign.scheduledAt,
+      createdAt: campaign.createdAt,
+      modifiedAt: campaign.modifiedAt
+    })), null, 2));
+    return;
+  }
+
   if (action === 'update-doi') {
     if (process.env.BREVO_ADMIN_CONFIRM !== 'UPDATE_DOI_TEMPLATE') {
       throw new Error('BREVO_ADMIN_CONFIRM=UPDATE_DOI_TEMPLATE olmadan şablon güncellenmez.');
