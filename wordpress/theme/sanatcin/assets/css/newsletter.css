@@ -1,0 +1,100 @@
+.sanatcin-newsletter {
+  padding: 58px 0 62px;
+  background: var(--navy-deep);
+  color: #fffdf9;
+  border-top: 5px solid var(--gold);
+}
+
+.sanatcin-newsletter__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, .9fr);
+  gap: 48px;
+  align-items: center;
+}
+
+.sanatcin-newsletter__kicker {
+  margin-bottom: 9px;
+  color: #ffe89a;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.sanatcin-newsletter h2 {
+  margin: 0 0 12px;
+  color: #fffdf9;
+  font: 500 clamp(32px, 3.1vw, 44px)/1.05 var(--serif);
+}
+
+.sanatcin-newsletter p {
+  margin: 0;
+  max-width: 690px;
+  color: #d6e0e5;
+}
+
+.sanatcin-newsletter__form-wrap > p {
+  margin-bottom: 15px;
+}
+
+.sanatcin-newsletter__form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.sanatcin-newsletter__form input[type="email"] {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, .34);
+  border-radius: 5px;
+  background: #fffdf9;
+  color: var(--ink);
+  padding: 13px 15px;
+}
+
+.sanatcin-newsletter__form input[type="email"]::placeholder {
+  color: #6f7d85;
+}
+
+.sanatcin-newsletter__form button {
+  border: 1px solid var(--gold);
+  border-radius: 5px;
+  background: var(--red);
+  color: #fff;
+  padding: 13px 20px;
+  font-weight: 850;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sanatcin-newsletter__form button:hover,
+.sanatcin-newsletter__form button:focus-visible {
+  background: var(--red-deep);
+}
+
+.sanatcin-newsletter__note {
+  margin-top: 11px !important;
+  color: #aebfc8 !important;
+  font-size: 12px;
+}
+
+@media (max-width: 820px) {
+  .sanatcin-newsletter {
+    padding: 46px 0 50px;
+  }
+
+  .sanatcin-newsletter__grid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .sanatcin-newsletter__form {
+    grid-template-columns: 1fr;
+  }
+
+  .sanatcin-newsletter__form button {
+    width: 100%;
+  }
+}
