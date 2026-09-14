@@ -18,10 +18,10 @@ const allowedCategories = new Set(['kultur-sanat', 'sinema', 'moda-tasarim', 'se
 // cezalandırmaz. Bu yalnız moda-tasarım kategorisinde küçük bir pozitif sinyaldir.
 const categorySourceBoosts = {
   'moda-tasarim': {
-    'jingdaily-fashion': 6,
-    'radii-fashion': 6,
-    'dao-fashion-retail': 5,
-    'china-daily-fashion': 3
+    'jingdaily-fashion': 3,
+    'radii-fashion': 3,
+    'dao-fashion-retail': 2,
+    'china-daily-fashion': 2
   }
 };
 
