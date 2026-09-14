@@ -1,4 +1,12 @@
-<?php get_header(); ?>
+<?php
+wp_enqueue_style(
+    'sanatcin-newsletter',
+    get_template_directory_uri() . '/assets/css/newsletter.css',
+    [],
+    wp_get_theme()->get('Version')
+);
+get_header();
+?>
 <?php
 $regular_exclusions = sanatcin_regular_category_exclusions();
 $featured = new WP_Query([
@@ -83,6 +91,27 @@ if ($latest->have_posts()) : ?>
     </div>
 </section>
 <?php endif; ?>
+
+<section class="sanatcin-newsletter" aria-labelledby="sanatcin-newsletter-title">
+    <div class="site-wrap sanatcin-newsletter__grid">
+        <div>
+            <div class="sanatcin-newsletter__kicker">Haftalık Seçki</div>
+            <h2 id="sanatcin-newsletter-title">SanatÇin Bülteni</h2>
+            <p>Çin’in kültür, sanat, sinema, moda ve yaşam dünyasından görülmeye değer hikâyeler.</p>
+        </div>
+        <div class="sanatcin-newsletter__form-wrap">
+            <p>Haftanın gürültüsünü değil, editörün seçtiklerini gönderiyoruz.</p>
+            <form id="sib-form" class="sanatcin-newsletter__form" method="POST" action="https://c2ad19f3.sibforms.com/serve/MUIFAN_BNboJQLneToEiIMtP9c44DszV0a-TCE_inJZ-3wKrncWaFwtMPPZneHMwSu2rn9EBbi7kOGwJWKMKtFqliqEWVE7ns_7OF2v9qNGh7Z5AO_WwJIPilf5dD22maJRGJDklkmRPhjDstSpbRUYHcjk-1hsvpvs3jSIoOQWcSbHiwyXCt8YCT6w23PsEo0A6-vHrenlShf9uig==" data-type="subscription" accept-charset="UTF-8">
+                <label class="screen-reader-text" for="sanatcin-newsletter-email">E-posta adresiniz</label>
+                <input type="email" id="sanatcin-newsletter-email" name="EMAIL" placeholder="E-posta adresiniz" autocomplete="email" required>
+                <input type="text" name="email_address_check" value="" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
+                <input type="hidden" name="locale" value="tr">
+                <button type="submit">Bültene Abone Ol →</button>
+            </form>
+            <p class="sanatcin-newsletter__note">Abonelik işlemi Brevo üzerinden güvenli biçimde tamamlanır.</p>
+        </div>
+    </div>
+</section>
 
 <?php if ($featured->found_posts > 3) : ?>
 <section class="category-ribbon" aria-label="SanatÇin yayın başlıkları">
