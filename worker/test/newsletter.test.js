@@ -1,4 +1,5 @@
 // Newsletter selection and scheduled-send safety tests.
+// Railway build gate must pass this file before autosend is enabled.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
