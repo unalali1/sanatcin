@@ -46,7 +46,7 @@ function editorialResult(excerpt = 'Şanghay’da açılan sergi, geleneksel zan
   };
 }
 
-test('olgu çıkarımı ve Türkçe haber yazımı farklı modellerle ardışık çalışır', async () => {
+test('olgu çıkarımı, haber yazımı ve Türkçe son okuma ardışık çalışır', async () => {
   const calls = [];
   const completeJson = async (request) => {
     calls.push(request);
@@ -55,15 +55,17 @@ test('olgu çıkarımı ve Türkçe haber yazımı farklı modellerle ardışık
 
   const result = await translateArticle(article, { completeJson });
 
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   assert.equal(calls[0].model, config.openaiFactModel);
   assert.equal(calls[1].model, config.openaiEditorModel);
-  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v5');
+  assert.equal(calls[2].model, config.openaiEditorModel);
+  assert.match(calls[2].input[0].content, /son okuma editörüsün/);
+  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v6-final-copydesk');
   assert.equal(result.factSheet.facts.length, 4);
   assert.match(result.title, /Şanghay/);
 });
 
-test('dil veya biçim notu adayı elemek yerine tek hedefli düzeltme başlatır', async () => {
+test('dil veya biçim notu adayı elemek yerine hedefli düzeltme ve son okuma başlatır', async () => {
   const calls = [];
   const completeJson = async (request) => {
     calls.push(request);
@@ -74,8 +76,9 @@ test('dil veya biçim notu adayı elemek yerine tek hedefli düzeltme başlatır
 
   const result = await translateArticle(article, { completeJson });
 
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
   assert.equal(calls[2].model, config.openaiEditorModel);
   assert.match(calls[2].input[1].content, /Spot 105-180 karakter aralığında değil/);
+  assert.match(calls[3].input[0].content, /son okuma editörüsün/);
   assert.ok(result.excerpt.length >= 105);
 });
