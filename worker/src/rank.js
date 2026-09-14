@@ -14,6 +14,21 @@ const client = new OpenAI({
 });
 const allowedCategories = new Set(['kultur-sanat', 'sinema', 'moda-tasarim', 'sehir-yasam']);
 
+// Moda havuzunda uzman kaynakları öne çıkarır; China Daily gibi genel kaynakları
+// cezalandırmaz. Bu yalnız moda-tasarım kategorisinde küçük bir pozitif sinyaldir.
+const categorySourceBoosts = {
+  'moda-tasarim': {
+    'jingdaily-fashion': 6,
+    'radii-fashion': 6,
+    'dao-fashion-retail': 5,
+    'china-daily-fashion': 3
+  }
+};
+
+function categorySourceBoost(candidate, category) {
+  return categorySourceBoosts[category]?.[candidate.source?.id] ?? 0;
+}
+
 export function applyAiScores(candidates, items, now = new Date()) {
   const byId = new Map(items.map((item) => [String(item.id), item]));
   return candidates.map((candidate) => {
@@ -23,12 +38,23 @@ export function applyAiScores(candidates, items, now = new Date()) {
     const category = eligible ? ai.category : 'uygunsuz';
     const interest = Math.max(0, Math.min(100, Number(ai.interest) || 0));
     const relevance = Math.max(0, Math.min(100, Number(ai.relevance) || 0));
+    const sourceBoost = eligible ? categorySourceBoost(candidate, category) : 0;
     const score =
       freshnessPoints(candidate.publishedAt, now) +
       interest * 0.30 +
       relevance * 0.20 +
-      Math.min(10, candidate.source.quality ?? 5);
-    return { ...candidate, eligible, category, score: eligible ? Math.round(score * 10) / 10 : 0, scoreReason: String(ai.reason ?? '').slice(0, 240) };
+      Math.min(10, candidate.source.quality ?? 5) +
+      sourceBoost;
+    return {
+      ...candidate,
+      eligible,
+      category,
+      interest,
+      relevance,
+      sourceBoost,
+      score: eligible ? Math.round(score * 10) / 10 : 0,
+      scoreReason: String(ai.reason ?? '').slice(0, 240)
+    };
   });
 }
 
@@ -84,16 +110,63 @@ export function diversifyBySource(candidates) {
   return diversified;
 }
 
+const TOPIC_STOP_WORDS = new Set([
+  'the', 'and', 'with', 'from', 'into', 'over', 'after', 'before', 'amid', 'for', 'its',
+  'china', 'chinese', 'culture', 'cultural', 'art', 'artist', 'artists', 'museum', 'gallery',
+  'exhibition', 'festival', 'film', 'films', 'cinema', 'fashion', 'design', 'new', 'opens', 'opened'
+]);
+
+function topicTokens(candidate) {
+  return `${candidate.title ?? ''} ${candidate.summary ?? ''}`
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .map((token) => token.length > 5 && token.endsWith('s') ? token.slice(0, -1) : token)
+    .filter((token) => token.length > 3 && !TOPIC_STOP_WORDS.has(token));
+}
+
+export function topicSimilarity(left, right) {
+  const a = new Set(topicTokens(left));
+  const b = new Set(topicTokens(right));
+  if (!a.size || !b.size) return { score: 0, shared: [] };
+  const shared = [...a].filter((token) => b.has(token));
+  const union = new Set([...a, ...b]).size;
+  return { score: shared.length / union, shared };
+}
+
+function isNearTopicRepeat(candidate, selected) {
+  return selected.some((prior) => {
+    const similarity = topicSimilarity(candidate, prior);
+    const hasDistinctiveSharedTerm = similarity.shared.some((token) => token.length >= 7);
+    return similarity.score >= 0.42
+      || (similarity.shared.length >= 3 && similarity.score >= 0.16)
+      || (similarity.shared.length >= 2 && hasDistinctiveSharedTerm && similarity.score >= 0.08);
+  });
+}
+
+// Konu tekrarını sert biçimde silmek yerine, önce farklı başlıkları öne taşır.
+// Kuyrukta yalnız benzer konular kaldıysa adayı korur ama küçük bir puan indirimi
+// uygular; böylece sistem işlemez hale gelmeden ikinci slot eşiği devreye girebilir.
 export function diversifyByTopic(candidates) {
   const remaining = [...candidates];
   const selected = [];
   while (remaining.length) {
-    let index = remaining.findIndex((candidate) => selected.every((prior) => {
-      const similarity = titleSimilarity(candidate.title, prior.title);
-      return similarity.shared < 2 || similarity.score < 0.45;
-    }));
-    if (index < 0) index = 0;
-    selected.push(remaining.splice(index, 1)[0]);
+    let index = remaining.findIndex((candidate) => !isNearTopicRepeat(candidate, selected));
+    let topicPenalty = 0;
+    if (index < 0) {
+      index = 0;
+      topicPenalty = 6;
+    }
+    const candidate = remaining.splice(index, 1)[0];
+    selected.push(topicPenalty > 0
+      ? {
+          ...candidate,
+          score: Math.max(0, Math.round((candidate.score - topicPenalty) * 10) / 10),
+          topicPenalty,
+          scoreReason: `${candidate.scoreReason || ''} Aynı gün benzer konu nedeniyle çeşitlilik puanı düşürüldü.`.trim()
+        }
+      : candidate);
   }
   return selected;
 }
@@ -104,11 +177,11 @@ async function rerankBatch(batch, signal) {
     input: [
       {
         role: 'system',
-        content: 'SanatÇin için haber seçen kıdemli bir Türkçe kültür-sanat editörüsün. Yalnız geçerli JSON ver. Finans, ekonomi, borsa, bankacılık, siyaset, askerî gündem, spor, sıradan protokol, reklam ve zayıf PR metinleri kesinlikle kapsam dışıdır. Türkiye’deki okur için güncellik, somut gelişme, görsel güç, özgünlük ve kültürel değer arıyoruz.'
+        content: 'SanatÇin için haber seçen kıdemli bir Türkçe kültür-sanat editörüsün. Yalnız geçerli JSON ver. Finans, ekonomi, borsa, bankacılık, siyaset, askerî gündem, spor, sıradan protokol, reklam ve zayıf PR metinleri kesinlikle kapsam dışıdır. Türkiye’deki okur için güncellik, somut gelişme, görsel güç, özgünlük ve kültürel değer arıyoruz. Kategori kotasını doldurmak uğruna zayıf bir adayı uygun sayma.'
       },
       {
         role: 'user',
-        content: `Her adayı bağımsız değerlendir; hiçbir adayı atlama. Yalnız gerçek kültür-sanat, sinema, moda-tasarım ve şehir yaşamı haberleri eligible=true olabilir. Finans/ekonomi/siyaset/spor/protokol/kurumsal PR için eligible=false ve category="uygunsuz" ver. Uygun adayları kultur-sanat, sinema, moda-tasarim veya sehir-yasam kategorisine koy. Kaynağın varsayılan kategorisini gerektiğinde değiştir. interest ve relevance alanlarını 0-100 puanla. Aynı olayı tekrar eden adaylara düşük interest ver. JSON biçimi: {"items":[{"id":"...","eligible":true,"category":"...","interest":0,"relevance":0,"reason":"kısa gerekçe"}]}. Adaylar:\n${JSON.stringify(batch)}`
+        content: `Her adayı bağımsız değerlendir; hiçbir adayı atlama. Yalnız gerçek kültür-sanat, sinema, moda-tasarım ve şehir yaşamı haberleri eligible=true olabilir. Finans/ekonomi/siyaset/spor/protokol/kurumsal PR için eligible=false ve category="uygunsuz" ver. Bir marka röportajı veya kurumsal tanıtım ancak somut yeni tasarım, yaratıcı işbirliği, kültürel üretim, güçlü trend ya da doğrulanabilir sektör gelişmesi taşıyorsa uygun olabilir; yalnız marka mesajıysa düşük puanla veya uygunsuz say. Uygun adayları kultur-sanat, sinema, moda-tasarim veya sehir-yasam kategorisine koy. Kaynağın varsayılan kategorisini gerektiğinde değiştir. interest ve relevance alanlarını 0-100 puanla. Aynı olay veya aynı dar temayı tekrar eden adaylara belirgin biçimde düşük interest ver. JSON biçimi: {"items":[{"id":"...","eligible":true,"category":"...","interest":0,"relevance":0,"reason":"kısa gerekçe"}]}. Adaylar:\n${JSON.stringify(batch)}`
       }
     ]
   }, { signal });
