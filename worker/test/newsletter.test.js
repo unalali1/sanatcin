@@ -31,6 +31,22 @@ test('newsletter editörden ve dört ana kategoriyi dengeli seçer', () => {
   assert.deepEqual(selected.map((item) => item.id), [1, 3, 7, 5, 6, 2]);
 });
 
+test('newsletter aynı konuya ait benzer başlıkları ikinci kez seçmez', () => {
+  const posts = [
+    post(20, 'editorden', 0, '2026-09-13T10:00:00', 'Çin mikro dizileri Türkiye’de neden ilgi görüyor?'),
+    post(21, 'kultur-sanat', 82, '2026-09-13T09:00:00', 'Dunhuang mirası yeni sergide izleyiciyle buluştu'),
+    post(22, 'sinema', 90, '2026-09-13T08:00:00', 'The Pigeon Ring Venedik’te büyük ödülü aldı'),
+    post(23, 'moda-tasarim', 78, '2026-09-13T07:00:00', 'Çin Moda Haftası genç tasarımcılara sahne açtı'),
+    post(24, 'sehir-yasam', 74, '2026-09-13T06:00:00', 'Sarı Nehir boyunca yeni kültür rotası öne çıktı'),
+    post(25, 'sinema', 88, '2026-09-12T08:00:00', 'The Pigeon Ring Venedik’te VR yarışmasına seçildi'),
+    post(26, 'sinema', 76, '2026-09-11T08:00:00', 'Yeni Çin filmi Toronto’da ilk gösterimini yaptı')
+  ];
+  const selected = selectNewsletterPosts(posts, 6);
+  assert.equal(selected.some((item) => item.id === 25), false);
+  assert.equal(selected.some((item) => item.id === 26), true);
+  assert.equal(selected.length, 6);
+});
+
 test('newsletter HTML görsel, başlık ve link içerir', () => {
   const html = renderNewsletterHtml([post(10, 'sinema', 80, '2026-09-13T10:00:00', 'Örnek Başlık')], {
     siteUrl: 'https://sanatcin.com',
