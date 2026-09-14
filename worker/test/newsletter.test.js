@@ -1,3 +1,4 @@
+// Newsletter selection and scheduled-send safety tests.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
