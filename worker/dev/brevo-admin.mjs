@@ -54,7 +54,7 @@ async function main() {
     await brevo('/smtp/templates/2', {
       method: 'PUT',
       body: JSON.stringify({
-        templateName: 'Default Template Double opt-in confirmation',
+        templateName: 'SanatÇin – Abonelik Onayı',
         subject: 'SanatÇin Bülteni aboneliğinizi onaylayın',
         htmlContent,
         isActive: true,
