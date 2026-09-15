@@ -2,7 +2,7 @@ import {
   fetchRecentWordPressPosts,
   renderNewsletterHtml
 } from '../src/newsletter.js';
-import { buildNewsletterSelection } from '../src/newsletter-score.js';
+import { buildNewsletterSelectionWithDossierBonus } from '../src/newsletter-dossier.js';
 
 const action = String(process.env.BREVO_ADMIN_ACTION || 'idle').trim();
 const apiKey = process.env.BREVO_API_KEY || '';
@@ -81,6 +81,7 @@ async function main() {
     const siteUrl = (process.env.WP_BASE_URL || 'https://sanatcin.com').replace(/\/$/, '');
     const lookbackDays = Math.max(1, Math.min(integer('NEWSLETTER_LOOKBACK_DAYS', 7), 21));
     const maxItems = Math.max(4, Math.min(integer('NEWSLETTER_MAX_ITEMS', 6), 8));
+    const dossierBonus = Math.max(0, Math.min(integer('NEWSLETTER_DOSSIER_BONUS', 10), 20));
     const logoUrl = process.env.NEWSLETTER_LOGO_URL || `${siteUrl}/wp-content/uploads/2026/09/SanatCin-Logo.png`;
 
     const posts = await fetchRecentWordPressPosts({
@@ -89,10 +90,11 @@ async function main() {
       perPage: 100,
       signal: AbortSignal.timeout(30000)
     });
-    const selected = await buildNewsletterSelection(posts, maxItems, {
+    const selected = await buildNewsletterSelectionWithDossierBonus(posts, maxItems, {
       apiKey: process.env.OPENAI_API_KEY || '',
       model: process.env.NEWSLETTER_SCORE_MODEL || process.env.OPENAI_SELECTION_MODEL || 'gpt-5-mini',
       now: new Date(),
+      dossierBonus,
       signal: AbortSignal.timeout(90000)
     });
     if (selected.length < 4) throw new Error(`Newsletter için yeterli içerik yok: ${selected.length}`);
@@ -116,6 +118,7 @@ async function main() {
         title: post.title?.rendered,
         newsletterScore: post.newsletterScore,
         newsletterScoreMode: post.newsletterScoreMode,
+        newsletterScoreBonus: post.newsletterScoreBonus ?? 0,
         link: post.link
       }))
     }, null, 2));
