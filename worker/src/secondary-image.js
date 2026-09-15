@@ -120,7 +120,7 @@ async function loadCandidate(article, imageUrl, signal) {
   };
 }
 
-async function evaluateCandidate(article, image, signal) {
+async function evaluatePair(article, primary, candidate, signal) {
   const response = await ai.responses.create({
     model: config.openaiSelectionModel,
     input: [{
@@ -129,51 +129,20 @@ async function evaluateCandidate(article, image, signal) {
         {
           type: 'input_text',
           text: [
-            'SanatÇin için haber gövdesinde kullanılabilecek ikinci görseli değerlendir.',
-            'Bu görsel ana kapak görselinin yerine geçmeyecek; habere ek bilgi ve görsel çeşitlilik katmalı.',
-            'Logo, QR kod, site ekran görüntüsü, jenerik kurumsal kart, watermark ağırlıklı görsel veya haberle zayıf ilişkili fotoğraf için usable=false ver.',
-            'relevanceScore 0-100: görselin bu habere doğrudan ilişkisi.',
-            'qualityScore 0-100: çözünürlük dışında kompozisyon, estetik güç, okunabilirlik ve editoryal değer.',
-            'description alanı 8-18 kelimelik doğal Türkçe alternatif metin olsun.',
-            'Yalnız şu JSON biçiminde yanıt ver: {"usable":true,"relevanceScore":82,"qualityScore":76,"scene":"artifact","description":"...","reason":"..."}',
+            'SanatÇin için aynı haberde kullanılacak iki görseli birlikte değerlendir.',
+            'Birinci görsel kapak görselidir. İkinci görsel haber gövdesine eklenmesi düşünülen adaydır.',
+            'İkinci görsel logo, QR kod, site ekran görüntüsü, jenerik kurumsal kart, watermark ağırlıklı görsel veya haberle zayıf ilişkiliyse usable=false ver.',
+            'relevanceScore 0-100: ikinci görselin bu habere doğrudan ilişkisi.',
+            'qualityScore 0-100: ikinci görselin kompozisyonu, estetik gücü, okunabilirliği ve editoryal değeri.',
+            'similarityScore 0-100: iki görselin aynı anı, aynı kompozisyonu veya çok benzer kadrajı gösterme derecesi. 100 neredeyse aynı görsel demektir.',
+            'complementaryScore 0-100: ikinci görselin farklı eser, kişi, mekân detayı, performans anı veya başka yeni görsel bilgi katma derecesi.',
+            'useTogether yalnız ikinci görsel habere gerçek görsel çeşitlilik katıyorsa true olsun.',
+            'description ikinci görsel için 8-18 kelimelik doğal Türkçe alternatif metin olsun.',
+            'Yalnız şu JSON biçiminde yanıt ver: {"usable":true,"useTogether":true,"relevanceScore":82,"qualityScore":76,"similarityScore":30,"complementaryScore":84,"scene":"artifact","description":"...","reason":"..."}',
             `Başlık: ${article.title}`,
             `Spot: ${article.excerpt}`,
             `Kategori: ${article.category}`,
-            `Boyut: ${image.dimensions.width}x${image.dimensions.height}`
-          ].join('\n')
-        },
-        { type: 'input_image', image_url: `data:${image.contentType};base64,${image.buffer.toString('base64')}`, detail: 'low' }
-      ]
-    }]
-  }, { signal });
-  const raw = response.output_text.replace(/^```json\s*|\s*```$/g, '').trim();
-  const result = JSON.parse(raw);
-  if (result.usable !== true) throw new Error(`İkinci görsel editoryal olarak uygun değil: ${result.reason ?? 'gerekçe yok'}`);
-  return {
-    ...image,
-    relevanceScore: clampScore(result.relevanceScore),
-    qualityScore: clampScore(result.qualityScore),
-    scene: String(result.scene ?? 'other').slice(0, 40),
-    altText: String(result.description ?? '').replace(/\s+/g, ' ').trim().slice(0, 180),
-    reason: String(result.reason ?? '').replace(/\s+/g, ' ').trim().slice(0, 240)
-  };
-}
-
-async function compareWithPrimary(article, primary, candidate, signal) {
-  const response = await ai.responses.create({
-    model: config.openaiSelectionModel,
-    input: [{
-      role: 'user',
-      content: [
-        {
-          type: 'input_text',
-          text: [
-            'Aşağıdaki iki görsel aynı haber için kullanılacak. Birinci görsel kapak görselidir, ikinci görsel gövdeye eklenmesi düşünülen adaydır.',
-            'Aynı anın, aynı kompozisyonun veya çok benzer kadrajın varyantıysa similarityScore yüksek olmalı.',
-            'İkinci görsel farklı bir eser, kişi, mekân detayı, performans anı veya başka tamamlayıcı bilgi taşıyorsa complementaryScore yüksek olmalı.',
-            'useTogether yalnız ikinci görsel habere gerçek görsel çeşitlilik katıyorsa true olsun.',
-            'Yalnız şu JSON biçiminde yanıt ver: {"useTogether":true,"similarityScore":35,"complementaryScore":82,"reason":"..."}',
-            `Başlık: ${article.title}`
+            `İkinci görsel boyutu: ${candidate.dimensions.width}x${candidate.dimensions.height}`
           ].join('\n')
         },
         { type: 'input_image', image_url: `data:${primary.contentType};base64,${primary.buffer.toString('base64')}`, detail: 'low' },
@@ -183,10 +152,16 @@ async function compareWithPrimary(article, primary, candidate, signal) {
   }, { signal });
   const raw = response.output_text.replace(/^```json\s*|\s*```$/g, '').trim();
   const result = JSON.parse(raw);
+  if (result.usable !== true) throw new Error(`İkinci görsel editoryal olarak uygun değil: ${result.reason ?? 'gerekçe yok'}`);
   return {
+    ...candidate,
     useTogether: result.useTogether === true,
+    relevanceScore: clampScore(result.relevanceScore),
+    qualityScore: clampScore(result.qualityScore),
     similarityScore: clampScore(result.similarityScore, 100),
     complementaryScore: clampScore(result.complementaryScore),
+    scene: String(result.scene ?? 'other').slice(0, 40),
+    altText: String(result.description ?? '').replace(/\s+/g, ' ').trim().slice(0, 180),
     reason: String(result.reason ?? '').replace(/\s+/g, ' ').trim().slice(0, 240)
   };
 }
@@ -285,23 +260,22 @@ async function selectSecondaryImage(article, primaryImage, signal) {
     attempted += 1;
     try {
       const loaded = await loadCandidate(article, imageUrl, signal);
-      const candidate = await evaluateCandidate(article, loaded, signal);
-      if (!secondaryCandidatePassesThreshold(candidate)) {
-        errors.push(`Eşik altı: ${imageUrl}`);
+      const evaluated = await evaluatePair(article, primaryImage, loaded, signal);
+      if (!secondaryCandidatePassesThreshold(evaluated)) {
+        errors.push(`Kalite/ilişki eşiği altı: ${imageUrl}`);
         continue;
       }
-      const pair = await compareWithPrimary(article, primaryImage, candidate, signal);
-      if (!pair.useTogether || pair.similarityScore > MAX_SIMILARITY || pair.complementaryScore < MIN_COMPLEMENT) {
+      if (!evaluated.useTogether || evaluated.similarityScore > MAX_SIMILARITY || evaluated.complementaryScore < MIN_COMPLEMENT) {
         errors.push(`Ana görsele fazla benzer veya tamamlayıcılığı düşük: ${imageUrl}`);
         continue;
       }
       const score = Math.round((
-        candidate.qualityScore * 0.45
-        + candidate.relevanceScore * 0.25
-        + pair.complementaryScore * 0.30
-        - Math.max(0, pair.similarityScore - 50) * 0.12
+        evaluated.qualityScore * 0.45
+        + evaluated.relevanceScore * 0.25
+        + evaluated.complementaryScore * 0.30
+        - Math.max(0, evaluated.similarityScore - 50) * 0.12
       ) * 10) / 10;
-      reviewed.push({ ...candidate, ...pair, secondaryScore: score });
+      reviewed.push({ ...evaluated, secondaryScore: score });
     } catch (error) {
       errors.push(error.message);
     }
