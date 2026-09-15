@@ -14,9 +14,37 @@ const excludedTopicPatterns = [
   /(?:银行资本|资本补充|中央银行|金融机构|股票市场|债券市场|国内生产总值|关税|军事|导弹|选举|党代会)/u
 ];
 
+const commercialEconomySignals = [
+  /\bexports?\b/i,
+  /\bimports?\b/i,
+  /\bmarket share\b/i,
+  /\bmarket size\b/i,
+  /\bmanufactur(?:er|ers|ing)\b/i,
+  /\bproduction (?:capacity|line|volume)\b/i,
+  /\bfactor(?:y|ies)\b/i,
+  /\brevenue\b/i,
+  /\bsales (?:rose|grew|growth|volume|value)\b/i,
+  /\bacquisition\b/i,
+  /\bsupply chain\b/i,
+  /\bindustrial cluster\b/i,
+  /(?:出口|进口|市场份额|市场规模|制造商|生产能力|工厂|营收|销量|收购|供应链|产业集群)/u
+];
+
+const creativeContextPatterns = [
+  /\b(?:art|artist|culture|cultural|museum|gallery|exhibition|heritage|literature|poetry|book|theatre|opera|music|film|cinema|director|actor|fashion|designer|runway|collection|architecture|craft|artisan|creative|festival|performance|photography|painting|sculpture)\b/i,
+  /(?:艺术|文化|博物馆|美术馆|展览|遗产|文学|诗歌|图书|戏剧|歌剧|音乐|电影|导演|演员|时尚|设计师|秀场|建筑|工艺|非遗|演出|摄影|绘画|雕塑)/u
+];
+
+export function isCommercialEconomyDominant(candidate) {
+  const haystack = `${candidate.title ?? ''} ${candidate.summary ?? ''}`;
+  if (creativeContextPatterns.some((pattern) => pattern.test(haystack))) return false;
+  const hits = commercialEconomySignals.reduce((sum, pattern) => sum + (pattern.test(haystack) ? 1 : 0), 0);
+  return hits >= 2;
+}
+
 export function hasExcludedTopic(candidate) {
-  const haystack = `${candidate.title} ${candidate.summary ?? ''}`;
-  return excludedTopicPatterns.some((pattern) => pattern.test(haystack));
+  const haystack = `${candidate.title ?? ''} ${candidate.summary ?? ''}`;
+  return excludedTopicPatterns.some((pattern) => pattern.test(haystack)) || isCommercialEconomyDominant(candidate);
 }
 
 export function inferCategory(candidate) {
@@ -44,7 +72,7 @@ export function freshnessPoints(publishedAt, now = new Date()) {
 
 export function scoreCandidate(candidate, now = new Date()) {
   if (hasExcludedTopic(candidate)) {
-    return { ...candidate, category: 'uygunsuz', eligible: false, score: 0, scoreReason: 'Kapsam dışı finans, siyaset veya askerî gündem.' };
+    return { ...candidate, category: 'uygunsuz', eligible: false, score: 0, scoreReason: 'Kapsam dışı finans, siyaset, askerî veya ticari-ekonomi ağırlıklı gündem.' };
   }
   const haystack = `${candidate.title} ${candidate.summary ?? ''}`.toLowerCase();
   const signals = interestSignals.reduce((sum, term) => sum + (haystack.includes(term) ? 1 : 0), 0);
