@@ -8,7 +8,7 @@ import {
   renderNewsletterHtml,
   sendBrevoCampaign
 } from './newsletter.js';
-import { buildNewsletterSelection } from './newsletter-score.js';
+import { buildNewsletterSelectionWithDossierBonus } from './newsletter-dossier.js';
 
 function integer(name, fallback) {
   const value = Number.parseInt(process.env[name] ?? '', 10);
@@ -21,6 +21,7 @@ async function run() {
   const mode = (process.env.NEWSLETTER_MODE || 'preview').toLowerCase();
   const lookbackDays = Math.max(1, Math.min(integer('NEWSLETTER_LOOKBACK_DAYS', 7), 21));
   const maxItems = Math.max(4, Math.min(integer('NEWSLETTER_MAX_ITEMS', 6), 8));
+  const dossierBonus = Math.max(0, Math.min(integer('NEWSLETTER_DOSSIER_BONUS', 10), 20));
   const senderEmail = process.env.NEWSLETTER_SENDER_EMAIL || 'editor@sanatcin.com';
   const senderName = process.env.NEWSLETTER_SENDER_NAME || 'SanatÇin';
   const logoUrl = process.env.NEWSLETTER_LOGO_URL || `${siteUrl}/wp-content/uploads/2026/09/SanatCin-Logo.png`;
@@ -28,13 +29,14 @@ async function run() {
   const campaignName = `${process.env.NEWSLETTER_CAMPAIGN_PREFIX || 'SanatÇin Haftalık Seçki'} · ${campaignDate}`;
   const subject = process.env.NEWSLETTER_SUBJECT || 'SanatÇin Haftalık Seçki';
 
-  setLogContext({ runId: `newsletter-${campaignDate}`, worker: 'newsletter', newsletterVersion: '0.9.2' });
+  setLogContext({ runId: `newsletter-${campaignDate}`, worker: 'newsletter', newsletterVersion: '0.10.0' });
   log('info', 'Newsletter seçkisi hazırlanıyor', {
     mode,
     siteUrl,
     lookbackDays,
     maxItems,
     campaignName,
+    dossierBonus,
     scoreModel: process.env.NEWSLETTER_SCORE_MODEL || process.env.OPENAI_SELECTION_MODEL || 'gpt-5-mini'
   });
 
@@ -56,10 +58,11 @@ async function run() {
     perPage: 100,
     signal: AbortSignal.timeout(30000)
   });
-  const selected = await buildNewsletterSelection(posts, maxItems, {
+  const selected = await buildNewsletterSelectionWithDossierBonus(posts, maxItems, {
     apiKey: process.env.OPENAI_API_KEY || '',
     model: process.env.NEWSLETTER_SCORE_MODEL || process.env.OPENAI_SELECTION_MODEL || 'gpt-5-mini',
     now,
+    dossierBonus,
     signal: AbortSignal.timeout(90000)
   });
   if (selected.length < 4) {
@@ -78,6 +81,7 @@ async function run() {
       newsletterScoreMode: post.newsletterScoreMode ?? null,
       newsletterScoreComponents: post.newsletterScoreComponents ?? null,
       newsletterScoreReason: post.newsletterScoreReason ?? null,
+      newsletterScoreBonus: post.newsletterScoreBonus ?? 0,
       link: post.link
     }))
   });
