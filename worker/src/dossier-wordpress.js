@@ -36,7 +36,7 @@ export function isoWeekStart(date = new Date()) {
 }
 
 export async function categoryId(slug) {
-  const result = await wp(`/wp/v2/categories?slug=${encodeURIComponent(slug)}&context=edit`);
+  const result = await wp(`/wp/v2/categories?slug=${encodeURIComponent(slug)}`);
   if (!Array.isArray(result) || !result.length) throw new Error(`WordPress kategorisi bulunamadı: ${slug}`);
   return Number(result[0].id);
 }
@@ -70,7 +70,7 @@ export async function dossierRunState(now = new Date()) {
     const expected = `cin-sanatlari-dosyasi-${topic.slug}`;
     if (posts.some((post) => post.slug === expected || post.slug?.startsWith(`${expected}-`))) usedSlugs.add(topic.slug);
   }
-  const topic = nextUnusedTopic(usedSlugs);
+  const topic = usedSlugs.size >= DOSSIER_TOPICS.length ? null : nextUnusedTopic(usedSlugs);
   return { dossierCategory, cultureCategory, posts, currentWeekPost, usedSlugs, topic, weekKey: isoWeekKey(now) };
 }
 
@@ -123,6 +123,9 @@ export async function uploadDossierImages(images, topic, { signal } = {}) {
     } catch (error) {
       if (uploaded.length < 2 && index === images.length - 1) throw error;
     }
+  }
+  if (images.length >= 2 && uploaded.length < 2) {
+    throw new Error(`Dosya için yeterli görsel WordPress'e yüklenemedi: ${uploaded.length}/${images.length}.`);
   }
   return uploaded;
 }
