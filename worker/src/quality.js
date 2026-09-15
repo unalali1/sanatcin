@@ -23,6 +23,10 @@ const OUTPUT_BOILERPLATE_PATTERNS = [
 ];
 
 const RAW_PINYIN_MARKERS = /\b(?:sheng|shi|xian|qu|zhen|zhou|zizhiqu|renmin|zhengfu|wenhua|bowuguan|meishuguan|daxue|ribao|dianshitai)\b/giu;
+const NEWSROOM_CLICHES = /\b(?:dikkat çekiyor|öne çıkıyor|gözler önüne seriyor|önemli bir adım|büyük ilgi gördü|sahnede|görücüye çıktı)\b/giu;
+const NOMINALIZATION_PATTERN = /\b\p{L}{4,}(?:ılması|ilmesi|ulması|ülmesi|lanması|lenmesi)\b/giu;
+const TURKISH_HEADLINE_CONTEXT = /\b(?:sergi|festival|film|sinema|moda|müze|ödül|sanat|edebiyat|şiir|tasarım|konser|tiyatro|opera|mimari|kent|şehir|Pekin|Şanghay|Çin)\b/iu;
+const FOREIGN_PROPER_NAME_LEAD = /^[“"'‘]?[A-Z][A-Za-z-]+(?:\s+[A-Z][A-Za-z-]+){1,4}[”"'’]?(?:,|\s)/u;
 
 export function countCjk(value = '') {
   return value.match(CJK_PATTERN)?.length ?? 0;
@@ -32,8 +36,8 @@ export function translationIssues({ title = '', excerpt = '', text = '', paragra
   const issues = [];
   const combined = `${title}\n${excerpt}\n${text}`.trim();
   const paragraphCount = paragraphs.length || text.split(/\n{2,}/).filter((item) => item.trim()).length;
-  if (text.trim().length < 650) issues.push('Türkçe haber gövdesi 650 karakterden kısa.');
-  if (paragraphCount < 4) issues.push('Türkçe haber gövdesi en az dört paragraf içermiyor.');
+  if (text.trim().length < 600) issues.push('Türkçe haber gövdesi 600 karakterden kısa.');
+  if (paragraphCount < 3) issues.push('Türkçe haber gövdesi en az üç paragraf içermiyor.');
   if (countCjk(combined) > 0) issues.push('Metinde çevrilmemiş Çince karakterler bulunuyor.');
   const words = text.match(/\p{L}+/gu) ?? [];
   const turkishSignals = text.match(TURKISH_WORD_PATTERN)?.length ?? 0;
@@ -45,14 +49,29 @@ export function translationIssues({ title = '', excerpt = '', text = '', paragra
   }
   const pinyinMarkers = combined.match(RAW_PINYIN_MARKERS)?.length ?? 0;
   if (pinyinMarkers >= 2) issues.push('Kurum veya yer adlarında açıklanmamış ham Pinyin zinciri bulunuyor.');
-  const sentences = text.split(/(?<=[.!?])\s+/u).map((item) => item.replace(/\s+/g, ' ').trim().toLocaleLowerCase('tr-TR')).filter((item) => item.length > 45);
+
+  const rawSentences = text.split(/(?<=[.!?])\s+/u).map((item) => item.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const sentences = rawSentences.map((item) => item.toLocaleLowerCase('tr-TR')).filter((item) => item.length > 45);
   if (new Set(sentences).size < sentences.length) issues.push('Haber gövdesinde yinelenen cümle bulunuyor.');
+  const longSentences = rawSentences.filter((sentence) => (sentence.match(/\p{L}+/gu) ?? []).length > 38);
+  if (longSentences.length >= 2) issues.push('Metinde birden fazla aşırı uzun cümle bulunuyor; Türkçe haber ritmi için bölünmeli.');
+  const nominalizations = combined.match(NOMINALIZATION_PATTERN)?.length ?? 0;
+  if (nominalizations >= 7) issues.push('Metinde yabancı sözdizimini andıran aşırı isimleştirme yoğunluğu var.');
+  const clichéCount = combined.match(NEWSROOM_CLICHES)?.length ?? 0;
+  if (clichéCount >= 3) issues.push('Metinde fazla sayıda kalıp haber ifadesi bulunuyor.');
+
   const paragraphStarts = paragraphs.map((paragraph) => String(paragraph).split(/\s+/).slice(0, 7).join(' ').toLocaleLowerCase('tr-TR')).filter(Boolean);
   if (paragraphStarts.length && new Set(paragraphStarts).size < paragraphStarts.length) issues.push('Paragraflar aynı ifadeyle tekrarlı biçimde başlıyor.');
   const titleLetters = title.match(/\p{L}/gu) ?? [];
   const upperLetters = title.match(/\p{Lu}/gu) ?? [];
   if (titleLetters.length > 15 && upperLetters.length / titleLetters.length > 0.72) {
     issues.push('Başlık gereksiz biçimde büyük harflerden oluşuyor.');
+  }
+  if (/\bÇin bağlantılı\b/iu.test(title)) {
+    issues.push('Başlıkta “Çin bağlantılı” gibi muğlak bir ifade var; mümkünse daha kesin özne kullanılmalı.');
+  }
+  if (FOREIGN_PROPER_NAME_LEAD.test(title.trim()) && !TURKISH_HEADLINE_CONTEXT.test(title)) {
+    issues.push('Başlık bilinmeyen yabancı özel adla başlıyor; Türk okuyucu için ne olduğunu açıklayan bağlam eklenmeli.');
   }
   return issues;
 }
