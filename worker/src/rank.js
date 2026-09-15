@@ -3,7 +3,6 @@ import { config } from './config.js';
 import { mapLimit } from './concurrency.js';
 import { log } from './logger.js';
 import { freshnessPoints } from './score.js';
-import { titleSimilarity } from './quality.js';
 
 const client = new OpenAI({
   apiKey: config.openaiApiKey,
@@ -368,15 +367,25 @@ export async function rerankCandidates(candidates, { signal } = {}) {
     sparseCategories: [...sparseCategories],
     candidates: rescuePool.length
   });
-  const rescueItems = await rerankInputsResilient(rescuePool.map(rerankInput), { signal });
-  const rescued = applyAiScores(rescuePool, rescueItems);
-  log('info', 'Kategori kurtarma AI turu tamamlandı', {
-    evaluated: rescued.length,
-    eligible: rescued.filter((candidate) => candidate.eligible).length,
-    queues: Object.fromEntries([...allowedCategories].map((category) => [
-      category,
-      rescued.filter((candidate) => candidate.eligible && candidate.category === category).length
-    ]))
-  });
-  return [...ranked, ...rescued];
+  try {
+    const rescueItems = await rerankInputsResilient(rescuePool.map(rerankInput), { signal });
+    const rescued = applyAiScores(rescuePool, rescueItems);
+    log('info', 'Kategori kurtarma AI turu tamamlandı', {
+      evaluated: rescued.length,
+      eligible: rescued.filter((candidate) => candidate.eligible).length,
+      queues: Object.fromEntries([...allowedCategories].map((category) => [
+        category,
+        rescued.filter((candidate) => candidate.eligible && candidate.category === category).length
+      ]))
+    });
+    return [...ranked, ...rescued];
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    log('warn', 'Kategori kurtarma AI turu başarısız; başarılı ilk AI sıralaması korunacak', {
+      sparseCategories: [...sparseCategories],
+      candidates: rescuePool.length,
+      error: errorMessage(error)
+    });
+    return ranked;
+  }
 }
