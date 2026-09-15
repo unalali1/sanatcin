@@ -6,9 +6,9 @@ import {
   isNewsletterSendWindow,
   newsletterCampaignDate,
   renderNewsletterHtml,
-  selectNewsletterPosts,
   sendBrevoCampaign
 } from './newsletter.js';
+import { buildNewsletterSelection } from './newsletter-score.js';
 
 function integer(name, fallback) {
   const value = Number.parseInt(process.env[name] ?? '', 10);
@@ -28,8 +28,15 @@ async function run() {
   const campaignName = `${process.env.NEWSLETTER_CAMPAIGN_PREFIX || 'SanatÇin Haftalık Seçki'} · ${campaignDate}`;
   const subject = process.env.NEWSLETTER_SUBJECT || 'SanatÇin Haftalık Seçki';
 
-  setLogContext({ runId: `newsletter-${campaignDate}`, worker: 'newsletter' });
-  log('info', 'Newsletter seçkisi hazırlanıyor', { mode, siteUrl, lookbackDays, maxItems, campaignName });
+  setLogContext({ runId: `newsletter-${campaignDate}`, worker: 'newsletter', newsletterVersion: '0.9.2' });
+  log('info', 'Newsletter seçkisi hazırlanıyor', {
+    mode,
+    siteUrl,
+    lookbackDays,
+    maxItems,
+    campaignName,
+    scoreModel: process.env.NEWSLETTER_SCORE_MODEL || process.env.OPENAI_SELECTION_MODEL || 'gpt-5-mini'
+  });
 
   if (!['preview', 'draft', 'send'].includes(mode)) {
     throw new Error('NEWSLETTER_MODE yalnız preview, draft veya send olabilir.');
@@ -49,7 +56,12 @@ async function run() {
     perPage: 100,
     signal: AbortSignal.timeout(30000)
   });
-  const selected = selectNewsletterPosts(posts, maxItems);
+  const selected = await buildNewsletterSelection(posts, maxItems, {
+    apiKey: process.env.OPENAI_API_KEY || '',
+    model: process.env.NEWSLETTER_SCORE_MODEL || process.env.OPENAI_SELECTION_MODEL || 'gpt-5-mini',
+    now,
+    signal: AbortSignal.timeout(90000)
+  });
   if (selected.length < 4) {
     throw new Error(`Newsletter için yeterli içerik yok: ${selected.length} içerik bulundu.`);
   }
@@ -57,7 +69,17 @@ async function run() {
   const htmlContent = renderNewsletterHtml(selected, { siteUrl, logoUrl });
   log('info', 'Newsletter seçkisi hazır', {
     count: selected.length,
-    items: selected.map((post) => ({ id: post.id, title: post.title?.rendered, score: post.meta?.sanatcin_score ?? 0, link: post.link }))
+    heroPostId: selected[0]?.id ?? null,
+    items: selected.map((post) => ({
+      id: post.id,
+      title: post.title?.rendered,
+      sanatcinScore: post.meta?.sanatcin_score ?? 0,
+      newsletterScore: post.newsletterScore ?? null,
+      newsletterScoreMode: post.newsletterScoreMode ?? null,
+      newsletterScoreComponents: post.newsletterScoreComponents ?? null,
+      newsletterScoreReason: post.newsletterScoreReason ?? null,
+      link: post.link
+    }))
   });
 
   if (mode === 'preview') {
