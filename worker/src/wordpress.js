@@ -9,14 +9,45 @@ import { SITE_PAGES } from './site-content.js';
 const auth = `Basic ${Buffer.from(`${config.wpUsername}:${config.wpAppPassword}`).toString('base64')}`;
 const categoryIds = new Map();
 const runImageHashes = new Set();
+const runVisualScenes = new Map();
 const ai = new OpenAI({
   apiKey: config.openaiApiKey,
   timeout: config.aiRequestTimeoutMs,
   maxRetries: config.aiMaxRetries
 });
 
+const VISUAL_SCENES = new Set([
+  'conference', 'runway', 'portrait', 'artifact', 'architecture', 'performance',
+  'exhibition', 'street', 'food', 'illustration', 'poster', 'other'
+]);
+
 function escapeHtml(value = '') {
   return String(value).replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' })[char]);
+}
+
+function clampScore(value, fallback = 50) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(100, number)) : fallback;
+}
+
+function resolutionPreference(dimensions = {}) {
+  const width = Number(dimensions.width) || 0;
+  const height = Number(dimensions.height) || 0;
+  if (width >= 1600 && height >= 900) return 8;
+  if (width >= 1200 && height >= 675) return 5;
+  if (width >= 900 && height >= 500) return 2;
+  return 0;
+}
+
+function sceneDiversityPenalty(scene) {
+  const count = runVisualScenes.get(scene) ?? 0;
+  if (count < 2) return 0;
+  return scene === 'conference' ? 14 : 8;
+}
+
+function noteVisualScene(scene) {
+  const normalized = VISUAL_SCENES.has(scene) ? scene : 'other';
+  runVisualScenes.set(normalized, (runVisualScenes.get(normalized) ?? 0) + 1);
 }
 
 async function validateEditorialImage(article, image, signal) {
@@ -28,16 +59,21 @@ async function validateEditorialImage(article, image, signal) {
         {
           type: 'input_text',
           text: [
-            'Bir kültür-sanat haber editörü olarak başlık ile görsel arasındaki ilişkiyi denetle.',
-            'Görsel yalnız habere doğrudan ilişkin fotoğraf, illüstrasyon veya etkinlik afişiyse kullanılabilir.',
+            'Bir kültür-sanat haber editörü olarak başlık ile görsel arasındaki ilişkiyi ve görsel kalitesini denetle.',
+            'Görsel yalnız habere doğrudan ilişkin fotoğraf, illüstrasyon veya etkinlik afişiyse usable=true olabilir.',
             'QR kod, logo, genel haber kartı, site ekran görüntüsü, boş/soyut yer tutucu ya da başlıkla ilgisiz görseli reddet.',
-            'Kare/dikey QR kodları, yayınevi/medya logolu kimlik kartlarını, internet sitesi ekran görüntülerini ve başka bir habere de uyabilecek jenerik görselleri reddet.',
-            'description alanına görselde gerçekten görülenleri, 8-18 kelimelik doğal Türkçe alternatif metin olarak yaz.',
+            'Kare/dikey QR kodları, yayınevi/medya logolu kimlik kartlarını, internet sitesi ekran görüntülerini ve başka bir habere de uyabilecek tamamen jenerik görselleri reddet.',
+            'visualScore alanını 0-100 ver. Haberle doğrudan ilişki %35, editoryal/estetik güç %25, ana sayfa küçük kartında etkileyicilik %20, kompozisyon ve okunabilirlik %20 ağırlığında düşün.',
+            'Konferans salonunda uzaktan çekilmiş panel/kürsü fotoğrafı genellikle düşük-orta puan almalı; eser, sanatçı, performans, mekân, zanaat detayı veya güçlü atmosfer görüntüsü daha yüksek puan alabilir.',
+            'description alanına görselde gerçekten görülenleri 8-18 kelimelik doğal Türkçe alternatif metin olarak yaz.',
             'kind alanı editorial-photo, illustration veya event-poster olmalı.',
-            'Haberi yeniden kategorize etme; yalnız görselin doğrudan ilişkisini değerlendir.',
-            'Yalnız şu JSON biçiminde yanıt ver: {"usable":true,"kind":"editorial-photo","description":"kısa görsel açıklaması","reason":"kısa gerekçe"}',
+            'scene alanı conference, runway, portrait, artifact, architecture, performance, exhibition, street, food, illustration, poster veya other değerlerinden biri olmalı.',
+            'Haberi yeniden kategorize etme; yalnız görselin doğrudan ilişkisini ve editoryal gücünü değerlendir.',
+            'Yalnız şu JSON biçiminde yanıt ver: {"usable":true,"kind":"editorial-photo","scene":"exhibition","visualScore":82,"description":"kısa görsel açıklaması","reason":"kısa gerekçe"}',
             `Başlık: ${article.title}`,
-            `Mevcut kategori: ${article.category}`
+            `Spot: ${article.excerpt}`,
+            `Mevcut kategori: ${article.category}`,
+            `Görsel boyutu: ${image.dimensions?.width ?? '?'}x${image.dimensions?.height ?? '?'}`
           ].join('\n')
         },
         { type: 'input_image', image_url: `data:${image.contentType};base64,${image.buffer.toString('base64')}`, detail: 'low' }
@@ -50,7 +86,14 @@ async function validateEditorialImage(article, image, signal) {
   if (!['editorial-photo', 'illustration', 'event-poster'].includes(result.kind)) {
     throw new Error(`Görsel türü uygun değil: ${result.kind ?? 'belirlenemedi'}.`);
   }
-  return { kind: result.kind, altText: String(result.description ?? '').replace(/\s+/g, ' ').trim().slice(0, 180) };
+  const scene = VISUAL_SCENES.has(result.scene) ? result.scene : 'other';
+  return {
+    kind: result.kind,
+    scene,
+    visualScore: clampScore(result.visualScore),
+    altText: String(result.description ?? '').replace(/\s+/g, ' ').trim().slice(0, 180),
+    reason: String(result.reason ?? '').replace(/\s+/g, ' ').trim().slice(0, 240)
+  };
 }
 
 export function canonicalImageUrl(value = '') {
@@ -153,66 +196,149 @@ async function generateEditorialImage(article, signal) {
   };
   const validation = await validateEditorialImage(article, image, signal);
   image.kind = 'illustration';
+  image.scene = 'illustration';
+  image.visualScore = validation.visualScore;
   image.altText = validation.altText;
   return image;
 }
 
+async function loadSourceImage(article, imageUrl, signal) {
+  const response = await fetch(imageUrl, {
+    redirect: 'follow',
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMs)])
+      : AbortSignal.timeout(config.requestTimeoutMs),
+    headers: { 'user-agent': config.userAgent, accept: 'image/jpeg,image/png,image/webp,image/*;q=0.8', referer: article.url }
+  });
+  if (!response.ok) throw new Error(`Kaynak görsel indirilemedi: HTTP ${response.status}`);
+  const contentType = response.headers.get('content-type') ?? '';
+  const extension = extensionFor(contentType);
+  if (!extension) throw new Error(`Desteklenmeyen görsel türü: ${contentType || 'bilinmiyor'}`);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length < 12_000) throw new Error('Kaynak görsel güvenilir kalite için çok küçük.');
+  if (buffer.length > 10_000_000) throw new Error('Kaynak görsel 10 MB sınırını aşıyor.');
+  const dimensions = assertImageDimensions(buffer, contentType, {
+    minWidth: config.sourceImageMinWidth,
+    minHeight: config.sourceImageMinHeight,
+    minRatio: 0.75,
+    maxRatio: 3.2
+  });
+  const imageHash = crypto.createHash('sha256').update(buffer).digest('hex');
+  const imageSourceHash = sourceHash(canonicalImageUrl(imageUrl));
+  if (runImageHashes.has(imageHash)) throw new Error('Aynı görsel bu çalışmada başka bir haber için zaten kullanıldı.');
+  const existing = await wp(`/sanatcin/v1/image-known?hash=${encodeURIComponent(imageHash)}&source_hash=${encodeURIComponent(imageSourceHash)}`, { signal });
+  if (existing.known) throw new Error('Aynı görsel daha önce başka bir haberde kullanılmış.');
+  return {
+    buffer,
+    contentType: contentType.split(';')[0],
+    extension,
+    imageHash,
+    imageSourceHash,
+    sourceUrl: imageUrl,
+    dimensions,
+    origin: 'source-editorial'
+  };
+}
+
 export async function prepareFeaturedImage(article, { signal } = {}) {
-  const candidates = sourceImageReuseAllowed(article)
+  const rawCandidates = sourceImageReuseAllowed(article)
     ? (article.sourceImageUrls?.length ? article.sourceImageUrls : [article.sourceImageUrl])
     : [];
+  const candidates = [...new Set(rawCandidates.filter((value) => isUsableImageUrl(value)))].slice(0, 6);
   const errors = [];
+  const loaded = [];
+
   for (const imageUrl of candidates) {
-    if (!isUsableImageUrl(imageUrl)) continue;
     try {
-      const response = await fetch(imageUrl, {
-      redirect: 'follow',
-      signal: signal
-        ? AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMs)])
-        : AbortSignal.timeout(config.requestTimeoutMs),
-      headers: { 'user-agent': config.userAgent, accept: 'image/jpeg,image/png,image/webp,image/*;q=0.8', referer: article.url }
-      });
-      if (!response.ok) throw new Error(`Kaynak görsel indirilemedi: HTTP ${response.status}`);
-      const contentType = response.headers.get('content-type') ?? '';
-      const extension = extensionFor(contentType);
-      if (!extension) throw new Error(`Desteklenmeyen görsel türü: ${contentType || 'bilinmiyor'}`);
-      const buffer = Buffer.from(await response.arrayBuffer());
-      if (buffer.length < 12_000) throw new Error('Kaynak görsel güvenilir kalite için çok küçük.');
-      if (buffer.length > 10_000_000) throw new Error('Kaynak görsel 10 MB sınırını aşıyor.');
-      const dimensions = assertImageDimensions(buffer, contentType, {
-        minWidth: config.sourceImageMinWidth,
-        minHeight: config.sourceImageMinHeight,
-        minRatio: 0.75,
-        maxRatio: 3.2
-      });
-      const imageHash = crypto.createHash('sha256').update(buffer).digest('hex');
-      const imageSourceHash = sourceHash(canonicalImageUrl(imageUrl));
-      if (runImageHashes.has(imageHash)) throw new Error('Aynı görsel bu çalışmada başka bir haber için zaten kullanıldı.');
-      const existing = await wp(`/sanatcin/v1/image-known?hash=${encodeURIComponent(imageHash)}&source_hash=${encodeURIComponent(imageSourceHash)}`, { signal });
-      if (existing.known) throw new Error('Aynı görsel daha önce başka bir haberde kullanılmış.');
-      const image = { buffer, contentType: contentType.split(';')[0], extension, imageHash, imageSourceHash, sourceUrl: imageUrl, dimensions, origin: 'source-editorial' };
-      const validation = await validateEditorialImage(article, image, signal);
-      image.kind = validation.kind;
-      image.altText = validation.altText;
-      return image;
+      loaded.push(await loadSourceImage(article, imageUrl, signal));
     } catch (error) {
       errors.push(error.message);
     }
   }
+
+  loaded.sort((left, right) => resolutionPreference(right.dimensions) - resolutionPreference(left.dimensions));
+  let best = null;
+  const reviewPool = loaded.slice(0, config.sourceImageReviewLimit);
+  for (const image of reviewPool) {
+    try {
+      const validation = await validateEditorialImage(article, image, signal);
+      const diversityPenalty = sceneDiversityPenalty(validation.scene);
+      const adjustedVisualScore = Math.max(0, Math.min(100,
+        validation.visualScore + resolutionPreference(image.dimensions) - diversityPenalty
+      ));
+      const reviewed = {
+        ...image,
+        kind: validation.kind,
+        scene: validation.scene,
+        visualScore: validation.visualScore,
+        adjustedVisualScore,
+        altText: validation.altText,
+        visualReason: validation.reason
+      };
+      if (!best || reviewed.adjustedVisualScore > best.adjustedVisualScore) best = reviewed;
+      if (reviewed.adjustedVisualScore >= 88 && reviewed.visualScore >= 80) break;
+    } catch (error) {
+      errors.push(error.message);
+    }
+  }
+
+  if (best && best.visualScore >= 45) {
+    noteVisualScene(best.scene);
+    log('info', 'En güçlü kaynak görseli seçildi', {
+      source: article.source.id,
+      url: article.url,
+      reviewed: reviewPool.length,
+      dimensions: `${best.dimensions.width}x${best.dimensions.height}`,
+      visualScore: best.visualScore,
+      adjustedVisualScore: best.adjustedVisualScore,
+      scene: best.scene
+    });
+    return best;
+  }
+
   if (config.generateFallbackImages) {
-    log('info', 'Uygun kaynak görseli bulunamadı; özgün editoryal illüstrasyon üretilecek', {
+    log('info', 'Yeterince güçlü kaynak görseli bulunamadı; özgün editoryal illüstrasyon denenecek', {
       source: article.source.id,
       url: article.url,
       sourceImagePolicy: config.sourceImagePolicy,
-      attempted: candidates.filter(Boolean).length,
+      attempted: candidates.length,
+      reviewed: reviewPool.length,
+      bestSourceScore: best?.visualScore ?? null,
       errors: errors.slice(0, 5)
     });
-    return generateEditorialImage(article, signal);
+    try {
+      const generated = await generateEditorialImage(article, signal);
+      noteVisualScene(generated.scene);
+      return generated;
+    } catch (error) {
+      errors.push(error.message);
+      if (best) {
+        noteVisualScene(best.scene);
+        log('warn', 'Temsili illüstrasyon üretilemedi; kullanılabilir en iyi kaynak görseli korunacak', {
+          source: article.source.id,
+          visualScore: best.visualScore,
+          scene: best.scene,
+          error: error.message
+        });
+        return best;
+      }
+    }
   }
+
+  if (best) {
+    noteVisualScene(best.scene);
+    log('warn', 'Kaynak görseli ideal kalite eşiğinin altında ancak yayını engellememek için en iyi uygun görsel kullanılacak', {
+      source: article.source.id,
+      visualScore: best.visualScore,
+      scene: best.scene
+    });
+    return best;
+  }
+
   log('error', 'Haber için zorunlu görsel hazırlanamadı', {
     source: article.source.id,
     url: article.url,
-    attempted: candidates.filter(Boolean).length,
+    attempted: candidates.length,
     errors: errors.slice(0, 5)
   });
   throw new Error('Haber için uygun bir kaynak görseli veya temsili illüstrasyon hazırlanamadı.');
