@@ -3,7 +3,6 @@ import { config } from './config.js';
 import { mapLimit } from './concurrency.js';
 import { log } from './logger.js';
 import { freshnessPoints } from './score.js';
-import { titleSimilarity } from './quality.js';
 
 const client = new OpenAI({
   apiKey: config.openaiApiKey,
@@ -29,31 +28,60 @@ function categorySourceBoost(candidate, category) {
   return categorySourceBoosts[category]?.[candidate.source?.id] ?? 0;
 }
 
+function clamp(value, minimum, maximum, fallback = minimum) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(minimum, Math.min(maximum, number)) : fallback;
+}
+
+export function sourceCrowdingPenalty(previousCount = 0) {
+  if (previousCount <= 0) return 0;
+  if (previousCount === 1) return 3;
+  if (previousCount === 2) return 8;
+  return 15;
+}
+
 export function applyAiScores(candidates, items, now = new Date()) {
   const byId = new Map(items.map((item) => [String(item.id), item]));
   return candidates.map((candidate) => {
     const ai = byId.get(String(candidate.id));
     if (!ai) return { ...candidate, eligible: false, category: 'uygunsuz', score: 0, scoreReason: 'Yapay zekâ editoryal değerlendirmesi alınamadı.' };
-    const eligible = ai.eligible === true && allowedCategories.has(ai.category);
+    const editorialFit = clamp(ai.fit, 0, 10, 7);
+    const interest = clamp(ai.interest, 0, 100, 0);
+    const relevance = clamp(ai.relevance, 0, 100, 0);
+    const institutionalEvent = ai.institutionalEvent === true;
+    const commercialDominant = ai.commercialDominant === true;
+    const baseEligible = ai.eligible === true && allowedCategories.has(ai.category);
+    const eligible = baseEligible
+      && editorialFit >= config.minEditorialFit
+      && !(commercialDominant && editorialFit <= 6);
     const category = eligible ? ai.category : 'uygunsuz';
-    const interest = Math.max(0, Math.min(100, Number(ai.interest) || 0));
-    const relevance = Math.max(0, Math.min(100, Number(ai.relevance) || 0));
     const sourceBoost = eligible ? categorySourceBoost(candidate, category) : 0;
-    const score =
+    const fitAdjustment = (editorialFit - 7) * 4;
+    const institutionalPenalty = institutionalEvent ? (editorialFit <= 6 ? 8 : 4) : 0;
+    const commercialPenalty = commercialDominant ? 10 : 0;
+    const rawScore =
       freshnessPoints(candidate.publishedAt, now) +
       interest * 0.30 +
       relevance * 0.20 +
       Math.min(10, candidate.source.quality ?? 5) +
-      sourceBoost;
+      sourceBoost +
+      fitAdjustment -
+      institutionalPenalty -
+      commercialPenalty;
     return {
       ...candidate,
       eligible,
       category,
       interest,
       relevance,
+      editorialFit,
+      institutionalEvent,
+      commercialDominant,
       sourceBoost,
-      score: eligible ? Math.round(score * 10) / 10 : 0,
-      scoreReason: String(ai.reason ?? '').slice(0, 240)
+      institutionalPenalty,
+      commercialPenalty,
+      score: eligible ? Math.max(0, Math.min(100, Math.round(rawScore * 10) / 10)) : 0,
+      scoreReason: String(ai.reason ?? '').slice(0, 320)
     };
   });
 }
@@ -177,11 +205,17 @@ async function rerankBatch(batch, signal) {
     input: [
       {
         role: 'system',
-        content: 'SanatÇin için haber seçen kıdemli bir Türkçe kültür-sanat editörüsün. Yalnız geçerli JSON ver. Finans, ekonomi, borsa, bankacılık, siyaset, askerî gündem, spor, sıradan protokol, reklam ve zayıf PR metinleri kesinlikle kapsam dışıdır. Türkiye’deki okur için güncellik, somut gelişme, görsel güç, özgünlük ve kültürel değer arıyoruz. Kategori kotasını doldurmak uğruna zayıf bir adayı uygun sayma.'
+        content: [
+          'SanatÇin için haber seçen kıdemli bir Türkçe kültür-sanat editörüsün. Yalnız geçerli JSON ver.',
+          'SanatÇin genel Çin haber sitesi değildir; sanat, kültür, moda, tasarım, sinema ve şehir kültürü ekseni belirleyicidir.',
+          'Finans, makroekonomi, ihracat, üretim kapasitesi, otomotiv, sıradan teknoloji, diplomasi, askerî gündem, spor, protokol, reklam ve zayıf PR metinleri kültürel/yaratıcı bağ açık ve asli değilse kapsam dışıdır.',
+          'Türkiye’deki okur için güncellik, somut gelişme, özgünlük, kültürel değer, geniş okuyucu ilgisi ve güçlü görsel potansiyel arıyoruz.',
+          'Kategori kotasını doldurmak uğruna zayıf bir adayı uygun sayma; ancak orta düzey ama gerçek kültür-sanat haberlerini yalnız çok çarpıcı olmadıkları için reddetme.'
+        ].join(' ')
       },
       {
         role: 'user',
-        content: `Her adayı bağımsız değerlendir; hiçbir adayı atlama. Yalnız gerçek kültür-sanat, sinema, moda-tasarım ve şehir yaşamı haberleri eligible=true olabilir. Finans/ekonomi/siyaset/spor/protokol/kurumsal PR için eligible=false ve category="uygunsuz" ver. Bir marka röportajı veya kurumsal tanıtım ancak somut yeni tasarım, yaratıcı işbirliği, kültürel üretim, güçlü trend ya da doğrulanabilir sektör gelişmesi taşıyorsa uygun olabilir; yalnız marka mesajıysa düşük puanla veya uygunsuz say. Uygun adayları kultur-sanat, sinema, moda-tasarim veya sehir-yasam kategorisine koy. Kaynağın varsayılan kategorisini gerektiğinde değiştir. interest ve relevance alanlarını 0-100 puanla. Aynı olay veya aynı dar temayı tekrar eden adaylara belirgin biçimde düşük interest ver. JSON biçimi: {"items":[{"id":"...","eligible":true,"category":"...","interest":0,"relevance":0,"reason":"kısa gerekçe"}]}. Adaylar:\n${JSON.stringify(batch)}`
+        content: `Her adayı bağımsız değerlendir; hiçbir adayı atlama. Yalnız gerçek kültür-sanat, sinema, moda-tasarım ve şehir yaşamı haberleri eligible=true olabilir. Uygun adayları kultur-sanat, sinema, moda-tasarim veya sehir-yasam kategorisine koy; kaynağın varsayılan kategorisini gerektiğinde değiştir.\n\nfit alanı SanatÇin editoryal uyumunu 0-10 puanlasın: 0-4 konu dışı/zayıf uyum, 5-6 ancak daha güçlü aday yoksa kullanılabilecek gerçek ama ikincil kültür/lifestyle haberi, 7-8 güçlü uyum, 9-10 markanın merkezinde olması gereken içerik.\n\ninterest ve relevance alanlarını 0-100 puanla. Türkiye’de tanınmayan küçük bir kurumun rutin toplantısı, açılış töreni, konferansı veya kurumsal buluşması daha geniş bir kültürel sonuç, önemli isim, sıra dışı eser ya da özgün insan hikâyesi taşımıyorsa institutionalEvent=true ver ve fit'i 6'nın üstüne çıkarma. İhracat, satış, pazar payı, üretim, fabrika, şirket satın alması veya sektör büyüklüğü haberin ana gövdesiyse ve yaratıcı/kültürel unsur tali kalıyorsa commercialDominant=true ver; bu tür içerik çoğu durumda eligible=false olmalı. Moda/tasarım sektöründeki gerçek yaratıcı trendleri yalnız ticari veri içeriyor diye commercialDominant sayma. Aynı olay veya aynı dar temayı tekrar eden adaylara düşük interest ver.\n\nJSON biçimi: {"items":[{"id":"...","eligible":true,"category":"...","fit":0,"interest":0,"relevance":0,"institutionalEvent":false,"commercialDominant":false,"reason":"kısa gerekçe"}]}. Adaylar:\n${JSON.stringify(batch)}`
       }
     ]
   }, { signal });
@@ -289,17 +323,69 @@ export async function rerankInputsResilient(input, {
   return items;
 }
 
+function rerankInput(candidate) {
+  return {
+    id: candidate.id,
+    title: candidate.title,
+    summary: candidate.summary?.slice(0, 450) ?? '',
+    source: candidate.source.name,
+    preliminary_category: candidate.category,
+    published_at: candidate.publishedAt
+  };
+}
+
 export async function rerankCandidates(candidates, { signal } = {}) {
   if (!candidates.length) return [];
   const shortlist = buildBalancedShortlist(candidates);
-  const input = shortlist.map((candidate) => ({
-      id: candidate.id,
-      title: candidate.title,
-      summary: candidate.summary?.slice(0, 350) ?? '',
-      source: candidate.source.name,
-      preliminary_category: candidate.category,
-      published_at: candidate.publishedAt
-    }));
-  const items = await rerankInputsResilient(input, { signal });
-  return applyAiScores(shortlist, items);
+  const items = await rerankInputsResilient(shortlist.map(rerankInput), { signal });
+  const ranked = applyAiScores(shortlist, items);
+
+  if (config.rescueAiCandidates <= 0 || shortlist.length >= candidates.length) return ranked;
+  const counts = Object.fromEntries([...allowedCategories].map((category) => [
+    category,
+    ranked.filter((candidate) => candidate.eligible && candidate.category === category).length
+  ]));
+  const sparseCategories = new Set(
+    Object.entries(counts)
+      .filter(([, count]) => count < config.categoryRescueMinCandidates)
+      .map(([category]) => category)
+  );
+  if (!sparseCategories.size) return ranked;
+
+  const used = new Set(shortlist.map((candidate) => candidate.id));
+  const remainder = candidates.filter((candidate) => !used.has(candidate.id) && candidate.eligible !== false);
+  const preferred = remainder
+    .filter((candidate) => sparseCategories.has(candidate.category))
+    .sort((left, right) => right.score - left.score);
+  const backup = remainder
+    .filter((candidate) => !sparseCategories.has(candidate.category))
+    .sort((left, right) => right.score - left.score);
+  const rescuePool = [...preferred, ...backup].slice(0, config.rescueAiCandidates);
+  if (!rescuePool.length) return ranked;
+
+  log('info', 'Kategori kurtarma AI turu başladı', {
+    sparseCategories: [...sparseCategories],
+    candidates: rescuePool.length
+  });
+  try {
+    const rescueItems = await rerankInputsResilient(rescuePool.map(rerankInput), { signal });
+    const rescued = applyAiScores(rescuePool, rescueItems);
+    log('info', 'Kategori kurtarma AI turu tamamlandı', {
+      evaluated: rescued.length,
+      eligible: rescued.filter((candidate) => candidate.eligible).length,
+      queues: Object.fromEntries([...allowedCategories].map((category) => [
+        category,
+        rescued.filter((candidate) => candidate.eligible && candidate.category === category).length
+      ]))
+    });
+    return [...ranked, ...rescued];
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    log('warn', 'Kategori kurtarma AI turu başarısız; başarılı ilk AI sıralaması korunacak', {
+      sparseCategories: [...sparseCategories],
+      candidates: rescuePool.length,
+      error: errorMessage(error)
+    });
+    return ranked;
+  }
 }
