@@ -1,1 +1,350 @@
-// placeholder
+import crypto from 'node:crypto';
+import OpenAI from 'openai';
+import { config } from './config.js';
+import { sourceHash } from './fetch.js';
+import { log } from './logger.js';
+import { assertImageDimensions, isUsableImageUrl } from './quality.js';
+
+const auth = `Basic ${Buffer.from(`${config.wpUsername}:${config.wpAppPassword}`).toString('base64')}`;
+const ai = new OpenAI({
+  apiKey: config.openaiApiKey,
+  timeout: config.aiRequestTimeoutMs,
+  maxRetries: config.aiMaxRetries
+});
+
+const runSecondaryHashes = new Set();
+const MIN_WIDTH = Number.parseInt(process.env.SECONDARY_IMAGE_MIN_WIDTH ?? '900', 10) || 900;
+const MIN_HEIGHT = Number.parseInt(process.env.SECONDARY_IMAGE_MIN_HEIGHT ?? '500', 10) || 500;
+const MIN_RELEVANCE = Number.parseInt(process.env.SECONDARY_IMAGE_MIN_RELEVANCE ?? '70', 10) || 70;
+const MIN_QUALITY = Number.parseInt(process.env.SECONDARY_IMAGE_MIN_QUALITY ?? '65', 10) || 65;
+const MAX_SIMILARITY = Number.parseInt(process.env.SECONDARY_IMAGE_MAX_SIMILARITY ?? '85', 10) || 85;
+const MIN_COMPLEMENT = Number.parseInt(process.env.SECONDARY_IMAGE_MIN_COMPLEMENT ?? '55', 10) || 55;
+const REVIEW_LIMIT = Math.max(1, Math.min(4, Number.parseInt(process.env.SECONDARY_IMAGE_REVIEW_LIMIT ?? '3', 10) || 3));
+
+function clampScore(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(100, number)) : fallback;
+}
+
+function escapeHtml(value = '') {
+  return String(value).replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' })[char]);
+}
+
+function canonicalImageUrl(value = '') {
+  try {
+    const url = new URL(value);
+    url.hash = '';
+    url.search = '';
+    return url.href;
+  } catch {
+    return String(value).trim();
+  }
+}
+
+function extensionFor(contentType) {
+  const mime = contentType.split(';')[0].trim().toLowerCase();
+  return { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[mime] ?? null;
+}
+
+function sourceImageReuseAllowed(article) {
+  if (config.sourceImagePolicy === 'allow-all') return true;
+  return article.source?.imageReuse === 'permitted'
+    && Boolean(article.source?.imageCredit)
+    && Boolean(article.source?.imageLicenseUrl);
+}
+
+async function wp(path, options = {}) {
+  const { headers = {}, signal = AbortSignal.timeout(config.requestTimeoutMs), ...requestOptions } = options;
+  const response = await fetch(`${config.wpBaseUrl}/wp-json${path}`, {
+    ...requestOptions,
+    signal,
+    headers: { authorization: auth, 'content-type': 'application/json', ...headers }
+  });
+  if (!response.ok) throw new Error(`WordPress ${response.status}: ${(await response.text()).slice(0, 700)}`);
+  return response.status === 204 ? null : response.json();
+}
+
+async function alreadyUsedImage(imageHash, imageSourceHash, signal) {
+  if (runSecondaryHashes.has(imageHash)) return true;
+  const primaryKnown = await wp(`/sanatcin/v1/image-known?hash=${encodeURIComponent(imageHash)}&source_hash=${encodeURIComponent(imageSourceHash)}`, { signal });
+  if (primaryKnown.known) return true;
+
+  // İkinci görseller post meta alanlarında tutulmadığı için medya slug'ını da kontrol et.
+  // Her yüklenen görselin dosya adı hash tabanlı olduğundan bu kontrol günler arası tekrarı önler.
+  const mediaSlug = `sanatcin-${imageHash.slice(0, 20)}`;
+  const media = await wp(`/wp/v2/media?slug=${encodeURIComponent(mediaSlug)}&per_page=1&_fields=id`, { signal });
+  return Array.isArray(media) && media.length > 0;
+}
+
+async function loadCandidate(article, imageUrl, signal) {
+  const response = await fetch(imageUrl, {
+    redirect: 'follow',
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMs)])
+      : AbortSignal.timeout(config.requestTimeoutMs),
+    headers: {
+      'user-agent': config.userAgent,
+      accept: 'image/jpeg,image/png,image/webp,image/*;q=0.8',
+      referer: article.url
+    }
+  });
+  if (!response.ok) throw new Error(`İkinci kaynak görsel indirilemedi: HTTP ${response.status}`);
+  const contentType = response.headers.get('content-type') ?? '';
+  const extension = extensionFor(contentType);
+  if (!extension) throw new Error(`İkinci görsel türü desteklenmiyor: ${contentType || 'bilinmiyor'}`);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length < 12_000) throw new Error('İkinci görsel güvenilir kalite için çok küçük.');
+  if (buffer.length > 10_000_000) throw new Error('İkinci görsel 10 MB sınırını aşıyor.');
+
+  const dimensions = assertImageDimensions(buffer, contentType, {
+    minWidth: MIN_WIDTH,
+    minHeight: MIN_HEIGHT,
+    minRatio: 0.75,
+    maxRatio: 3.2
+  });
+  const imageHash = crypto.createHash('sha256').update(buffer).digest('hex');
+  const imageSourceHash = sourceHash(canonicalImageUrl(imageUrl));
+  if (await alreadyUsedImage(imageHash, imageSourceHash, signal)) {
+    throw new Error('İkinci görsel daha önce kullanılmış.');
+  }
+
+  return {
+    buffer,
+    contentType: contentType.split(';')[0],
+    extension,
+    imageHash,
+    imageSourceHash,
+    sourceUrl: imageUrl,
+    dimensions,
+    origin: 'source-editorial'
+  };
+}
+
+async function evaluateCandidate(article, image, signal) {
+  const response = await ai.responses.create({
+    model: config.openaiSelectionModel,
+    input: [{
+      role: 'user',
+      content: [
+        {
+          type: 'input_text',
+          text: [
+            'SanatÇin için haber gövdesinde kullanılabilecek ikinci görseli değerlendir.',
+            'Bu görsel ana kapak görselinin yerine geçmeyecek; habere ek bilgi ve görsel çeşitlilik katmalı.',
+            'Logo, QR kod, site ekran görüntüsü, jenerik kurumsal kart, watermark ağırlıklı görsel veya haberle zayıf ilişkili fotoğraf için usable=false ver.',
+            'relevanceScore 0-100: görselin bu habere doğrudan ilişkisi.',
+            'qualityScore 0-100: çözünürlük dışında kompozisyon, estetik güç, okunabilirlik ve editoryal değer.',
+            'description alanı 8-18 kelimelik doğal Türkçe alternatif metin olsun.',
+            'Yalnız şu JSON biçiminde yanıt ver: {"usable":true,"relevanceScore":82,"qualityScore":76,"scene":"artifact","description":"...","reason":"..."}',
+            `Başlık: ${article.title}`,
+            `Spot: ${article.excerpt}`,
+            `Kategori: ${article.category}`,
+            `Boyut: ${image.dimensions.width}x${image.dimensions.height}`
+          ].join('\n')
+        },
+        { type: 'input_image', image_url: `data:${image.contentType};base64,${image.buffer.toString('base64')}`, detail: 'low' }
+      ]
+    }]
+  }, { signal });
+  const raw = response.output_text.replace(/^```json\s*|\s*```$/g, '').trim();
+  const result = JSON.parse(raw);
+  if (result.usable !== true) throw new Error(`İkinci görsel editoryal olarak uygun değil: ${result.reason ?? 'gerekçe yok'}`);
+  return {
+    ...image,
+    relevanceScore: clampScore(result.relevanceScore),
+    qualityScore: clampScore(result.qualityScore),
+    scene: String(result.scene ?? 'other').slice(0, 40),
+    altText: String(result.description ?? '').replace(/\s+/g, ' ').trim().slice(0, 180),
+    reason: String(result.reason ?? '').replace(/\s+/g, ' ').trim().slice(0, 240)
+  };
+}
+
+async function compareWithPrimary(article, primary, candidate, signal) {
+  const response = await ai.responses.create({
+    model: config.openaiSelectionModel,
+    input: [{
+      role: 'user',
+      content: [
+        {
+          type: 'input_text',
+          text: [
+            'Aşağıdaki iki görsel aynı haber için kullanılacak. Birinci görsel kapak görselidir, ikinci görsel gövdeye eklenmesi düşünülen adaydır.',
+            'Aynı anın, aynı kompozisyonun veya çok benzer kadrajın varyantıysa similarityScore yüksek olmalı.',
+            'İkinci görsel farklı bir eser, kişi, mekân detayı, performans anı veya başka tamamlayıcı bilgi taşıyorsa complementaryScore yüksek olmalı.',
+            'useTogether yalnız ikinci görsel habere gerçek görsel çeşitlilik katıyorsa true olsun.',
+            'Yalnız şu JSON biçiminde yanıt ver: {"useTogether":true,"similarityScore":35,"complementaryScore":82,"reason":"..."}',
+            `Başlık: ${article.title}`
+          ].join('\n')
+        },
+        { type: 'input_image', image_url: `data:${primary.contentType};base64,${primary.buffer.toString('base64')}`, detail: 'low' },
+        { type: 'input_image', image_url: `data:${candidate.contentType};base64,${candidate.buffer.toString('base64')}`, detail: 'low' }
+      ]
+    }]
+  }, { signal });
+  const raw = response.output_text.replace(/^```json\s*|\s*```$/g, '').trim();
+  const result = JSON.parse(raw);
+  return {
+    useTogether: result.useTogether === true,
+    similarityScore: clampScore(result.similarityScore, 100),
+    complementaryScore: clampScore(result.complementaryScore),
+    reason: String(result.reason ?? '').replace(/\s+/g, ' ').trim().slice(0, 240)
+  };
+}
+
+export function secondaryCandidatePassesThreshold(candidate) {
+  return Boolean(candidate)
+    && Number(candidate.dimensions?.width) >= MIN_WIDTH
+    && Number(candidate.dimensions?.height) >= MIN_HEIGHT
+    && Number(candidate.relevanceScore) >= MIN_RELEVANCE
+    && Number(candidate.qualityScore) >= MIN_QUALITY;
+}
+
+export function insertAfterParagraph(html, insertion, paragraphNumber = 2) {
+  const source = String(html ?? '');
+  const fragment = String(insertion ?? '');
+  if (!fragment) return source;
+  const regex = /<\/p\s*>/giu;
+  let match;
+  let count = 0;
+  while ((match = regex.exec(source)) !== null) {
+    count += 1;
+    if (count === paragraphNumber) {
+      const position = match.index + match[0].length;
+      return `${source.slice(0, position)}\n${fragment}\n${source.slice(position)}`;
+    }
+  }
+  return `${source}\n${fragment}`;
+}
+
+function sourceCaption(article) {
+  return `Görsel: ${article.source?.imageCredit || article.source?.name || 'Kaynak'}`;
+}
+
+function inlineFigure(article, image, media) {
+  const caption = sourceCaption(article);
+  return [
+    '<figure class="wp-block-image size-large sanatcin-secondary-image">',
+    `<img src="${escapeHtml(media.source_url)}" alt="${escapeHtml(image.altText || article.title)}" class="wp-image-${media.id}" loading="lazy" decoding="async" />`,
+    `<figcaption class="wp-element-caption"><a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(caption)}</a></figcaption>`,
+    '</figure>'
+  ].join('');
+}
+
+async function uploadSecondaryImage(article, postId, image, signal) {
+  const filename = `sanatcin-${image.imageHash.slice(0, 20)}.${image.extension}`;
+  const media = await wp('/wp/v2/media', {
+    method: 'POST',
+    body: image.buffer,
+    headers: {
+      'content-type': image.contentType,
+      'content-disposition': `attachment; filename="${filename}"`
+    },
+    signal
+  });
+  await wp(`/wp/v2/media/${media.id}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title: `${article.title} — ikinci görsel`,
+      alt_text: image.altText || article.title,
+      caption: sourceCaption(article),
+      description: `Kaynak görsel: ${canonicalImageUrl(image.sourceUrl)}`,
+      post: postId
+    }),
+    signal
+  });
+  runSecondaryHashes.add(image.imageHash);
+  return media;
+}
+
+async function selectSecondaryImage(article, primaryImage, signal) {
+  if (!sourceImageReuseAllowed(article)) return null;
+  const primaryUrl = canonicalImageUrl(primaryImage?.sourceUrl ?? '');
+  const urls = [...new Set((article.sourceImageUrls?.length ? article.sourceImageUrls : [article.sourceImageUrl])
+    .filter((url) => isUsableImageUrl(url))
+    .map((url) => canonicalImageUrl(url)))]
+    .filter((url) => url && url !== primaryUrl)
+    .slice(0, 6);
+  if (!urls.length) return null;
+
+  const reviewed = [];
+  const errors = [];
+  for (const imageUrl of urls) {
+    if (reviewed.length >= REVIEW_LIMIT) break;
+    try {
+      const loaded = await loadCandidate(article, imageUrl, signal);
+      const candidate = await evaluateCandidate(article, loaded, signal);
+      if (!secondaryCandidatePassesThreshold(candidate)) {
+        errors.push(`Eşik altı: ${imageUrl}`);
+        continue;
+      }
+      const pair = await compareWithPrimary(article, primaryImage, candidate, signal);
+      if (!pair.useTogether || pair.similarityScore > MAX_SIMILARITY || pair.complementaryScore < MIN_COMPLEMENT) {
+        errors.push(`Ana görsele fazla benzer veya tamamlayıcılığı düşük: ${imageUrl}`);
+        continue;
+      }
+      const score = Math.round((
+        candidate.qualityScore * 0.45
+        + candidate.relevanceScore * 0.25
+        + pair.complementaryScore * 0.30
+        - Math.max(0, pair.similarityScore - 50) * 0.12
+      ) * 10) / 10;
+      reviewed.push({ ...candidate, ...pair, secondaryScore: score });
+    } catch (error) {
+      errors.push(error.message);
+    }
+  }
+
+  const selected = reviewed.sort((left, right) => right.secondaryScore - left.secondaryScore)[0] ?? null;
+  if (!selected) {
+    log('info', 'Uygun ikinci görsel bulunamadı; haber tek görselle korunacak', {
+      source: article.source?.id,
+      candidates: urls.length,
+      errors: errors.slice(0, 5)
+    });
+    return null;
+  }
+  log('info', 'Tamamlayıcı ikinci görsel seçildi', {
+    source: article.source?.id,
+    dimensions: `${selected.dimensions.width}x${selected.dimensions.height}`,
+    relevanceScore: selected.relevanceScore,
+    qualityScore: selected.qualityScore,
+    similarityScore: selected.similarityScore,
+    complementaryScore: selected.complementaryScore,
+    secondaryScore: selected.secondaryScore,
+    scene: selected.scene
+  });
+  return selected;
+}
+
+export async function attachSecondaryImage(article, primaryImage, post, { signal } = {}) {
+  if (config.dryRun || !post?.id || !primaryImage?.buffer) {
+    return { attached: false, reason: config.dryRun ? 'dry-run' : 'missing-post-or-primary' };
+  }
+  const selected = await selectSecondaryImage(article, primaryImage, signal);
+  if (!selected) return { attached: false, reason: 'no-qualified-secondary-image' };
+
+  const media = await uploadSecondaryImage(article, post.id, selected, signal);
+  const current = await wp(`/wp/v2/posts/${post.id}?context=edit&_fields=id,content`, { signal });
+  const rawContent = current.content?.raw ?? '';
+  if (!rawContent) throw new Error('İkinci görsel eklenecek haber gövdesi WordPress’ten okunamadı.');
+  const figure = inlineFigure(article, selected, media);
+  const content = insertAfterParagraph(rawContent, figure, 2);
+  await wp(`/wp/v2/posts/${post.id}`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+    signal
+  });
+
+  return {
+    attached: true,
+    mediaId: media.id,
+    imageUrl: media.source_url,
+    sourceUrl: selected.sourceUrl,
+    relevanceScore: selected.relevanceScore,
+    qualityScore: selected.qualityScore,
+    similarityScore: selected.similarityScore,
+    complementaryScore: selected.complementaryScore,
+    secondaryScore: selected.secondaryScore,
+    scene: selected.scene
+  };
+}
