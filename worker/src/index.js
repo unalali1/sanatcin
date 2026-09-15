@@ -6,6 +6,7 @@ import { log, setLogContext } from './logger.js';
 import { scoreCandidate } from './score.js';
 import { diversifyBySource, diversifyByTopic, rerankCandidates, sourceCrowdingPenalty } from './rank.js';
 import { createRunBudget } from './run-budget.js';
+import { attachSecondaryImage } from './secondary-image.js';
 import { CATEGORIES, SOURCES, SOURCE_SET_VERSION } from './sources.js';
 import { translateArticle } from './translate.js';
 import { assertNoSimilarPublishedTitle, knownHashes, prepareFeaturedImage, publishArticle, syncSiteContent } from './wordpress.js';
@@ -84,7 +85,7 @@ function candidateForRound(queue, sourceUseCounts, {
 async function run() {
   validateConfig();
   const runId = `sanatcin-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${process.pid}`;
-  setLogContext({ runId, workerVersion: '0.9.0' });
+  setLogContext({ runId, workerVersion: '0.9.1' });
 
   if (config.syncSitePages) {
     log('info', 'Site kurumsal içerik eşitlemesi başladı', { maintenanceOnly: config.maintenanceOnly });
@@ -286,7 +287,21 @@ async function run() {
         const translated = await translateArticle({ ...article, originalTitle: article.title }, { signal: runController.signal });
         await assertNoSimilarPublishedTitle(translated.title, { signal: runController.signal });
         const image = await prepareFeaturedImage(translated, { signal: runController.signal });
-        const post = await publishArticle({ ...translated, score: candidate.score }, image, { signal: runController.signal });
+        const publishable = { ...translated, score: candidate.score };
+        const post = await publishArticle(publishable, image, { signal: runController.signal });
+        let secondaryImage = { attached: false, reason: config.dryRun ? 'dry-run' : 'not-attempted' };
+        if (!config.dryRun) {
+          try {
+            secondaryImage = await attachSecondaryImage(publishable, image, post, { signal: runController.signal });
+          } catch (secondaryError) {
+            log('warn', 'İkinci görsel hazırlanamadı; haber tek görselle korunacak', {
+              source: candidate.source.id,
+              postId: post.id,
+              url: candidate.url,
+              error: String(secondaryError?.message ?? secondaryError).slice(0, 500)
+            });
+          }
+        }
         const result = {
           source: candidate.source.id,
           category: candidate.category,
@@ -304,6 +319,10 @@ async function run() {
           imageOrigin: image.origin,
           imageScore: image.visualScore ?? null,
           imageScene: image.scene ?? null,
+          hasSecondaryImage: secondaryImage.attached === true,
+          secondaryImageScore: secondaryImage.secondaryScore ?? null,
+          secondaryImageSimilarity: secondaryImage.similarityScore ?? null,
+          secondaryImageScene: secondaryImage.scene ?? null,
           mode: config.dryRun ? 'dry-run' : config.publishStatus
         };
         sourceStats[candidate.source.id].published += 1;
