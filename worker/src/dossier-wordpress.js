@@ -1,4 +1,5 @@
 import { load } from 'cheerio';
+import { shortDossierCaption } from './dossier-images.js';
 import { DOSSIER_TOPICS, nextUnusedTopic } from './dossier-topics.js';
 
 function env(name, fallback = '') { return process.env[name] ?? fallback; }
@@ -102,17 +103,30 @@ async function uploadOneImage(candidate, topic, index, signal) {
   if (!upload.ok) throw new Error(`WordPress medya yükleme hatası ${upload.status}: ${(await upload.text()).slice(0, 500)}`);
   const media = await upload.json();
   const alt = candidate.description || `${topic.title} hakkında tarihsel eser veya zanaat örneği`;
+  const captionLabel = shortDossierCaption(candidate.captionTr, topic.title);
   const credit = [candidate.artist, candidate.license].filter(Boolean).join(' · ');
+  const description = [
+    `Kaynak: ${candidate.sourcePage}`,
+    candidate.artist ? `Sanatçı/üretici: ${candidate.artist}` : '',
+    `Lisans: ${candidate.license}${candidate.licenseUrl ? ` (${candidate.licenseUrl})` : ''}`
+  ].filter(Boolean).join('\n');
   await wp(`/wp/v2/media/${media.id}`, {
     method: 'POST',
     signal,
     body: JSON.stringify({
       alt_text: text(alt).slice(0, 180),
-      caption: `<a href="${esc(candidate.sourcePage)}" target="_blank" rel="noopener noreferrer nofollow">Wikimedia Commons</a>${credit ? ` · ${esc(credit)}` : ''}`,
-      description: `Kaynak: ${candidate.sourcePage}\nLisans: ${candidate.license}${candidate.licenseUrl ? ` (${candidate.licenseUrl})` : ''}`
+      caption: captionLabel,
+      description
     })
   });
-  return { ...candidate, mediaId: media.id, mediaUrl: media.source_url, altText: text(alt).slice(0, 180), credit };
+  return {
+    ...candidate,
+    mediaId: media.id,
+    mediaUrl: media.source_url,
+    altText: text(alt).slice(0, 180),
+    captionLabel,
+    credit
+  };
 }
 
 export async function uploadDossierImages(images, topic, { signal } = {}) {
@@ -130,8 +144,9 @@ export async function uploadDossierImages(images, topic, { signal } = {}) {
   return uploaded;
 }
 
-function figureHtml(image) {
-  return `<figure class="wp-block-image size-large sanatcin-dossier-image"><img src="${esc(image.mediaUrl)}" alt="${esc(image.altText)}" loading="lazy"><figcaption>${esc(image.title)}${image.credit ? ` · ${esc(image.credit)}` : ''} · <a href="${esc(image.sourcePage)}" target="_blank" rel="noopener noreferrer nofollow">Wikimedia Commons</a></figcaption></figure>`;
+export function dossierFigureHtml(image) {
+  const label = shortDossierCaption(image.captionLabel || image.captionTr, 'Görsel kaynağı');
+  return `<figure class="wp-block-image size-large sanatcin-dossier-image"><img src="${esc(image.mediaUrl)}" alt="${esc(image.altText)}" loading="lazy"><figcaption><a href="${esc(image.sourcePage)}" target="_blank" rel="noopener noreferrer nofollow">${esc(label)}</a></figcaption></figure>`;
 }
 
 export function injectDossierImages(contentHtml, uploadedImages) {
@@ -147,13 +162,13 @@ export function injectDossierImages(contentHtml, uploadedImages) {
     if (/^<\/p>$/i.test(parts[i])) {
       paragraphCount += 1;
       if (imageIndex < bodyImages.length && paragraphCount >= (targets[imageIndex] || paragraphCount + 1)) {
-        output += figureHtml(bodyImages[imageIndex]);
+        output += dossierFigureHtml(bodyImages[imageIndex]);
         imageIndex += 1;
       }
     }
   }
   while (imageIndex < bodyImages.length) {
-    output += figureHtml(bodyImages[imageIndex]);
+    output += dossierFigureHtml(bodyImages[imageIndex]);
     imageIndex += 1;
   }
   return output;
