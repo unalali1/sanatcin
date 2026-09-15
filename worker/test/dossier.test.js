@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DOSSIER_TOPICS, nextUnusedTopic } from '../src/dossier-topics.js';
-import { injectDossierImages, isoWeekKey, isoWeekStart } from '../src/dossier-wordpress.js';
+import { orderDossierImages, shortDossierCaption } from '../src/dossier-images.js';
+import { dossierFigureHtml, injectDossierImages, isoWeekKey, isoWeekStart } from '../src/dossier-wordpress.js';
 import { applyDossierNewsletterBonus } from '../src/newsletter-dossier.js';
 
 test('Çin Sanatları Dosyası 52 benzersiz haftalık konu içerir', () => {
@@ -33,15 +34,49 @@ test('ISO hafta anahtarı pazartesi-pazar arasında sabit kalır', () => {
 test('dosya gövde görselleri ana görsel tekrarlanmadan paragraflara dağıtılır', () => {
   const html = '<p>Birinci paragraf.</p><p>İkinci paragraf.</p><p>Üçüncü paragraf.</p><p>Dördüncü paragraf.</p><p>Beşinci paragraf.</p><p>Altıncı paragraf.</p>';
   const images = [
-    { mediaUrl: 'https://example.com/hero.jpg', altText: 'hero', title: 'Hero', credit: 'CC BY', sourcePage: 'https://commons.wikimedia.org/hero' },
-    { mediaUrl: 'https://example.com/detail.jpg', altText: 'detay', title: 'Detay', credit: 'CC BY', sourcePage: 'https://commons.wikimedia.org/detail' },
-    { mediaUrl: 'https://example.com/process.jpg', altText: 'üretim', title: 'Üretim', credit: 'CC BY-SA', sourcePage: 'https://commons.wikimedia.org/process' }
+    { mediaUrl: 'https://example.com/hero.jpg', altText: 'hero', captionLabel: 'Ana eser', sourcePage: 'https://commons.wikimedia.org/hero' },
+    { mediaUrl: 'https://example.com/detail.jpg', altText: 'detay', captionLabel: 'Eser detayı', sourcePage: 'https://commons.wikimedia.org/detail' },
+    { mediaUrl: 'https://example.com/process.jpg', altText: 'üretim', captionLabel: 'Üretim süreci', sourcePage: 'https://commons.wikimedia.org/process' }
   ];
   const result = injectDossierImages(html, images);
   assert.doesNotMatch(result, /hero\.jpg/);
   assert.match(result, /detail\.jpg/);
   assert.match(result, /process\.jpg/);
   assert.ok(result.indexOf('detail.jpg') > result.indexOf('İkinci paragraf'));
+});
+
+test('görsel altı yalnız kısa Türkçe ifade ve kaynak bağlantısı gösterir', () => {
+  const html = dossierFigureHtml({
+    mediaUrl: 'https://example.com/image.jpg',
+    altText: 'Kaligrafi örneği',
+    captionLabel: 'Kaligrafi tomarları',
+    sourcePage: 'https://commons.wikimedia.org/wiki/File:Example.jpg',
+    title: 'Long filename.jpg',
+    credit: 'Fotoğrafçı · CC BY-SA 4.0'
+  });
+  assert.match(html, />Kaligrafi tomarları<\/a>/);
+  assert.match(html, /commons\.wikimedia\.org/);
+  assert.doesNotMatch(html, /Long filename/);
+  assert.doesNotMatch(html, /CC BY/);
+  assert.equal(shortDossierCaption('  Wang Xianzhi örneği  '), 'Wang Xianzhi örneği');
+});
+
+test('kapak seçimi genel bağlam fotoğrafı yerine güçlü ve doğrudan görseli öne alır', () => {
+  const context = {
+    sourcePage: 'context', role: 'context', relevance: 80, visualQuality: 88,
+    subjectCentrality: 58, heroSuitability: 45, finalScore: 79, heroScore: 55
+  };
+  const artwork = {
+    sourcePage: 'artwork', role: 'artwork', relevance: 88, visualQuality: 80,
+    subjectCentrality: 94, heroSuitability: 90, finalScore: 86, heroScore: 94
+  };
+  const process = {
+    sourcePage: 'process', role: 'process', relevance: 84, visualQuality: 78,
+    subjectCentrality: 82, heroSuitability: 72, finalScore: 82, heroScore: 78
+  };
+  const ordered = orderDossierImages([context, process, artwork], 3);
+  assert.equal(ordered[0].sourcePage, 'artwork');
+  assert.equal(ordered.length, 3);
 });
 
 function newsletterPost(id, slugs, score = 75) {
