@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { diversifyBySource, diversifyByTopic, rerankInputsResilient } from '../src/rank.js';
+import { diversifyBySource, diversifyByTopic, rerankInputsResilient, sourceCrowdingPenalty } from '../src/rank.js';
 
 const silentLogger = () => {};
 
@@ -69,6 +69,14 @@ test('kategori kuyruğunu puanı koruyarak kaynaklar arasında dönüşümlü ku
     diversifyBySource(input).map((item) => item.id),
     ['a1', 'b1', 'c1', 'a2', 'b2', 'a3']
   );
+});
+
+test('aynı kaynaktan tekrar yayınlandıkça yumuşak çeşitlilik cezası artar', () => {
+  assert.equal(sourceCrowdingPenalty(0), 0);
+  assert.equal(sourceCrowdingPenalty(1), 3);
+  assert.equal(sourceCrowdingPenalty(2), 8);
+  assert.equal(sourceCrowdingPenalty(3), 15);
+  assert.equal(sourceCrowdingPenalty(5), 15);
 });
 
 test('aynı konudaki adayları elemeden kuyruğa dağıtır', () => {
