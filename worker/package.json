@@ -1,6 +1,6 @@
 {
   "name": "sanatcin-worker",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node src/index.js",
     "newsletter": "node src/newsletter-run.js",
-    "check": "node --check src/index.js && node --check src/secondary-image.js && node --check src/newsletter.js && node --check src/newsletter-run.js && node --check src/sources.js && node --check src/fetch.js && node dev/check-php.mjs",
+    "check": "node --check src/index.js && node --check src/secondary-image.js && node --check src/newsletter.js && node --check src/newsletter-score.js && node --check src/newsletter-run.js && node --check src/sources.js && node --check src/fetch.js && node dev/check-php.mjs",
     "test": "node --test"
   },
   "devDependencies": {
