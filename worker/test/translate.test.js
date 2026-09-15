@@ -59,8 +59,8 @@ test('olgu çıkarımı, haber yazımı ve Türkçe son okuma ardışık çalı�
   assert.equal(calls[0].model, config.openaiFactModel);
   assert.equal(calls[1].model, config.openaiEditorModel);
   assert.equal(calls[2].model, config.openaiEditorModel);
-  assert.match(calls[2].input[0].content, /son okuma editörüsün/);
-  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v6-final-copydesk');
+  assert.match(calls[2].input[0].content, /son okuma.*editörüsün/);
+  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v7-clarity-copydesk');
   assert.equal(result.factSheet.facts.length, 4);
   assert.match(result.title, /Şanghay/);
 });
@@ -79,6 +79,6 @@ test('dil veya biçim notu adayı elemek yerine hedefli düzeltme ve son okuma b
   assert.equal(calls.length, 4);
   assert.equal(calls[2].model, config.openaiEditorModel);
   assert.match(calls[2].input[1].content, /Spot 105-180 karakter aralığında değil/);
-  assert.match(calls[3].input[0].content, /son okuma editörüsün/);
+  assert.match(calls[3].input[0].content, /son okuma.*editörüsün/);
   assert.ok(result.excerpt.length >= 105);
 });
