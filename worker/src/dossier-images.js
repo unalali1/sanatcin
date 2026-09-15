@@ -30,6 +30,16 @@ function imageScore(candidate) {
   return Math.min(100, score);
 }
 
+export function shortDossierCaption(value = '', fallback = 'Görsel kaynağı') {
+  const cleaned = text(value).replace(/[|·•:;]+$/g, '').trim();
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length >= 2 && words.length <= 6 && cleaned.length <= 72) return cleaned;
+  const fallbackClean = text(fallback).replace(/[|·•:;]+$/g, '').trim();
+  const fallbackWords = fallbackClean.split(/\s+/).filter(Boolean);
+  if (fallbackWords.length > 6) return fallbackWords.slice(0, 6).join(' ');
+  return fallbackClean || 'Görsel kaynağı';
+}
+
 async function searchOne(query, signal) {
   const url = new URL('https://commons.wikimedia.org/w/api.php');
   url.searchParams.set('action', 'query');
@@ -95,6 +105,37 @@ function parseJson(value) {
   return JSON.parse(raw.slice(start, end + 1));
 }
 
+function roleHeroBonus(role = '') {
+  if (role === 'hero' || role === 'artwork') return 8;
+  if (role === 'detail') return 4;
+  if (role === 'process') return -2;
+  if (role === 'context') return -12;
+  return -6;
+}
+
+export function orderDossierImages(reviewed, target = 5) {
+  const maxTarget = Math.max(1, Math.min(Number(target) || 5, 6));
+  if (!reviewed.length) return [];
+  const ranked = [...reviewed].sort((a, b) => b.finalScore - a.finalScore);
+  const strongHero = ranked.filter((item) =>
+    item.relevance >= 70 && item.visualQuality >= 62 && item.subjectCentrality >= 68 && item.heroSuitability >= 62
+  );
+  const heroPool = strongHero.length ? strongHero : ranked;
+  const hero = [...heroPool].sort((a, b) => b.heroScore - a.heroScore)[0];
+  const selected = hero ? [hero] : [];
+  const seenRoles = new Set(hero ? [hero.role || 'other'] : []);
+  for (const item of ranked) {
+    if (selected.length >= maxTarget) break;
+    if (hero && item.sourcePage === hero.sourcePage) continue;
+    const roleKey = item.role || 'other';
+    const duplicateRole = seenRoles.has(roleKey) && ['hero', 'artwork', 'process', 'context'].includes(roleKey);
+    if (duplicateRole && selected.length < 3) continue;
+    selected.push(item);
+    seenRoles.add(roleKey);
+  }
+  return selected;
+}
+
 export async function selectDossierImages(topic, candidates, {
   apiKey = process.env.OPENAI_API_KEY || '',
   model = process.env.DOSSIER_VISION_MODEL || process.env.OPENAI_FACT_MODEL || 'gpt-5.6-luna',
@@ -103,18 +144,25 @@ export async function selectDossierImages(topic, candidates, {
 } = {}) {
   const pool = candidates.slice(0, 10);
   if (!pool.length) return [];
-  if (!apiKey) return pool.slice(0, Math.max(1, Math.min(target, 6)));
+  const maxTarget = Math.max(1, Math.min(target, 6));
+  if (!apiKey) return pool.slice(0, maxTarget).map((item) => ({ ...item, captionTr: shortDossierCaption('', topic.title) }));
   const client = new OpenAI({ apiKey, timeout: 120000, maxRetries: 1 });
   const content = [{
     type: 'input_text',
     text: [
       `SanatÇin dosya konusu: ${topicDisplayName(topic)}`,
       'Aşağıdaki Wikimedia Commons görsellerini tarihsel ve editoryal uygunluk açısından değerlendir.',
-      'Her aday için relevance ve visualQuality 0-100 ver.',
-      'Yanlış nesne/dönem/sanat geleneğini gösteren, logo/afiş/harita/aşırı metinli veya konuya dolaylı görselleri düşük puanla.',
+      'Her aday için relevance, visualQuality, subjectCentrality ve heroSuitability 0-100 ver.',
+      'subjectCentrality: dosyanın ana konusu görselin merkezinde ve ilk bakışta anlaşılır mı? Kaligrafi yazısı gibi konu yalnız arka planda/yan unsur ise düşük ver.',
+      'heroSuitability: bu görsel yazının en üstünde kapak olarak kullanıldığında konuyu güçlü ve temsil edici biçimde anlatır mı?',
+      'Kapakta doğrudan temsil gücü, estetik kalite ve kompozisyon; yalnız yatay olmasından daha önemlidir.',
+      'Genel etkinlik, turistik ortam, konuya dolaylı bağlanan dekorasyon veya tesadüfen konu unsuru içeren kareleri kapakta düşük puanla.',
+      'Tarihsel eser, güçlü müze sunumu, zanaatın kendisi veya konuyu açıkça gösteren üretim anı kapakta önceliklidir.',
+      'Yanlış nesne/dönem/sanat geleneğini gösteren, logo/afiş/harita/aşırı metinli görselleri düşük puanla.',
       'Aynı nesnenin çok benzer varyasyonlarından yalnız en iyisini seç.',
-      'Kapak için mümkünse yatay ve güçlü bir görüntü; gövde için eser detayı, üretim, mimari/mekân veya tarihsel örnek gibi tamamlayıcı çeşitlilik tercih et.',
-      'Yalnız JSON ver: {"items":[{"index":0,"relevance":90,"visualQuality":82,"role":"hero|detail|process|context|other","reason":"..."}]}'
+      'Gövde için eser detayı, üretim, mimari/mekân veya tarihsel örnek gibi tamamlayıcı çeşitlilik tercih et.',
+      'captionTr alanında görseli açıklayan 2-5 kelimelik doğal Türkçe bir ifade yaz; dosya adı, fotoğrafçı, lisans veya “Wikimedia Commons” yazma.',
+      'Yalnız JSON ver: {"items":[{"index":0,"relevance":90,"visualQuality":82,"subjectCentrality":95,"heroSuitability":88,"role":"hero|artwork|detail|process|context|other","captionTr":"Kaligrafi tomarları","reason":"..."}]}'
     ].join('\n')
   }];
   pool.forEach((candidate, index) => {
@@ -125,26 +173,31 @@ export async function selectDossierImages(topic, candidates, {
     const response = await client.responses.create({ model, input: [{ role: 'user', content }] }, { signal });
     const parsed = parseJson(response.output_text);
     const reviews = new Map((Array.isArray(parsed?.items) ? parsed.items : []).map((item) => [Number(item.index), item]));
-    const ranked = pool.map((candidate, index) => {
+    const reviewed = pool.map((candidate, index) => {
       const review = reviews.get(index) || {};
       const relevance = Math.max(0, Math.min(100, Number(review.relevance) || 0));
       const visualQuality = Math.max(0, Math.min(100, Number(review.visualQuality) || candidate.baseScore));
-      const finalScore = relevance * 0.62 + visualQuality * 0.28 + candidate.baseScore * 0.10;
-      return { ...candidate, relevance, visualQuality, role: text(review.role || 'other'), reviewReason: text(review.reason).slice(0, 220), finalScore };
-    }).filter((x) => x.relevance >= 62 && x.visualQuality >= 55)
-      .sort((a, b) => b.finalScore - a.finalScore);
-    const selected = [];
-    const seenRoles = new Set();
-    for (const item of ranked) {
-      if (selected.length >= Math.max(1, Math.min(target, 6))) break;
-      const roleKey = item.role || 'other';
-      const duplicateRole = seenRoles.has(roleKey) && ['hero', 'process', 'context'].includes(roleKey);
-      if (duplicateRole && selected.length < 3) continue;
-      selected.push(item);
-      seenRoles.add(roleKey);
-    }
-    return selected.length ? selected : pool.slice(0, Math.max(1, Math.min(target, 6)));
+      const subjectCentrality = Math.max(0, Math.min(100, Number(review.subjectCentrality) || 0));
+      const heroSuitability = Math.max(0, Math.min(100, Number(review.heroSuitability) || 0));
+      const role = text(review.role || 'other');
+      const finalScore = relevance * 0.35 + visualQuality * 0.25 + subjectCentrality * 0.25 + candidate.baseScore * 0.15;
+      const heroScore = heroSuitability * 0.45 + subjectCentrality * 0.25 + relevance * 0.20 + visualQuality * 0.10 + roleHeroBonus(role);
+      return {
+        ...candidate,
+        relevance,
+        visualQuality,
+        subjectCentrality,
+        heroSuitability,
+        role,
+        captionTr: shortDossierCaption(review.captionTr, topic.title),
+        reviewReason: text(review.reason).slice(0, 220),
+        finalScore,
+        heroScore
+      };
+    }).filter((x) => x.relevance >= 62 && x.visualQuality >= 55 && x.subjectCentrality >= 55);
+    const ordered = orderDossierImages(reviewed, maxTarget);
+    return ordered.length ? ordered : pool.slice(0, maxTarget).map((item) => ({ ...item, captionTr: shortDossierCaption('', topic.title) }));
   } catch {
-    return pool.slice(0, Math.max(1, Math.min(target, 6)));
+    return pool.slice(0, maxTarget).map((item) => ({ ...item, captionTr: shortDossierCaption('', topic.title) }));
   }
 }
