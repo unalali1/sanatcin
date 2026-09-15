@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { freshnessPoints, hasExcludedTopic, inferCategory, scoreCandidate, selectByCategory } from '../src/score.js';
+import { freshnessPoints, hasExcludedTopic, inferCategory, isCommercialEconomyDominant, scoreCandidate, selectByCategory } from '../src/score.js';
 import { applyAiScores, buildBalancedShortlist } from '../src/rank.js';
 
 const source = { id: 'test', name: 'Test', quality: 9, defaultCategory: null };
@@ -35,12 +35,48 @@ test('AI puanı kategori ve ilgi değerini nihai skora uygular', () => {
   assert.equal(ranked.score, 91);
 });
 
+test('yüksek SanatÇin uyumu nihai skoru artırır', () => {
+  const now = new Date('2026-09-08T12:00:00Z');
+  const candidate = scoreCandidate({ id:'fit', title:'New museum opens', summary:'art', url:'https://example.com/fit', publishedAt:'2026-09-08T01:00:00Z', source }, now);
+  const [neutral] = applyAiScores([candidate], [{ id:'fit', eligible:true, category:'kultur-sanat', fit:7, interest:80, relevance:90 }], now);
+  const [strong] = applyAiScores([candidate], [{ id:'fit', eligible:true, category:'kultur-sanat', fit:10, interest:80, relevance:90 }], now);
+  assert.ok(strong.score > neutral.score);
+});
+
+test('fit puanı eşik altındaysa aday yayıma alınmaz', () => {
+  const candidate = scoreCandidate({ id:'weak', title:'City lifestyle update', summary:'event', url:'https://example.com/weak', publishedAt:new Date().toISOString(), source });
+  const [ranked] = applyAiScores([candidate], [{ id:'weak', eligible:true, category:'sehir-yasam', fit:4, interest:90, relevance:90 }]);
+  assert.equal(ranked.eligible, false);
+  assert.equal(ranked.category, 'uygunsuz');
+});
+
 test('bankacılık haberi kaynak kategorisi olsa bile kapsam dışı kalır', () => {
   const candidate = { id:'f', title:'Bank capital injection reaches 50 billion yuan', summary:'financial institution', url:'https://example.com/f', publishedAt:new Date().toISOString(), source:{ ...source, defaultCategory:'sehir-yasam' } };
   assert.equal(hasExcludedTopic(candidate), true);
   const scored = scoreCandidate(candidate);
   assert.equal(scored.eligible, false);
   assert.equal(scored.category, 'uygunsuz');
+});
+
+test('yaratıcı bağ taşımayan ihracat ve üretim haberi ticari-ekonomi ağırlıklı sayılır', () => {
+  const candidate = {
+    id:'e-bike',
+    title:'Chinese e-bike manufacturers expand exports',
+    summary:'Manufacturers increase market share as factory production and exports grow across Europe.',
+    source
+  };
+  assert.equal(isCommercialEconomyDominant(candidate), true);
+  assert.equal(scoreCandidate(candidate).eligible, false);
+});
+
+test('moda sektöründeki yaratıcı gelişme ticari veri içeriyor diye otomatik elenmez', () => {
+  const candidate = {
+    id:'fashion',
+    title:'Chinese fashion designers expand in Europe',
+    summary:'The runway collection and designer collaboration arrives as brand sales grow.',
+    source
+  };
+  assert.equal(isCommercialEconomyDominant(candidate), false);
 });
 
 test('AI kapsam dışı kararı deterministik kategoriyi geri getirmez', () => {
