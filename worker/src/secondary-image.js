@@ -256,20 +256,33 @@ async function uploadSecondaryImage(article, postId, image, signal) {
   return media;
 }
 
+function uniqueCandidateUrls(article, primaryImage) {
+  const primaryKey = canonicalImageUrl(primaryImage?.sourceUrl ?? '');
+  const seen = new Set();
+  const result = [];
+  const rawUrls = article.sourceImageUrls?.length ? article.sourceImageUrls : [article.sourceImageUrl];
+  for (const rawUrl of rawUrls) {
+    if (!isUsableImageUrl(rawUrl)) continue;
+    const key = canonicalImageUrl(rawUrl);
+    if (!key || key === primaryKey || seen.has(key)) continue;
+    seen.add(key);
+    result.push(rawUrl);
+    if (result.length >= 6) break;
+  }
+  return result;
+}
+
 async function selectSecondaryImage(article, primaryImage, signal) {
   if (!sourceImageReuseAllowed(article)) return null;
-  const primaryUrl = canonicalImageUrl(primaryImage?.sourceUrl ?? '');
-  const urls = [...new Set((article.sourceImageUrls?.length ? article.sourceImageUrls : [article.sourceImageUrl])
-    .filter((url) => isUsableImageUrl(url))
-    .map((url) => canonicalImageUrl(url)))]
-    .filter((url) => url && url !== primaryUrl)
-    .slice(0, 6);
+  const urls = uniqueCandidateUrls(article, primaryImage);
   if (!urls.length) return null;
 
   const reviewed = [];
   const errors = [];
+  let attempted = 0;
   for (const imageUrl of urls) {
-    if (reviewed.length >= REVIEW_LIMIT) break;
+    if (attempted >= REVIEW_LIMIT) break;
+    attempted += 1;
     try {
       const loaded = await loadCandidate(article, imageUrl, signal);
       const candidate = await evaluateCandidate(article, loaded, signal);
@@ -299,6 +312,7 @@ async function selectSecondaryImage(article, primaryImage, signal) {
     log('info', 'Uygun ikinci görsel bulunamadı; haber tek görselle korunacak', {
       source: article.source?.id,
       candidates: urls.length,
+      attempted,
       errors: errors.slice(0, 5)
     });
     return null;
@@ -311,7 +325,8 @@ async function selectSecondaryImage(article, primaryImage, signal) {
     similarityScore: selected.similarityScore,
     complementaryScore: selected.complementaryScore,
     secondaryScore: selected.secondaryScore,
-    scene: selected.scene
+    scene: selected.scene,
+    attempted
   });
   return selected;
 }
