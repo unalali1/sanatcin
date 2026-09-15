@@ -1,8 +1,8 @@
 import {
   fetchRecentWordPressPosts,
-  renderNewsletterHtml,
-  selectNewsletterPosts
+  renderNewsletterHtml
 } from '../src/newsletter.js';
+import { buildNewsletterSelection } from '../src/newsletter-score.js';
 
 const action = String(process.env.BREVO_ADMIN_ACTION || 'idle').trim();
 const apiKey = process.env.BREVO_API_KEY || '';
@@ -89,7 +89,12 @@ async function main() {
       perPage: 100,
       signal: AbortSignal.timeout(30000)
     });
-    const selected = selectNewsletterPosts(posts, maxItems);
+    const selected = await buildNewsletterSelection(posts, maxItems, {
+      apiKey: process.env.OPENAI_API_KEY || '',
+      model: process.env.NEWSLETTER_SCORE_MODEL || process.env.OPENAI_SELECTION_MODEL || 'gpt-5-mini',
+      now: new Date(),
+      signal: AbortSignal.timeout(90000)
+    });
     if (selected.length < 4) throw new Error(`Newsletter için yeterli içerik yok: ${selected.length}`);
 
     const htmlContent = renderNewsletterHtml(selected, { siteUrl, logoUrl });
@@ -106,7 +111,13 @@ async function main() {
       subject: verify?.subject,
       status: verify?.status,
       htmlBytes: Buffer.byteLength(htmlContent),
-      selected: selected.map((post) => ({ id: post.id, title: post.title?.rendered, link: post.link }))
+      selected: selected.map((post) => ({
+        id: post.id,
+        title: post.title?.rendered,
+        newsletterScore: post.newsletterScore,
+        newsletterScoreMode: post.newsletterScoreMode,
+        link: post.link
+      }))
     }, null, 2));
     return;
   }
