@@ -4,7 +4,7 @@ import { discover, extractArticle, sourceHash } from './fetch.js';
 import { classifyError } from './errors.js';
 import { log, setLogContext } from './logger.js';
 import { scoreCandidate } from './score.js';
-import { diversifyBySource, diversifyByTopic, rerankCandidates } from './rank.js';
+import { diversifyBySource, diversifyByTopic, rerankCandidates, sourceCrowdingPenalty } from './rank.js';
 import { createRunBudget } from './run-budget.js';
 import { CATEGORIES, SOURCES, SOURCE_SET_VERSION } from './sources.js';
 import { translateArticle } from './translate.js';
@@ -43,10 +43,48 @@ function distribution(items, key) {
   }, {});
 }
 
+function candidateForRound(queue, sourceUseCounts, {
+  fallbackActive,
+  hardMinimum,
+  preferredMinimum
+}) {
+  let bestIndex = -1;
+  let bestEffectiveScore = -Infinity;
+  let bestPenalty = 0;
+  let hasFallbackCandidate = false;
+
+  for (let index = 0; index < queue.length; index += 1) {
+    const candidate = queue[index];
+    if (candidate.score < hardMinimum) continue;
+    hasFallbackCandidate = true;
+    const previousCount = sourceUseCounts[candidate.source?.id] ?? 0;
+    const sourcePenalty = sourceCrowdingPenalty(previousCount);
+    const effectiveScore = Math.max(0, Math.round((candidate.score - sourcePenalty) * 10) / 10);
+    const qualifies = fallbackActive ? true : effectiveScore >= preferredMinimum;
+    if (!qualifies) continue;
+    if (effectiveScore > bestEffectiveScore) {
+      bestIndex = index;
+      bestEffectiveScore = effectiveScore;
+      bestPenalty = sourcePenalty;
+    }
+  }
+
+  if (bestIndex < 0) return { candidate: null, hasFallbackCandidate };
+  const candidate = queue.splice(bestIndex, 1)[0];
+  return {
+    candidate: {
+      ...candidate,
+      effectiveScore: bestEffectiveScore,
+      sourcePenalty: bestPenalty
+    },
+    hasFallbackCandidate
+  };
+}
+
 async function run() {
   validateConfig();
   const runId = `sanatcin-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${process.pid}`;
-  setLogContext({ runId, workerVersion: '0.8.0' });
+  setLogContext({ runId, workerVersion: '0.9.0' });
 
   if (config.syncSitePages) {
     log('info', 'Site kurumsal içerik eşitlemesi başladı', { maintenanceOnly: config.maintenanceOnly });
@@ -75,7 +113,12 @@ async function run() {
     maxRunMinutes: config.maxRunMinutes,
     minPublishScore: config.minPublishScore,
     secondSlotMinScore: config.secondSlotMinScore,
+    preferredPublishScore: config.preferredPublishScore,
+    preferredSecondSlotScore: config.preferredSecondSlotScore,
+    adaptiveFallbackRound: config.adaptiveFallbackRound,
+    minEditorialFit: config.minEditorialFit,
     maxAiCandidates: config.maxAiCandidates,
+    rescueAiCandidates: config.rescueAiCandidates,
     aiBatchSize: config.aiBatchSize,
     aiRerankConcurrency: config.aiRerankConcurrency,
     articleConcurrency: config.articleConcurrency,
@@ -86,7 +129,13 @@ async function run() {
 
   const sourceStats = Object.fromEntries(SOURCES.filter((source) => source.enabled).map((source) => [source.id, { discovered: 0, attempted: 0, published: 0, rejected: 0 }]));
   const rejectedReasons = {};
-  const selectionStats = { lowScoreSkipped: 0, topicPenalized: 0 };
+  const selectionStats = {
+    lowScoreSkipped: 0,
+    preferredDeferred: 0,
+    topicPenalized: 0,
+    sourcePenalized: 0,
+    adaptiveFallbackAttempts: 0
+  };
   const discovered = await mapLimit(SOURCES.filter((source) => source.enabled), config.discoveryConcurrency, async (source) => {
     try {
       const items = await discover(source);
@@ -128,12 +177,15 @@ async function run() {
     newCandidates: newCandidates.length,
     aiEvaluated: ranked.length,
     queues: Object.fromEntries(Object.entries(queues).map(([key, value]) => [key, value.length])),
+    fitDistribution: Object.fromEntries(CATEGORIES.map(({ slug }) => [
+      slug,
+      queues[slug].map((item) => item.editorialFit).filter((value) => Number.isFinite(value))
+    ])),
     topicPenalized: selectionStats.topicPenalized
   });
 
   const results = [];
   const categoryPublished = Object.fromEntries(CATEGORIES.map(({ slug }) => [slug, 0]));
-  const queueOffsets = Object.fromEntries(CATEGORIES.map(({ slug }) => [slug, 0]));
   let timeLimitReached = budget.isExpired() || runController.signal.aborted;
   for (let round = 1; round <= config.maxAttemptsPerCategory; round += 1) {
     if (timeLimitReached || results.length >= config.maxDailyTotal) break;
@@ -142,41 +194,67 @@ async function run() {
       break;
     }
 
+    const fallbackActive = round >= config.adaptiveFallbackRound && results.length < config.minDailyTarget;
     const remainingSlots = config.maxDailyTotal - results.length;
     const attempts = [];
+    const plannedSourceCounts = distribution(results, 'source');
+
     for (const { slug } of CATEGORIES) {
       if (attempts.length >= remainingSlots) break;
       if (categoryPublished[slug] >= config.maxPerCategory || !budget.canAttempt(slug)) continue;
 
-      const minimumScore = categoryPublished[slug] === 0
+      const firstSlot = categoryPublished[slug] === 0;
+      const hardMinimum = firstSlot
         ? config.minPublishScore
         : Math.max(config.minPublishScore, config.secondSlotMinScore);
-      let candidate = null;
-      while (queueOffsets[slug] < queues[slug].length) {
-        const next = queues[slug][queueOffsets[slug]++];
-        if (next.score >= minimumScore) {
-          candidate = next;
-          break;
+      const preferredMinimum = firstSlot
+        ? Math.max(hardMinimum, config.preferredPublishScore)
+        : Math.max(hardMinimum, config.preferredSecondSlotScore);
+      const selected = candidateForRound(queues[slug], plannedSourceCounts, {
+        fallbackActive,
+        hardMinimum,
+        preferredMinimum
+      });
+
+      if (!selected.candidate) {
+        if (!fallbackActive && selected.hasFallbackCandidate) {
+          selectionStats.preferredDeferred += 1;
+          log('info', 'Kategori adayı güvenli tabanın üzerinde ancak tercih eşiğinin altında; fallback turuna ertelendi', {
+            category: slug,
+            round,
+            preferredMinimum,
+            hardMinimum
+          });
         }
-        selectionStats.lowScoreSkipped += 1;
-        log('info', 'Aday kalite eşiğinin altında kaldı; daha güçlü aday aranacak', {
-          category: slug,
-          source: next.source.id,
-          score: next.score,
-          minimumScore,
-          title: next.title
-        });
+        continue;
       }
-      if (!candidate) continue;
-      attempts.push({ slug, candidate, attempt: budget.noteAttempt(slug) });
+
+      const candidate = selected.candidate;
+      if (candidate.sourcePenalty > 0) selectionStats.sourcePenalized += 1;
+      if (fallbackActive) selectionStats.adaptiveFallbackAttempts += 1;
+      increment(plannedSourceCounts, candidate.source.id);
+      attempts.push({ slug, candidate, attempt: budget.noteAttempt(slug), fallbackActive });
     }
-    if (!attempts.length) break;
+
+    if (!attempts.length) {
+      const shouldReachFallback = results.length < config.minDailyTarget && round < config.adaptiveFallbackRound;
+      if (shouldReachFallback) continue;
+      break;
+    }
 
     log('info', 'Kategori dengeli aday turu başladı', {
       round,
-      candidates: attempts.map(({ slug, candidate }) => ({ category: slug, source: candidate.source.id, score: candidate.score }))
+      fallbackActive,
+      candidates: attempts.map(({ slug, candidate }) => ({
+        category: slug,
+        source: candidate.source.id,
+        score: candidate.score,
+        effectiveScore: candidate.effectiveScore,
+        editorialFit: candidate.editorialFit,
+        sourcePenalty: candidate.sourcePenalty
+      }))
     });
-    const outcomes = await mapLimit(attempts, config.articleConcurrency, async ({ slug, candidate, attempt }) => {
+    const outcomes = await mapLimit(attempts, config.articleConcurrency, async ({ slug, candidate, attempt, fallbackActive: usedFallback }) => {
       sourceStats[candidate.source.id].attempted += 1;
       log('info', 'Haber adayı işleniyor', {
         round,
@@ -184,8 +262,14 @@ async function run() {
         attempt,
         source: candidate.source.id,
         score: candidate.score,
+        effectiveScore: candidate.effectiveScore,
+        editorialFit: candidate.editorialFit,
+        institutionalEvent: candidate.institutionalEvent ?? false,
+        commercialDominant: candidate.commercialDominant ?? false,
         sourceBoost: candidate.sourceBoost ?? 0,
+        sourcePenalty: candidate.sourcePenalty ?? 0,
         topicPenalty: candidate.topicPenalty ?? 0,
+        fallback: usedFallback,
         url: candidate.url
       });
       try {
@@ -202,18 +286,24 @@ async function run() {
         const translated = await translateArticle({ ...article, originalTitle: article.title }, { signal: runController.signal });
         await assertNoSimilarPublishedTitle(translated.title, { signal: runController.signal });
         const image = await prepareFeaturedImage(translated, { signal: runController.signal });
-        const post = await publishArticle(translated, image, { signal: runController.signal });
+        const post = await publishArticle({ ...translated, score: candidate.score }, image, { signal: runController.signal });
         const result = {
           source: candidate.source.id,
           category: candidate.category,
           score: candidate.score,
+          effectiveScore: candidate.effectiveScore,
+          editorialFit: candidate.editorialFit,
           scoreReason: candidate.scoreReason,
           sourceBoost: candidate.sourceBoost ?? 0,
+          sourcePenalty: candidate.sourcePenalty ?? 0,
           topicPenalty: candidate.topicPenalty ?? 0,
+          fallback: usedFallback,
           postId: post.id,
           link: post.link,
           hasImage: true,
           imageOrigin: image.origin,
+          imageScore: image.visualScore ?? null,
+          imageScene: image.scene ?? null,
           mode: config.dryRun ? 'dry-run' : config.publishStatus
         };
         sourceStats[candidate.source.id].published += 1;
@@ -254,6 +344,10 @@ async function run() {
     if (timeLimitReached) break;
   }
 
+  for (const queue of Object.values(queues)) {
+    selectionStats.lowScoreSkipped += queue.filter((candidate) => candidate.score < config.minPublishScore).length;
+  }
+
   if (timeLimitReached) {
     log('warn', 'Toplam çalışma süresi sınırına ulaşıldı; kalan adaylar işlenmeyecek', {
       maxRunMinutes: config.maxRunMinutes,
@@ -265,7 +359,7 @@ async function run() {
       log('warn', 'Kategori için yayımlanabilir yeni haber bulunamadı', {
         category: slug,
         attempts: budget.attemptsFor(slug),
-        candidates: queues[slug].length
+        candidatesRemaining: queues[slug].length
       });
     }
   }
@@ -275,7 +369,7 @@ async function run() {
   }
 
   const targetReached = results.length >= config.minDailyTarget;
-  const hadRejections = Object.keys(rejectedReasons).length > 0 || selectionStats.lowScoreSkipped > 0;
+  const hadRejections = Object.keys(rejectedReasons).length > 0;
   const runStatus = results.length === 0
     ? 'failed'
     : !targetReached || timeLimitReached
