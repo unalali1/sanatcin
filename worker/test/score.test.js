@@ -27,12 +27,32 @@ test('kategori başına ikiden fazla haber seçmez', () => {
   assert.equal(selectByCategory(candidates, 2).length, 2);
 });
 
-test('AI puanı kategori ve ilgi değerini nihai skora uygular', () => {
+test('AI puanı kategori, ilgi ve hikâye değerini nihai skora uygular', () => {
   const now = new Date('2026-09-08T12:00:00Z');
   const candidate = scoreCandidate({ id:'a', title:'New museum opens', summary:'art', url:'https://example.com/a', publishedAt:'2026-09-08T01:00:00Z', source }, now);
-  const [ranked] = applyAiScores([candidate], [{ id:'a', eligible:true, category:'kultur-sanat', interest:90, relevance:100, reason:'özgün sergi' }], now);
+  const [ranked] = applyAiScores([candidate], [{ id:'a', eligible:true, category:'kultur-sanat', interest:90, relevance:100, storyStrength:80, reason:'özgün sergi' }], now);
   assert.equal(ranked.category, 'kultur-sanat');
-  assert.equal(ranked.score, 91);
+  assert.equal(ranked.storyStrength, 80);
+  assert.equal(ranked.score, 97);
+});
+
+test('yakın dönem konu tekrarı nihai puanı düşürür', () => {
+  const now = new Date('2026-09-08T12:00:00Z');
+  const candidate = scoreCandidate({ id:'repeat', title:'New museum opens', summary:'art', url:'https://example.com/repeat', publishedAt:'2026-09-08T01:00:00Z', source }, now);
+  const base = { id:'repeat', eligible:true, category:'kultur-sanat', fit:8, interest:80, relevance:90, storyStrength:80 };
+  const [fresh] = applyAiScores([candidate], [{ ...base, recentTopicRepeat:false }], now);
+  const [repeat] = applyAiScores([candidate], [{ ...base, recentTopicRepeat:true }], now);
+  assert.ok(repeat.score < fresh.score);
+  assert.equal(repeat.recentTopicPenalty, 10);
+});
+
+test('iki kötü koşu sonrası kaynak sağlık kapısı adayı geçici olarak durdurur', () => {
+  const candidate = scoreCandidate({ id:'health', title:'New museum opens', summary:'art', url:'https://example.com/health', publishedAt:new Date().toISOString(), source });
+  const health = new Map([['test', { blocked:true, penalty:12 }]]);
+  const [ranked] = applyAiScores([candidate], [{ id:'health', eligible:true, category:'kultur-sanat', fit:9, interest:90, relevance:90, storyStrength:90 }], new Date(), health);
+  assert.equal(ranked.eligible, false);
+  assert.equal(ranked.sourceHealthBlocked, true);
+  assert.equal(ranked.category, 'uygunsuz');
 });
 
 test('yüksek SanatÇin uyumu nihai skoru artırır', () => {
