@@ -12,6 +12,7 @@ const client = new OpenAI({
   maxRetries: 0
 });
 const allowedCategories = new Set(['kultur-sanat', 'sinema', 'moda-tasarim', 'sehir-yasam']);
+const wpAuth = `Basic ${Buffer.from(`${config.wpUsername}:${config.wpAppPassword}`).toString('base64')}`;
 
 // Moda havuzunda uzman kaynakları öne çıkarır; China Daily gibi genel kaynakları
 // cezalandırmaz. Bu yalnız moda-tasarım kategorisinde küçük bir pozitif sinyaldir.
@@ -33,6 +34,100 @@ function clamp(value, minimum, maximum, fallback = minimum) {
   return Number.isFinite(number) ? Math.max(minimum, Math.min(maximum, number)) : fallback;
 }
 
+function stripHtml(value = '') {
+  return String(value)
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;|&#038;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&apos;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function wpJson(path, { signal } = {}) {
+  const response = await fetch(`${config.wpBaseUrl}/wp-json${path}`, {
+    signal,
+    headers: { authorization: wpAuth, accept: 'application/json' }
+  });
+  if (!response.ok) throw new Error(`WordPress bağlam isteği ${response.status}: ${(await response.text()).slice(0, 250)}`);
+  return response.json();
+}
+
+async function loadRecentEditorialContext(signal) {
+  if (!config.wpBaseUrl || !config.wpUsername || !config.wpAppPassword) return [];
+  const after = new Date(Date.now() - config.recentTopicLookbackDays * 86_400_000).toISOString();
+  try {
+    const posts = await wpJson(`/wp/v2/posts?status=publish&after=${encodeURIComponent(after)}&per_page=80&orderby=date&order=desc&_fields=date,title,excerpt,meta`, { signal });
+    return posts
+      .filter((post) => post?.meta?.sanatcin_source_url)
+      .slice(0, 50)
+      .map((post) => ({
+        date: post.date,
+        title: stripHtml(post.title?.rendered).slice(0, 180),
+        excerpt: stripHtml(post.excerpt?.rendered).slice(0, 220)
+      }))
+      .filter((post) => post.title);
+  } catch (error) {
+    log('warn', 'Yakın dönem konu hafızası yüklenemedi; yalnız bugünkü adaylarla devam edilecek', {
+      error: String(error?.message ?? error).slice(0, 400)
+    });
+    return [];
+  }
+}
+
+function parseHealthState(raw = '') {
+  try {
+    const parsed = JSON.parse(String(raw).trim());
+    return Array.isArray(parsed?.runs) ? parsed : { runs: [] };
+  } catch {
+    return { runs: [] };
+  }
+}
+
+async function loadSourceHealth(signal) {
+  const result = new Map();
+  if (!config.wpBaseUrl || !config.wpUsername || !config.wpAppPassword) return result;
+  try {
+    const pages = await wpJson('/wp/v2/pages?slug=sanatcin-source-health&status=private&context=edit&per_page=1&_fields=id,content', { signal });
+    const state = parseHealthState(pages?.[0]?.content?.raw ?? '');
+    const cutoff = Date.now() - config.sourceHealthLookbackDays * 86_400_000;
+    const runs = state.runs
+      .filter((run) => new Date(run.time ?? 0).getTime() >= cutoff)
+      .sort((left, right) => new Date(right.time ?? 0) - new Date(left.time ?? 0));
+    const sourceIds = new Set(runs.flatMap((run) => Object.keys(run.sources ?? {})));
+    for (const sourceId of sourceIds) {
+      const stats = runs.map((run) => run.sources?.[sourceId]).filter(Boolean);
+      const attempted = stats.reduce((sum, item) => sum + (Number(item.attempted) || 0), 0);
+      const rejected = stats.reduce((sum, item) => sum + (Number(item.rejected) || 0), 0);
+      const published = stats.reduce((sum, item) => sum + (Number(item.published) || 0), 0);
+      const badRun = (item) => Boolean(item.error) || ((Number(item.attempted) || 0) >= 2 && (Number(item.published) || 0) === 0 && (Number(item.rejected) || 0) >= 2);
+      let consecutiveBadRuns = 0;
+      for (const item of stats) {
+        if (!badRun(item)) break;
+        consecutiveBadRuns += 1;
+      }
+      const badRuns = stats.filter(badRun).length;
+      const failureRate = stats.length ? badRuns / stats.length : 0;
+      const rejectionRate = attempted ? rejected / attempted : 0;
+      const penalty = Math.min(12, Math.round((failureRate * 6 + rejectionRate * 6) * 10) / 10);
+      result.set(sourceId, {
+        blocked: consecutiveBadRuns >= 2,
+        consecutiveBadRuns,
+        failureRate,
+        rejectionRate,
+        conversionRate: attempted ? published / attempted : 0,
+        penalty
+      });
+    }
+  } catch (error) {
+    log('warn', 'Kaynak sağlık geçmişi yüklenemedi; kaynak cezası olmadan devam edilecek', {
+      error: String(error?.message ?? error).slice(0, 400)
+    });
+  }
+  return result;
+}
+
 export function sourceCrowdingPenalty(previousCount = 0) {
   if (previousCount <= 0) return 0;
   if (previousCount === 1) return 3;
@@ -40,7 +135,7 @@ export function sourceCrowdingPenalty(previousCount = 0) {
   return 15;
 }
 
-export function applyAiScores(candidates, items, now = new Date()) {
+export function applyAiScores(candidates, items, now = new Date(), sourceHealth = new Map()) {
   const byId = new Map(items.map((item) => [String(item.id), item]));
   return candidates.map((candidate) => {
     const ai = byId.get(String(candidate.id));
@@ -48,40 +143,61 @@ export function applyAiScores(candidates, items, now = new Date()) {
     const editorialFit = clamp(ai.fit, 0, 10, 7);
     const interest = clamp(ai.interest, 0, 100, 0);
     const relevance = clamp(ai.relevance, 0, 100, 0);
+    const storyStrength = clamp(ai.storyStrength, 0, 100, 50);
     const institutionalEvent = ai.institutionalEvent === true;
     const commercialDominant = ai.commercialDominant === true;
+    const recentTopicRepeat = ai.recentTopicRepeat === true;
+    const realPersonCentered = ai.realPersonCentered === true;
+    const health = sourceHealth.get(candidate.source?.id) ?? { blocked: false, penalty: 0 };
     const baseEligible = ai.eligible === true && allowedCategories.has(ai.category);
     const eligible = baseEligible
       && editorialFit >= config.minEditorialFit
-      && !(commercialDominant && editorialFit <= 6);
+      && !(commercialDominant && editorialFit <= 6)
+      && !health.blocked;
     const category = eligible ? ai.category : 'uygunsuz';
     const sourceBoost = eligible ? categorySourceBoost(candidate, category) : 0;
     const fitAdjustment = (editorialFit - 7) * 4;
     const institutionalPenalty = institutionalEvent ? (editorialFit <= 6 ? 8 : 4) : 0;
     const commercialPenalty = commercialDominant ? 10 : 0;
+    const recentTopicPenalty = recentTopicRepeat ? 10 : 0;
+    const sourceHealthPenalty = Number(health.penalty) || 0;
     const rawScore =
       freshnessPoints(candidate.publishedAt, now) +
-      interest * 0.30 +
-      relevance * 0.20 +
+      interest * 0.20 +
+      relevance * 0.15 +
+      storyStrength * 0.25 +
       Math.min(10, candidate.source.quality ?? 5) +
       sourceBoost +
       fitAdjustment -
       institutionalPenalty -
-      commercialPenalty;
+      commercialPenalty -
+      recentTopicPenalty -
+      sourceHealthPenalty;
+    const healthReason = health.blocked
+      ? 'Kaynak son koşularda tekrarlayan işlem hataları verdiği için geçici olarak devre dışı.'
+      : sourceHealthPenalty > 0
+        ? `Kaynak sağlık cezası ${sourceHealthPenalty}.`
+        : '';
     return {
       ...candidate,
       eligible,
       category,
       interest,
       relevance,
+      storyStrength,
       editorialFit,
       institutionalEvent,
       commercialDominant,
+      recentTopicRepeat,
+      recentTopicPenalty,
+      realPersonCentered,
       sourceBoost,
+      sourceHealthPenalty,
+      sourceHealthBlocked: health.blocked === true,
       institutionalPenalty,
       commercialPenalty,
       score: eligible ? Math.max(0, Math.min(100, Math.round(rawScore * 10) / 10)) : 0,
-      scoreReason: String(ai.reason ?? '').slice(0, 320)
+      scoreReason: `${String(ai.reason ?? '').slice(0, 260)} ${healthReason}`.trim().slice(0, 360)
     };
   });
 }
@@ -199,7 +315,10 @@ export function diversifyByTopic(candidates) {
   return selected;
 }
 
-async function rerankBatch(batch, signal) {
+async function rerankBatch(batch, signal, recentContext = []) {
+  const history = recentContext.length
+    ? `\n\nSon ${config.recentTopicLookbackDays} günde SanatÇin'de yayımlanan otomatik haberler. Bunları yalnız konu tekrarı denetimi için kullan:\n${JSON.stringify(recentContext)}`
+    : '';
   const response = await client.responses.create({
     model: config.openaiSelectionModel,
     input: [
@@ -209,13 +328,13 @@ async function rerankBatch(batch, signal) {
           'SanatÇin için haber seçen kıdemli bir Türkçe kültür-sanat editörüsün. Yalnız geçerli JSON ver.',
           'SanatÇin genel Çin haber sitesi değildir; sanat, kültür, moda, tasarım, sinema ve şehir kültürü ekseni belirleyicidir.',
           'Finans, makroekonomi, ihracat, üretim kapasitesi, otomotiv, sıradan teknoloji, diplomasi, askerî gündem, spor, protokol, reklam ve zayıf PR metinleri kültürel/yaratıcı bağ açık ve asli değilse kapsam dışıdır.',
-          'Türkiye’deki okur için güncellik, somut gelişme, özgünlük, kültürel değer, geniş okuyucu ilgisi ve güçlü görsel potansiyel arıyoruz.',
+          'Türkiye’deki okur için güncellik, somut gelişme, özgünlük, kültürel değer, geniş okuyucu ilgisi, güçlü hikâye değeri ve görsel potansiyel arıyoruz.',
           'Kategori kotasını doldurmak uğruna zayıf bir adayı uygun sayma; ancak orta düzey ama gerçek kültür-sanat haberlerini yalnız çok çarpıcı olmadıkları için reddetme.'
         ].join(' ')
       },
       {
         role: 'user',
-        content: `Her adayı bağımsız değerlendir; hiçbir adayı atlama. Yalnız gerçek kültür-sanat, sinema, moda-tasarım ve şehir yaşamı haberleri eligible=true olabilir. Uygun adayları kultur-sanat, sinema, moda-tasarim veya sehir-yasam kategorisine koy; kaynağın varsayılan kategorisini gerektiğinde değiştir.\n\nfit alanı SanatÇin editoryal uyumunu 0-10 puanlasın: 0-4 konu dışı/zayıf uyum, 5-6 ancak daha güçlü aday yoksa kullanılabilecek gerçek ama ikincil kültür/lifestyle haberi, 7-8 güçlü uyum, 9-10 markanın merkezinde olması gereken içerik.\n\ninterest ve relevance alanlarını 0-100 puanla. Türkiye’de tanınmayan küçük bir kurumun rutin toplantısı, açılış töreni, konferansı veya kurumsal buluşması daha geniş bir kültürel sonuç, önemli isim, sıra dışı eser ya da özgün insan hikâyesi taşımıyorsa institutionalEvent=true ver ve fit'i 6'nın üstüne çıkarma. İhracat, satış, pazar payı, üretim, fabrika, şirket satın alması veya sektör büyüklüğü haberin ana gövdesiyse ve yaratıcı/kültürel unsur tali kalıyorsa commercialDominant=true ver; bu tür içerik çoğu durumda eligible=false olmalı. Moda/tasarım sektöründeki gerçek yaratıcı trendleri yalnız ticari veri içeriyor diye commercialDominant sayma. Aynı olay veya aynı dar temayı tekrar eden adaylara düşük interest ver.\n\nJSON biçimi: {"items":[{"id":"...","eligible":true,"category":"...","fit":0,"interest":0,"relevance":0,"institutionalEvent":false,"commercialDominant":false,"reason":"kısa gerekçe"}]}. Adaylar:\n${JSON.stringify(batch)}`
+        content: `Her adayı bağımsız değerlendir; hiçbir adayı atlama. Yalnız gerçek kültür-sanat, sinema, moda-tasarım ve şehir yaşamı haberleri eligible=true olabilir. Uygun adayları kultur-sanat, sinema, moda-tasarim veya sehir-yasam kategorisine koy; kaynağın varsayılan kategorisini gerektiğinde değiştir.\n\nfit alanı SanatÇin editoryal uyumunu 0-10 puanlasın: 0-4 konu dışı/zayıf uyum, 5-6 ancak daha güçlü aday yoksa kullanılabilecek gerçek ama ikincil kültür/lifestyle haberi, 7-8 güçlü uyum, 9-10 markanın merkezinde olması gereken içerik.\n\ninterest ve relevance alanlarını 0-100 puanla. storyStrength alanı da 0-100 olsun ve şu soruyu ölçsün: “Bu haber Türkiye'deki bir okura Çin'i gerçekten yeni, özgün veya insani bir açıdan anlatıyor mu?” Rutin açılış, toplantı ve kurumsal duyurular düşük; özgün insan hikâyesi, sıra dışı eser, güçlü kültürel dönüşüm, dikkat çekici yaratıcı başarı veya geniş okur merakı taşıyan haber yüksek storyStrength almalı.\n\nTürkiye’de tanınmayan küçük bir kurumun rutin toplantısı, açılış töreni, konferansı veya kurumsal buluşması daha geniş bir kültürel sonuç, önemli isim, sıra dışı eser ya da özgün insan hikâyesi taşımıyorsa institutionalEvent=true ver ve fit'i 6'nın üstüne çıkarma. İhracat, satış, pazar payı, üretim, fabrika, şirket satın alması veya sektör büyüklüğü haberin ana gövdesiyse ve yaratıcı/kültürel unsur tali kalıyorsa commercialDominant=true ver; bu tür içerik çoğu durumda eligible=false olmalı. Moda/tasarım sektöründeki gerçek yaratıcı trendleri yalnız ticari veri içeriyor diye commercialDominant sayma.\n\nrecentTopicRepeat=true yalnız aday son dönemde yayımlanmış bir haberle aynı olayın devamı ya da semantik olarak çok dar biçimde aynı hikâyeyi tekrar ediyorsa olsun. Genel olarak aynı sanat dalında olmak tekrar değildir. Aynı olay zaten yayımlandıysa eligible=false; benzer ama yeni gelişme ise interest ve storyStrength'i düşür. realPersonCentered=true başlık/spot belirli ve gerçek bir kişiyi haberin ana öznesi yapıyorsa ver; bu alan görsel güvenliği için kullanılacak.\n\nJSON biçimi: {"items":[{"id":"...","eligible":true,"category":"...","fit":0,"interest":0,"relevance":0,"storyStrength":0,"institutionalEvent":false,"commercialDominant":false,"recentTopicRepeat":false,"realPersonCentered":false,"reason":"kısa gerekçe"}]}. Adaylar:\n${JSON.stringify(batch)}${history}`
       }
     ]
   }, { signal });
@@ -249,6 +368,7 @@ export async function rerankInputsResilient(input, {
 
   const results = await mapLimit(batches, concurrency, async (batch, batchIndex) => {
     const batchNumber = batchIndex + 1;
+    const startedAt = Date.now();
     logger('info', 'AI sıralama partisi başladı', {
       batch: batchNumber,
       totalBatches: batches.length,
@@ -261,7 +381,8 @@ export async function rerankInputsResilient(input, {
         batch: batchNumber,
         totalBatches: batches.length,
         candidates: batch.length,
-        evaluated: items.length
+        evaluated: items.length,
+        elapsedMs: Date.now() - startedAt
       });
       return items;
     } catch (error) {
@@ -276,12 +397,14 @@ export async function rerankInputsResilient(input, {
         totalBatches: batches.length,
         candidates: batch.length,
         retryParts: retryParts.length,
+        elapsedMs: Date.now() - startedAt,
         error: errorMessage(error)
       });
 
       const recovered = [];
       for (let retryIndex = 0; retryIndex < retryParts.length; retryIndex += 1) {
         const retryPart = retryParts[retryIndex];
+        const retryStartedAt = Date.now();
         try {
           const items = await rerank(retryPart, signal);
           recovered.push(...items);
@@ -291,7 +414,8 @@ export async function rerankInputsResilient(input, {
             retryPart: retryIndex + 1,
             retryParts: retryParts.length,
             candidates: retryPart.length,
-            evaluated: items.length
+            evaluated: items.length,
+            elapsedMs: Date.now() - retryStartedAt
           });
         } catch (retryError) {
           if (signal?.aborted) throw retryError;
@@ -301,6 +425,7 @@ export async function rerankInputsResilient(input, {
             retryPart: retryIndex + 1,
             retryParts: retryParts.length,
             candidates: retryPart.length,
+            elapsedMs: Date.now() - retryStartedAt,
             error: errorMessage(retryError)
           });
         }
@@ -336,11 +461,23 @@ function rerankInput(candidate) {
 
 export async function rerankCandidates(candidates, { signal } = {}) {
   if (!candidates.length) return [];
-  const shortlist = buildBalancedShortlist(candidates);
-  const items = await rerankInputsResilient(shortlist.map(rerankInput), { signal });
-  const ranked = applyAiScores(shortlist, items);
+  const [recentContext, sourceHealth] = await Promise.all([
+    loadRecentEditorialContext(signal),
+    loadSourceHealth(signal)
+  ]);
+  const blockedSources = [...sourceHealth.entries()].filter(([, health]) => health.blocked).map(([sourceId]) => sourceId);
+  const eligibleCandidates = candidates.filter((candidate) => !sourceHealth.get(candidate.source?.id)?.blocked);
+  log('info', 'Editoryal seçim bağlamı hazırlandı', {
+    recentTopics: recentContext.length,
+    sourceHealthEntries: sourceHealth.size,
+    blockedSources
+  });
+  const shortlist = buildBalancedShortlist(eligibleCandidates);
+  const contextualRerank = (batch, batchSignal) => rerankBatch(batch, batchSignal, recentContext);
+  const items = await rerankInputsResilient(shortlist.map(rerankInput), { signal, rerank: contextualRerank });
+  const ranked = applyAiScores(shortlist, items, new Date(), sourceHealth);
 
-  if (config.rescueAiCandidates <= 0 || shortlist.length >= candidates.length) return ranked;
+  if (config.rescueAiCandidates <= 0 || shortlist.length >= eligibleCandidates.length) return ranked;
   const counts = Object.fromEntries([...allowedCategories].map((category) => [
     category,
     ranked.filter((candidate) => candidate.eligible && candidate.category === category).length
@@ -353,7 +490,7 @@ export async function rerankCandidates(candidates, { signal } = {}) {
   if (!sparseCategories.size) return ranked;
 
   const used = new Set(shortlist.map((candidate) => candidate.id));
-  const remainder = candidates.filter((candidate) => !used.has(candidate.id) && candidate.eligible !== false);
+  const remainder = eligibleCandidates.filter((candidate) => !used.has(candidate.id) && candidate.eligible !== false);
   const preferred = remainder
     .filter((candidate) => sparseCategories.has(candidate.category))
     .sort((left, right) => right.score - left.score);
@@ -368,8 +505,8 @@ export async function rerankCandidates(candidates, { signal } = {}) {
     candidates: rescuePool.length
   });
   try {
-    const rescueItems = await rerankInputsResilient(rescuePool.map(rerankInput), { signal });
-    const rescued = applyAiScores(rescuePool, rescueItems);
+    const rescueItems = await rerankInputsResilient(rescuePool.map(rerankInput), { signal, rerank: contextualRerank });
+    const rescued = applyAiScores(rescuePool, rescueItems, new Date(), sourceHealth);
     log('info', 'Kategori kurtarma AI turu tamamlandı', {
       evaluated: rescued.length,
       eligible: rescued.filter((candidate) => candidate.eligible).length,
