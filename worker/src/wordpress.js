@@ -51,6 +51,7 @@ function noteVisualScene(scene) {
 }
 
 async function validateEditorialImage(article, image, signal) {
+  const generatedForRealPerson = article.realPersonCentered === true && image.origin === 'openai-generated';
   const response = await ai.responses.create({
     model: config.openaiSelectionModel,
     input: [{
@@ -63,16 +64,23 @@ async function validateEditorialImage(article, image, signal) {
             'Görsel yalnız habere doğrudan ilişkin fotoğraf, illüstrasyon veya etkinlik afişiyse usable=true olabilir.',
             'QR kod, logo, genel haber kartı, site ekran görüntüsü, boş/soyut yer tutucu ya da başlıkla ilgisiz görseli reddet.',
             'Kare/dikey QR kodları, yayınevi/medya logolu kimlik kartlarını, internet sitesi ekran görüntülerini ve başka bir habere de uyabilecek tamamen jenerik görselleri reddet.',
+            generatedForRealPerson
+              ? 'Bu haber belirli bir gerçek kişiyi merkezine alıyor ve bu görsel AI üretimidir. Görselde insan, insan yüzü, beden, siluet veya gerçek kişiyi taklit eden portre varsa usable=false ver. Yalnız ürün, obje, mekân, etkinlik veya soyut olmayan konu ayrıntıları kabul edilebilir.'
+              : 'Gerçek kişileri gösteren kaynak fotoğraflar ancak haberle doğrudan ilişkiliyse kabul edilebilir; AI illüstrasyonlarda gerçek bir kişiyi taklit eden yüzleri reddet.',
             'visualScore alanını 0-100 ver. Haberle doğrudan ilişki %35, editoryal/estetik güç %25, ana sayfa küçük kartında etkileyicilik %20, kompozisyon ve okunabilirlik %20 ağırlığında düşün.',
             'Konferans salonunda uzaktan çekilmiş panel/kürsü fotoğrafı genellikle düşük-orta puan almalı; eser, sanatçı, performans, mekân, zanaat detayı veya güçlü atmosfer görüntüsü daha yüksek puan alabilir.',
+            'hasHuman görselde herhangi bir insan, yüz, beden ya da belirgin insan silueti varsa true olsun.',
+            'cropSafe görselin 16:10 ve 3:2 haber kartlarında ana özne kesilmeden merkezden kırpılmaya uygun olup olmadığını göstersin.',
             'description alanına görselde gerçekten görülenleri 8-18 kelimelik doğal Türkçe alternatif metin olarak yaz.',
             'kind alanı editorial-photo, illustration veya event-poster olmalı.',
             'scene alanı conference, runway, portrait, artifact, architecture, performance, exhibition, street, food, illustration, poster veya other değerlerinden biri olmalı.',
             'Haberi yeniden kategorize etme; yalnız görselin doğrudan ilişkisini ve editoryal gücünü değerlendir.',
-            'Yalnız şu JSON biçiminde yanıt ver: {"usable":true,"kind":"editorial-photo","scene":"exhibition","visualScore":82,"description":"kısa görsel açıklaması","reason":"kısa gerekçe"}',
+            'Yalnız şu JSON biçiminde yanıt ver: {"usable":true,"kind":"editorial-photo","scene":"exhibition","visualScore":82,"hasHuman":false,"cropSafe":true,"description":"kısa görsel açıklaması","reason":"kısa gerekçe"}',
             `Başlık: ${article.title}`,
             `Spot: ${article.excerpt}`,
             `Mevcut kategori: ${article.category}`,
+            `Gerçek kişi merkezli haber: ${article.realPersonCentered === true ? 'evet' : 'hayır'}`,
+            `Görsel kökeni: ${image.origin ?? 'bilinmiyor'}`,
             `Görsel boyutu: ${image.dimensions?.width ?? '?'}x${image.dimensions?.height ?? '?'}`
           ].join('\n')
         },
@@ -86,11 +94,17 @@ async function validateEditorialImage(article, image, signal) {
   if (!['editorial-photo', 'illustration', 'event-poster'].includes(result.kind)) {
     throw new Error(`Görsel türü uygun değil: ${result.kind ?? 'belirlenemedi'}.`);
   }
+  const hasHuman = result.hasHuman === true;
+  if (generatedForRealPerson && hasHuman) {
+    throw new Error('Gerçek kişi merkezli haberde AI görsel insan figürü içeriyor; görsel güvenlik kapısından geçmedi.');
+  }
   const scene = VISUAL_SCENES.has(result.scene) ? result.scene : 'other';
   return {
     kind: result.kind,
     scene,
     visualScore: clampScore(result.visualScore),
+    hasHuman,
+    cropSafe: result.cropSafe === true,
     altText: String(result.description ?? '').replace(/\s+/g, ' ').trim().slice(0, 180),
     reason: String(result.reason ?? '').replace(/\s+/g, ' ').trim().slice(0, 240)
   };
@@ -150,6 +164,9 @@ function sourceImageReuseAllowed(article) {
 
 function visualPrompt(article) {
   const facts = article.factSheet?.facts?.slice(0, 5).join(' | ') ?? '';
+  const personRule = article.realPersonCentered === true
+    ? 'This article is centered on a named real person. Do not depict any human figure, face, body, silhouette, portrait or lookalike. Represent the story only through relevant products, objects, venue, award, materials, workspace or event context.'
+    : 'Do not depict a recognizable real person or imitate the appearance of any named person.';
   return [
     'Create one original landscape editorial illustration for a Turkish culture and lifestyle news publication.',
     `Article category: ${article.category}.`,
@@ -158,8 +175,9 @@ function visualPrompt(article) {
     facts ? `Verified visual context: ${facts}.` : '',
     'Use a refined contemporary editorial-art style with realistic materials, natural light and a clear central subject.',
     'The image must communicate the topic without pretending to be documentary evidence of the exact event.',
-    'Do not depict a recognizable real person. Do not add words, letters, logos, watermarks, flags, UI, frames or decorative borders.',
-    'Avoid generic stock-photo compositions, split screens, collages and repeated motifs. Compose for a 3:2 news card with safe crop space.'
+    personRule,
+    'Do not add words, letters, logos, watermarks, flags, UI, frames or decorative borders.',
+    'Avoid generic stock-photo compositions, split screens, collages and repeated motifs. Compose for a 3:2 news card with generous safe crop space around the central subject.'
   ].filter(Boolean).join('\n');
 }
 
@@ -199,6 +217,8 @@ async function generateEditorialImage(article, signal) {
   image.scene = 'illustration';
   image.visualScore = validation.visualScore;
   image.altText = validation.altText;
+  image.hasHuman = validation.hasHuman;
+  image.cropSafe = validation.cropSafe;
   return image;
 }
 
@@ -263,8 +283,9 @@ export async function prepareFeaturedImage(article, { signal } = {}) {
     try {
       const validation = await validateEditorialImage(article, image, signal);
       const diversityPenalty = sceneDiversityPenalty(validation.scene);
+      const cropPenalty = validation.cropSafe ? 0 : 8;
       const adjustedVisualScore = Math.max(0, Math.min(100,
-        validation.visualScore + resolutionPreference(image.dimensions) - diversityPenalty
+        validation.visualScore + resolutionPreference(image.dimensions) - diversityPenalty - cropPenalty
       ));
       const reviewed = {
         ...image,
@@ -272,11 +293,13 @@ export async function prepareFeaturedImage(article, { signal } = {}) {
         scene: validation.scene,
         visualScore: validation.visualScore,
         adjustedVisualScore,
+        hasHuman: validation.hasHuman,
+        cropSafe: validation.cropSafe,
         altText: validation.altText,
         visualReason: validation.reason
       };
       if (!best || reviewed.adjustedVisualScore > best.adjustedVisualScore) best = reviewed;
-      if (reviewed.adjustedVisualScore >= 88 && reviewed.visualScore >= 80) break;
+      if (reviewed.adjustedVisualScore >= 88 && reviewed.visualScore >= 80 && reviewed.cropSafe) break;
     } catch (error) {
       errors.push(error.message);
     }
@@ -291,7 +314,9 @@ export async function prepareFeaturedImage(article, { signal } = {}) {
       dimensions: `${best.dimensions.width}x${best.dimensions.height}`,
       visualScore: best.visualScore,
       adjustedVisualScore: best.adjustedVisualScore,
-      scene: best.scene
+      scene: best.scene,
+      hasHuman: best.hasHuman,
+      cropSafe: best.cropSafe
     });
     return best;
   }
@@ -304,11 +329,19 @@ export async function prepareFeaturedImage(article, { signal } = {}) {
       attempted: candidates.length,
       reviewed: reviewPool.length,
       bestSourceScore: best?.visualScore ?? null,
+      realPersonCentered: article.realPersonCentered === true,
       errors: errors.slice(0, 5)
     });
     try {
       const generated = await generateEditorialImage(article, signal);
       noteVisualScene(generated.scene);
+      log('info', 'AI editoryal illüstrasyonu güvenlik kapısından geçti', {
+        source: article.source.id,
+        visualScore: generated.visualScore,
+        hasHuman: generated.hasHuman,
+        cropSafe: generated.cropSafe,
+        realPersonCentered: article.realPersonCentered === true
+      });
       return generated;
     } catch (error) {
       errors.push(error.message);
@@ -330,7 +363,8 @@ export async function prepareFeaturedImage(article, { signal } = {}) {
     log('warn', 'Kaynak görseli ideal kalite eşiğinin altında ancak yayını engellememek için en iyi uygun görsel kullanılacak', {
       source: article.source.id,
       visualScore: best.visualScore,
-      scene: best.scene
+      scene: best.scene,
+      cropSafe: best.cropSafe
     });
     return best;
   }
@@ -420,7 +454,18 @@ export async function publishArticle(article, preparedImage = undefined, { signa
       id: null,
       link: null,
       dryRun: true,
-      payload: { title: article.title, excerpt: article.excerpt, status: config.publishStatus, categories: [category], imageOrigin: image.origin, sourceImageUrl: image.sourceUrl || null, imageHash: image.imageHash }
+      payload: {
+        title: article.title,
+        excerpt: article.excerpt,
+        status: config.publishStatus,
+        categories: [category],
+        imageOrigin: image.origin,
+        sourceImageUrl: image.sourceUrl || null,
+        imageHash: image.imageHash,
+        imageCropSafe: image.cropSafe ?? null,
+        imageHasHuman: image.hasHuman ?? null,
+        realPersonCentered: article.realPersonCentered === true
+      }
     };
   }
 
