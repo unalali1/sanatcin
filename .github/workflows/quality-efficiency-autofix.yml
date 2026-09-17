@@ -22,8 +22,16 @@ jobs:
           cache-dependency-path: worker/package-lock.json
       - name: Apply deterministic patch
         run: node worker/dev/apply-quality-efficiency.mjs
-      - name: Tighten headline metric regression check
-        run: sed -i 's/gösterim|izlenme/gösterim(?:e)?|izlenme/' worker/src/quality.js
+      - name: Tighten Turkish headline regression checks
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('worker/src/quality.js')
+          text = path.read_text()
+          text = text.replace('gösterim|izlenme', 'gösterim(?:e)?|izlenme')
+          text = text.replace(r'/\b(?:sanat|sanatçı|sergi|eser|film|sinema|moda|tasarım|koleksiyon|festival|müze|edebiyat|tiyatro|opera|mimari|zanaat)\b/iu', r'/(?:sanat|sanatçı|sergi|eser|film|sinema|moda|tasarım|koleksiyon|festival|müze|edebiyat|tiyatro|opera|mimari|zanaat)/iu')
+          path.write_text(text)
+          PY
       - name: Install dependencies
         working-directory: worker
         run: npm ci
