@@ -22,6 +22,8 @@ jobs:
           cache-dependency-path: worker/package-lock.json
       - name: Apply deterministic patch
         run: node worker/dev/apply-quality-efficiency.mjs
+      - name: Tighten headline metric regression check
+        run: sed -i 's/gösterim|izlenme/gösterim(?:e)?|izlenme/' worker/src/quality.js
       - name: Install dependencies
         working-directory: worker
         run: npm ci
