@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { config, validateConfig } from './config.js';
 import { mapLimit } from './concurrency.js';
 import { discover, extractArticle, sourceHash } from './fetch.js';
@@ -10,6 +11,8 @@ import { attachSecondaryImage } from './secondary-image.js';
 import { CATEGORIES, SOURCES, SOURCE_SET_VERSION } from './sources.js';
 import { translateArticle } from './translate.js';
 import { assertNoSimilarPublishedTitle, knownHashes, prepareFeaturedImage, publishArticle, syncSiteContent } from './wordpress.js';
+
+const WORKER_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version ?? 'unknown';
 
 function uniqueCandidates(items) {
   const urls = new Set();
@@ -85,7 +88,7 @@ function candidateForRound(queue, sourceUseCounts, {
 async function run() {
   validateConfig();
   const runId = `sanatcin-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${process.pid}`;
-  setLogContext({ runId, workerVersion: '0.9.1' });
+  setLogContext({ runId, workerVersion: WORKER_VERSION });
 
   if (config.syncSitePages) {
     log('info', 'Site kurumsal içerik eşitlemesi başladı', { maintenanceOnly: config.maintenanceOnly });

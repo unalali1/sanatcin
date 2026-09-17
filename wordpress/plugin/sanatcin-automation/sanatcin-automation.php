@@ -2,14 +2,14 @@
 /**
  * Plugin Name: SanatÇin Otomasyon Köprüsü
  * Description: Railway haber işleyicisi için kaynak alanlarını ve tekrar kontrolü REST uçlarını sağlar.
- * Version: 0.5.0
+ * Version: 0.5.1
  * Requires at least: 6.5
  * Requires PHP: 8.1
  */
 
 if (!defined('ABSPATH')) exit;
 
-const SANATCIN_AUTOMATION_VERSION = '0.5.0';
+const SANATCIN_AUTOMATION_VERSION = '0.5.1';
 
 const SANATCIN_META_FIELDS = [
     'sanatcin_source_url' => 'string',
@@ -23,6 +23,7 @@ const SANATCIN_META_FIELDS = [
     'sanatcin_image_kind' => 'string',
     'sanatcin_ai_image_model' => 'string',
     'sanatcin_score' => 'number',
+    'sanatcin_hero_eligible' => 'number',
     'sanatcin_original_title' => 'string',
     'sanatcin_editorial_mode' => 'string'
 ];

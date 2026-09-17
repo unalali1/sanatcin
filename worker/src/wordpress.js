@@ -39,6 +39,16 @@ function resolutionPreference(dimensions = {}) {
   return 0;
 }
 
+function heroImageEligible(dimensions = {}, cropSafe = false, scene = 'other', kind = '') {
+  const width = Number(dimensions.width) || 0;
+  const height = Number(dimensions.height) || 0;
+  if (!cropSafe || width < 1200 || height <= 0) return false;
+  const ratio = width / height;
+  if (ratio < 1.35 || ratio > 2.1) return false;
+  if (kind === 'event-poster' || scene === 'poster' || scene === 'portrait') return false;
+  return true;
+}
+
 function sceneDiversityPenalty(scene) {
   const count = runVisualScenes.get(scene) ?? 0;
   if (count < 2) return 0;
@@ -219,6 +229,7 @@ async function generateEditorialImage(article, signal) {
   image.altText = validation.altText;
   image.hasHuman = validation.hasHuman;
   image.cropSafe = validation.cropSafe;
+  image.heroEligible = heroImageEligible(image.dimensions, image.cropSafe, image.scene, image.kind);
   return image;
 }
 
@@ -295,6 +306,7 @@ export async function prepareFeaturedImage(article, { signal } = {}) {
         adjustedVisualScore,
         hasHuman: validation.hasHuman,
         cropSafe: validation.cropSafe,
+        heroEligible: heroImageEligible(image.dimensions, validation.cropSafe, validation.scene, validation.kind),
         altText: validation.altText,
         visualReason: validation.reason
       };
@@ -316,7 +328,8 @@ export async function prepareFeaturedImage(article, { signal } = {}) {
       adjustedVisualScore: best.adjustedVisualScore,
       scene: best.scene,
       hasHuman: best.hasHuman,
-      cropSafe: best.cropSafe
+      cropSafe: best.cropSafe,
+      heroEligible: best.heroEligible
     });
     return best;
   }
@@ -340,6 +353,7 @@ export async function prepareFeaturedImage(article, { signal } = {}) {
         visualScore: generated.visualScore,
         hasHuman: generated.hasHuman,
         cropSafe: generated.cropSafe,
+        heroEligible: generated.heroEligible,
         realPersonCentered: article.realPersonCentered === true
       });
       return generated;
@@ -489,7 +503,8 @@ export async function publishArticle(article, preparedImage = undefined, { signa
       sanatcin_ai_image_model: image?.model ?? '',
       sanatcin_score: Math.round(article.score),
       sanatcin_original_title: article.originalTitle,
-      sanatcin_editorial_mode: article.editorialMode
+      sanatcin_editorial_mode: article.editorialMode,
+      sanatcin_hero_eligible: image?.heroEligible ? 1 : 0
     }
   };
   payload.featured_media = featuredMedia;
