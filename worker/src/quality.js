@@ -19,7 +19,9 @@ const OUTPUT_BOILERPLATE_PATTERNS = [
   /(?:haberde|kaynakta|metinde).{0,70}(?:belirtilmemiş|yer almıyor|aktarılmıyor|açıklanmıyor)/iu,
   /(?:haber|metin|içerik) için kullanılan (?:fotoğraf|görsel)/iu,
   /(?:web|internet|çevrimiçi) (?:editörü|sürümü|sayfası)/iu,
-  /okuyucuya.{0,60}(?:sunuluyor|aktarılıyor|veriliyor)/iu
+  /okuyucuya.{0,60}(?:sunuluyor|aktarılıyor|veriliyor)/iu,
+  /\bkaynak metne göre\b|\bkaynağa göre\b|\bmetinde belirtildi(?:ği gibi)?\b|\bkaynakta belirtildiği gibi\b/iu,
+  /\bkaynak,\s/iu
 ];
 
 const RAW_PINYIN_MARKERS = /\b(?:sheng|shi|xian|qu|zhen|zhou|zizhiqu|renmin|zhengfu|wenhua|bowuguan|meishuguan|daxue|ribao|dianshitai)\b/giu;
@@ -74,6 +76,15 @@ export function translationIssues({ title = '', excerpt = '', text = '', paragra
     issues.push('Başlık bilinmeyen yabancı özel adla başlıyor; Türk okuyucu için ne olduğunu açıklayan bağlam eklenmeli.');
   }
   return issues;
+}
+
+export function headlineQualityRegression(before = '', after = '') {
+  const previous = String(before).trim();
+  const current = String(after).trim();
+  if (!previous || !current || previous === current) return false;
+  const meaningful = /(?:sanat|sanatçı|sergi|eser|film|sinema|moda|tasarım|koleksiyon|festival|müze|edebiyat|tiyatro|opera|mimari|zanaat)/iu;
+  const weakAdministrative = /\b(?:açıkladı|belirtti|duyurdu|kabul etti|düzenlendi|gerçekleştirildi|başkan|müdür|sözcü|gösterim(?:e)?|izlenme|beğeni|takipçi)\b/iu;
+  return meaningful.test(previous) && weakAdministrative.test(current) && !weakAdministrative.test(previous);
 }
 
 export function assertTranslationQuality(article) {

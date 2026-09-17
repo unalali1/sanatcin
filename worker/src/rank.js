@@ -64,6 +64,9 @@ async function loadRecentEditorialContext(signal) {
       .slice(0, 50)
       .map((post) => ({
         date: post.date,
+        published_at: post.date,
+        source_name: post?.meta?.sanatcin_source_name ?? '',
+        source_url: post?.meta?.sanatcin_source_url ?? '',
         title: stripHtml(post.title?.rendered).slice(0, 180),
         excerpt: stripHtml(post.excerpt?.rendered).slice(0, 220)
       }))
@@ -89,8 +92,8 @@ async function loadSourceHealth(signal) {
   const result = new Map();
   if (!config.wpBaseUrl || !config.wpUsername || !config.wpAppPassword) return result;
   try {
-    const pages = await wpJson('/wp/v2/pages?slug=sanatcin-source-health&status=private&context=edit&per_page=1&_fields=id,content', { signal });
-    const state = parseHealthState(pages?.[0]?.content?.raw ?? '');
+    const posts = await wpJson('/wp/v2/posts?slug=sanatcin-source-health-state&status=draft&context=edit&per_page=1&_fields=id,content', { signal });
+    const state = parseHealthState(posts?.[0]?.content?.raw ?? '');
     const cutoff = Date.now() - config.sourceHealthLookbackDays * 86_400_000;
     const runs = state.runs
       .filter((run) => new Date(run.time ?? 0).getTime() >= cutoff)
@@ -135,7 +138,29 @@ export function sourceCrowdingPenalty(previousCount = 0) {
   return 15;
 }
 
-export function applyAiScores(candidates, items, now = new Date(), sourceHealth = new Map()) {
+export function calculateSameSourcePenalty(sourceName, previousPosts = [], now = new Date()) {
+  const normalizedCurrent = String(sourceName ?? '').toLocaleLowerCase('tr-TR').trim();
+  if (!normalizedCurrent) return 0;
+  const cutoff = now.getTime() - 48 * 60 * 60 * 1000;
+  const count = previousPosts.filter((post) => {
+    const normalizedPrior = String(post?.source_name ?? '').toLocaleLowerCase('tr-TR').trim();
+    const publishedAt = new Date(post?.published_at ?? 0).getTime();
+    return normalizedPrior === normalizedCurrent && publishedAt >= cutoff && publishedAt <= now.getTime();
+  }).length;
+  if (count <= 1) return 0;
+  if (count === 2) return 4;
+  return 8;
+}
+
+function allowFit6Exception(editorialFit, storyStrength, freshness, institutionalEvent, commercialDominant) {
+  return editorialFit === 6
+    && storyStrength >= 85
+    && freshness >= 27
+    && !institutionalEvent
+    && !commercialDominant;
+}
+
+export function applyAiScores(candidates, items, now = new Date(), sourceHealth = new Map(), previousPosts = []) {
   const byId = new Map(items.map((item) => [String(item.id), item]));
   return candidates.map((candidate) => {
     const ai = byId.get(String(candidate.id));
@@ -150,8 +175,10 @@ export function applyAiScores(candidates, items, now = new Date(), sourceHealth 
     const realPersonCentered = ai.realPersonCentered === true;
     const health = sourceHealth.get(candidate.source?.id) ?? { blocked: false, penalty: 0 };
     const baseEligible = ai.eligible === true && allowedCategories.has(ai.category);
+    const freshness = freshnessPoints(candidate.publishedAt, now);
+    const fit6ExceptionApplied = allowFit6Exception(editorialFit, storyStrength, freshness, institutionalEvent, commercialDominant);
     const eligible = baseEligible
-      && editorialFit >= config.minEditorialFit
+      && (editorialFit >= config.minEditorialFit || fit6ExceptionApplied)
       && !(commercialDominant && editorialFit <= 6)
       && !health.blocked;
     const category = eligible ? ai.category : 'uygunsuz';
@@ -161,8 +188,9 @@ export function applyAiScores(candidates, items, now = new Date(), sourceHealth 
     const commercialPenalty = commercialDominant ? 10 : 0;
     const recentTopicPenalty = recentTopicRepeat ? 10 : 0;
     const sourceHealthPenalty = Number(health.penalty) || 0;
+    const sameSourcePenalty = calculateSameSourcePenalty(candidate.source?.name, previousPosts, now);
     const rawScore =
-      freshnessPoints(candidate.publishedAt, now) +
+      freshness +
       interest * 0.20 +
       relevance * 0.15 +
       storyStrength * 0.25 +
@@ -172,7 +200,8 @@ export function applyAiScores(candidates, items, now = new Date(), sourceHealth 
       institutionalPenalty -
       commercialPenalty -
       recentTopicPenalty -
-      sourceHealthPenalty;
+      sourceHealthPenalty -
+      sameSourcePenalty;
     const healthReason = health.blocked
       ? 'Kaynak son koşularda tekrarlayan işlem hataları verdiği için geçici olarak devre dışı.'
       : sourceHealthPenalty > 0
@@ -194,6 +223,8 @@ export function applyAiScores(candidates, items, now = new Date(), sourceHealth 
       sourceBoost,
       sourceHealthPenalty,
       sourceHealthBlocked: health.blocked === true,
+      sameSourcePenalty,
+      fit6ExceptionApplied,
       institutionalPenalty,
       commercialPenalty,
       score: eligible ? Math.max(0, Math.min(100, Math.round(rawScore * 10) / 10)) : 0,
@@ -475,7 +506,7 @@ export async function rerankCandidates(candidates, { signal } = {}) {
   const shortlist = buildBalancedShortlist(eligibleCandidates);
   const contextualRerank = (batch, batchSignal) => rerankBatch(batch, batchSignal, recentContext);
   const items = await rerankInputsResilient(shortlist.map(rerankInput), { signal, rerank: contextualRerank });
-  const ranked = applyAiScores(shortlist, items, new Date(), sourceHealth);
+  const ranked = applyAiScores(shortlist, items, new Date(), sourceHealth, recentContext);
 
   if (config.rescueAiCandidates <= 0 || shortlist.length >= eligibleCandidates.length) return ranked;
   const counts = Object.fromEntries([...allowedCategories].map((category) => [
@@ -506,7 +537,7 @@ export async function rerankCandidates(candidates, { signal } = {}) {
   });
   try {
     const rescueItems = await rerankInputsResilient(rescuePool.map(rerankInput), { signal, rerank: contextualRerank });
-    const rescued = applyAiScores(rescuePool, rescueItems, new Date(), sourceHealth);
+    const rescued = applyAiScores(rescuePool, rescueItems, new Date(), sourceHealth, recentContext);
     log('info', 'Kategori kurtarma AI turu tamamlandı', {
       evaluated: rescued.length,
       eligible: rescued.filter((candidate) => candidate.eligible).length,

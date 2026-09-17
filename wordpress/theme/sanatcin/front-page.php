@@ -2,7 +2,7 @@
 <?php
 $regular_exclusions = sanatcin_regular_category_exclusions();
 $featured = new WP_Query([
-    'posts_per_page' => 3,
+    'posts_per_page' => 6,
     'ignore_sticky_posts' => false,
     'category__not_in' => $regular_exclusions,
     'meta_key' => 'sanatcin_score',
@@ -11,10 +11,26 @@ $featured = new WP_Query([
 ]);
 if (!$featured->have_posts()) {
     $featured = new WP_Query([
-        'posts_per_page' => 3,
+        'posts_per_page' => 6,
         'ignore_sticky_posts' => false,
         'category__not_in' => $regular_exclusions
     ]);
+}
+if ($featured->have_posts()) {
+    $eligible_index = null;
+    foreach ($featured->posts as $index => $candidate_post) {
+        if ((int) get_post_meta($candidate_post->ID, 'sanatcin_hero_eligible', true) === 1) {
+            $eligible_index = $index;
+            break;
+        }
+    }
+    if ($eligible_index !== null && $eligible_index > 0) {
+        $hero_post = array_splice($featured->posts, $eligible_index, 1);
+        array_unshift($featured->posts, $hero_post[0]);
+    }
+    $featured->posts = array_slice($featured->posts, 0, 3);
+    $featured->post_count = count($featured->posts);
+    $featured->rewind_posts();
 }
 $featured_ids = wp_list_pluck($featured->posts, 'ID');
 if ($featured->have_posts()) : ?>

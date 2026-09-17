@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { config } from './config.js';
 import { log } from './logger.js';
-import { translationIssues } from './quality.js';
+import { headlineQualityRegression, translationIssues } from './quality.js';
 
 // A failed editorial request should move to the next candidate quickly. The old
 // pipeline retried every one of its many AI calls and could spend minutes on one
@@ -123,6 +123,7 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
         role: 'system',
         content: [
           'SanatÇin haber merkezinde çalışan kıdemli bir Türkiye Türkçesi editörü ve olgu denetçisisin.',
+          "Metnin üretim sürecini anlatan meta-dil kullanma; 'Kaynak metne göre', 'Kaynak, ...' ve 'metinde belirtildi' gibi ifadeler yazma. Bilgi atfedilecekse gerçek kaynak, kişi veya kurum adını kullan.",
           repairing
             ? 'Verilen Türkçe metindeki denetim notlarını gider; metni kaynak ve olgu fişine bağlı kalarak yeniden düzenle.'
             : 'Kaynak metni cümle cümle çevirmeden, özgün kaynak ile olgu fişini okuyup Türkçe haberi sıfırdan yaz.',
@@ -184,6 +185,7 @@ async function polishTurkishNews(article, factSheet, draft, { signal, completeJs
         role: 'system',
         content: [
           'Sen kaynak dilden çeviri yapan biri değil, Türkçe bir haber merkezinin son okuma ve başlık editörüsün.',
+          "Metnin üretim sürecini anlatan meta-dil kullanma; 'Kaynak metne göre', 'Kaynak, ...' ve 'metinde belirtildi' gibi ifadeler yazma. Bilgi atfedilecekse gerçek kaynak, kişi veya kurum adını kullan.",
           'Görevin verilen taslağı yeniden çevirmek değil; metindeki çeviri kokusunu, yabancı sözdizimini, gereksiz isimleştirmeleri, mekanik cümle ritmini ve muğlak başlığı temizlemektir.',
           'Metin, ilk kez Türkçe yazılmış bir kültür-sanat haberi gibi okunmalı. Fiilleri doğal kullan; uzun tamlamaları böl; özne-yüklem ilişkisini Türkçe haber diline göre yeniden kur.',
           'Başlık, spot ve giriş aynı bilgiyi tekrar etmesin. Paragraflar arasında doğal akış kur. Gereksiz açıklama, yorum, sıfat ve tanıtım dili ekleme.',
@@ -280,7 +282,8 @@ export async function translateArticle(article, { signal, completeJson = request
     if (polished.accepted) {
       assertUsableEditorialOutput(polished.draft);
       const polishedIssues = translationIssues(polished.draft);
-      if (polishedIssues.length <= prePolishIssues.length) {
+      const headlineRegression = headlineQualityRegression(prePolish.draft.title, polished.draft.title);
+      if (polishedIssues.length <= prePolishIssues.length && !headlineRegression) {
         final = polished;
         mechanicalIssues = polishedIssues;
         log('info', 'Türkçe son okuma tamamlandı', {
@@ -289,10 +292,15 @@ export async function translateArticle(article, { signal, completeJson = request
           elapsedSeconds: elapsedSeconds(startedAt)
         });
       } else {
-        log('warn', 'Türkçe son okuma mekanik kaliteyi düşürdü; önceki taslak korundu', {
+        log('warn', headlineRegression
+          ? 'Türkçe son okuma başlık kalitesini düşürdü; önceki taslak korundu'
+          : 'Türkçe son okuma mekanik kaliteyi düşürdü; önceki taslak korundu', {
           source: article.source.id,
           beforeIssues: prePolishIssues,
-          afterIssues: polishedIssues
+          afterIssues: polishedIssues,
+          beforeTitle: prePolish.draft.title,
+          afterTitle: polished.draft.title,
+          headlineRegression
         });
       }
     }

@@ -1,4 +1,4 @@
-export const SOURCE_SET_VERSION = '2026-09-10-en-01';
+export const SOURCE_SET_VERSION = '2026-09-17-en-02';
 
 export const CATEGORIES = [
   { slug: 'kultur-sanat', name: 'Kültür & Sanat' },
@@ -104,14 +104,18 @@ export const SOURCES = [
     defaultCategory: 'kultur-sanat',
     linkSelector: "a[href*='/event/']",
     pathPattern: /\/event\//i,
-    itemSelector: 'article, .event, .event-row, .card'
+    itemSelector: 'article, .event, .event-row, .card',
+    enabled: false,
+    disabledReason: 'Etkinlik ilanları haber çıkarımında tekrarlayan düşük verim üretiyor; ayrı etkinlik formatı tasarlanana kadar kapalı.'
   }),
   html('smartshanghai-stage', 'SmartShanghai – Stage & Dance', 'https://www.smartshanghai.com/events/stage/', 8, {
     adapter: 'html_smartshanghai',
     defaultCategory: 'kultur-sanat',
     linkSelector: "a[href*='/event/']",
     pathPattern: /\/event\//i,
-    itemSelector: 'article, .event, .event-row, .card'
+    itemSelector: 'article, .event, .event-row, .card',
+    enabled: false,
+    disabledReason: 'Etkinlik ilanları haber çıkarımında tekrarlayan düşük verim üretiyor; ayrı etkinlik formatı tasarlanana kadar kapalı.'
   }),
   html('cns-lifestyle', 'City News Service – Lifestyle', 'https://www.citynewsservice.cn/articles/cns/lifestyle', 8, {
     adapter: 'next_cns_articles',
