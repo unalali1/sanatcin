@@ -42,7 +42,11 @@ function buildEditorialReport(details = {}) {
   }));
   const results = Array.isArray(details.results) ? details.results : [];
   const imageScores = results.map((item) => Number(item.imageScore)).filter(Number.isFinite);
-  const secondaryScores = results.map((item) => Number(item.secondaryImageScore)).filter(Number.isFinite);
+  const secondaryScores = results
+    .map((item) => item.secondaryImageScore)
+    .filter((value) => value !== null && value !== undefined && value !== '')
+    .map(Number)
+    .filter(Number.isFinite);
   const sourceHealth = sources
     .map((item) => ({
       ...item,
@@ -65,6 +69,7 @@ function buildEditorialReport(details = {}) {
     imageOrigins: distribution(results, 'imageOrigin'),
     averagePrimaryImageScore: average(imageScores),
     averageSecondaryImageScore: average(secondaryScores),
+    secondaryImageCoverage: results.length ? Math.round((secondaryScores.length / results.length) * 1000) / 10 : 0,
     aiRanking: {
       batchesAndRetries: runMetrics.aiDurationsMs.length,
       averageMs: average(runMetrics.aiDurationsMs),
@@ -116,8 +121,8 @@ function parseState(raw = '') {
 
 async function persistSourceHealth(sourceStats = {}) {
   if (!wpCredentials()) return;
-  const pages = await wpRequest('/wp/v2/pages?slug=sanatcin-source-health&status=private&context=edit&per_page=1&_fields=id,content');
-  const existing = Array.isArray(pages) ? pages[0] : null;
+  const posts = await wpRequest('/wp/v2/posts?slug=sanatcin-source-health-state&status=draft&context=edit&per_page=1&_fields=id,content');
+  const existing = Array.isArray(posts) ? posts[0] : null;
   const state = parseState(existing?.content?.raw ?? '');
   const run = {
     runId: context.runId ?? null,
@@ -130,15 +135,15 @@ async function persistSourceHealth(sourceStats = {}) {
     ...state.runs.filter((item) => item?.runId !== run.runId)
   ].slice(0, 30);
   const body = JSON.stringify({
-    title: 'SanatÇin Source Health',
-    slug: 'sanatcin-source-health',
-    status: 'private',
+    title: 'SanatÇin Source Health State',
+    slug: 'sanatcin-source-health-state',
+    status: 'draft',
     content: JSON.stringify(state)
   });
   if (existing?.id) {
-    await wpRequest(`/wp/v2/pages/${existing.id}`, { method: 'POST', body });
+    await wpRequest(`/wp/v2/posts/${existing.id}`, { method: 'POST', body });
   } else {
-    await wpRequest('/wp/v2/pages', { method: 'POST', body });
+    await wpRequest('/wp/v2/posts', { method: 'POST', body });
   }
 }
 
