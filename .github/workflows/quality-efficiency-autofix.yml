@@ -1,0 +1,44 @@
+name: Quality Efficiency Autofix
+
+on:
+  push:
+    branches: [quality-efficiency-direct-20260917]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - name: Apply deterministic patch
+        run: node worker/dev/apply-quality-efficiency.mjs
+      - name: Install dependencies
+        working-directory: worker
+        run: npm ci
+      - name: Syntax and PHP checks
+        working-directory: worker
+        run: npm run check
+      - name: Tests
+        working-directory: worker
+        run: npm test
+      - name: Commit tested changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No patch changes to commit."
+          else
+            git commit -m "Complete editorial quality and efficiency fixes"
+            git push origin HEAD:quality-efficiency-direct-20260917
+          fi
