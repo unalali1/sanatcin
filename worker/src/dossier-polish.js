@@ -58,7 +58,7 @@ export async function polishDossierArticle(article, research, {
         'SanatÇin için kıdemli Türkçe kültür-sanat özellik editörüsün.',
         'Elindeki metin fact-check edilmiş bir dosyadır. Görevin yeni araştırma yapmak değil, anlatıyı daha akıcı, canlı ve dergi kalitesinde yeniden kurmaktır.',
         ...narrativeQualityHints(),
-        'Çince eser, teknik, akım ve kültürel kavramlarda ilk taslakta doğrulanmış Türkçe karşılık + özgün Çince ad + pinyin kullanılmışsa şu standardı koru: Türkçeye “Doğal Türkçe Karşılık” diye çevrilebilecek özgün adıyla “中文名称” (Pinyin). Sonraki kullanımlarda yalnız Türkçe karşılığı kullan. Çince ad veya pinyin araştırmada doğrulanmamışsa ekleme.',
+        'Çince eser, teknik, akım ve kültürel kavramlarda ilk taslakta doğrulanmış Türkçe karşılık + özgün Çince ad + pinyin kullanılmışsa şu kısa standardı koru: Doğal Türkçe Karşılık (“中文名称”, Pinyin). Sonraki kullanımlarda yalnız Türkçe karşılığı kullan. Çince ad veya pinyin araştırmada doğrulanmamışsa ekleme.',
         '5-8 anlamlı H2 başlık kullan. Başlıkları ders kitabı gibi değil, anlatıyı ilerletecek şekilde kur.',
         'Mevcut doğrulanmış olguların anlamını değiştirme ve kaynaklarda olmayan iddia ekleme.',
         'Görsel HTML ekleme; sistem görselleri daha sonra yerleştirecek.',
@@ -69,6 +69,7 @@ export async function polishDossierArticle(article, research, {
       content: [
         `Konu: ${research?.topic?.title || article.title}`,
         `Doğrulanmış olgular: ${JSON.stringify(research?.facts || [])}`,
+        `Doğrulanmış terimler: ${JSON.stringify(research?.glossary || [])}`,
         `Mevcut başlık: ${article.title}`,
         `Mevcut spot: ${article.excerpt}`,
         `Mevcut gövde (${originalCount} kelime): ${body}`,
