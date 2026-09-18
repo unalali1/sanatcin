@@ -174,8 +174,10 @@ export function log(level, message, details = {}) {
   }
 }
 
-process.on('beforeExit', async () => {
+export async function flushLogs() {
   if (persistenceAwaited || !pendingPersistence) return;
   persistenceAwaited = true;
   await pendingPersistence;
-});
+}
+
+process.on('beforeExit', flushLogs);

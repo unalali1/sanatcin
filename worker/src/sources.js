@@ -1,4 +1,4 @@
-export const SOURCE_SET_VERSION = '2026-09-17-en-02';
+export const SOURCE_SET_VERSION = '2026-09-18-en-03';
 
 export const CATEGORIES = [
   { slug: 'kultur-sanat', name: 'Kültür & Sanat' },
@@ -58,10 +58,14 @@ export const SOURCES = [
     defaultCategory: 'moda-tasarim',
     intervalMinutes: 180
   }),
-  rss('dao-fashion-retail', 'Dao Insights – Fashion & Retail', 'https://daoinsights.com/tag/industries-fashion-retail/feed/', 'https://daoinsights.com/tag/industries-fashion-retail/', 8, {
+  html('china-org-style', 'China.org.cn – Style', 'https://www.china.cn/culture/node_9013893.shtml', 9, {
+    adapter: 'html_china_org',
+    priority: 'P1',
+    intervalMinutes: 120,
     defaultCategory: 'moda-tasarim',
-    excludeTerms: ['sponsored', 'advertorial', 'partner content'],
-    intervalMinutes: 180
+    linkSelector: "a[href*='/culture/20']",
+    pathPattern: /\/culture\/20\d{2}-\d{1,2}\/\d{1,2}\/content_\d+\.shtml$/i,
+    includeTerms: ['fashion', 'designer', 'design', 'runway', 'collection', 'garment', 'textile', 'clothing', 'couture', 'costume', 'fashion week']
   }),
   rss('artasiapacific-news', 'ArtAsiaPacific – News', 'https://www.artasiapacific.com/rss/', 'https://www.artasiapacific.com/news/', 9, {
     defaultCategory: 'kultur-sanat',
@@ -125,11 +129,14 @@ export const SOURCES = [
     browser: true,
     waitSelector: 'article, a[href]'
   }),
-  html('cns-exhibitions', 'City News Service – Exhibition Events', 'https://www.citynewsservice.cn/events/exhibition', 8, {
-    adapter: 'html_cns_events',
-    defaultCategory: 'kultur-sanat',
-    linkSelector: 'main a[href]',
-    itemSelector: 'main article, main a:has(article)'
+  html('china-org-movies', 'China.org.cn – Movies & TV', 'https://www.china.cn/culture/node_9013888.shtml', 9, {
+    adapter: 'html_china_org',
+    priority: 'P1',
+    intervalMinutes: 120,
+    defaultCategory: 'sinema',
+    linkSelector: "a[href*='/culture/20']",
+    pathPattern: /\/culture\/20\d{2}-\d{1,2}\/\d{1,2}\/content_\d+\.shtml$/i,
+    includeTerms: ['film', 'cinema', 'movie', 'box office', 'director', 'actor', 'actress', 'animation', 'television', 'drama', 'premiere', 'screening']
   }),
   html('world-of-chinese', 'The World of Chinese', 'https://www.theworldofchinese.com/', 8, {
     adapter: 'html_twoc',
