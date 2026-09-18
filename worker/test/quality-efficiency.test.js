@@ -57,8 +57,14 @@ test('source health taslak kaydı, dinamik sürüm ve hero meta bağlantıları 
   const logger = readFileSync(new URL('../src/logger.js', import.meta.url), 'utf8');
   const index = readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
   const wordpress = readFileSync(new URL('../src/wordpress.js', import.meta.url), 'utf8');
+  const fetchSource = readFileSync(new URL('../src/fetch.js', import.meta.url), 'utf8');
   assert.match(rank, /sanatcin-source-health-state&status=draft/);
   assert.match(logger, /sanatcin-source-health-state&status=draft/);
+  assert.match(logger, /export async function flushLogs/);
   assert.match(index, /WORKER_VERSION/);
+  assert.match(index, /await flushLogs\(\)/);
+  assert.match(index, /process\.exit\(exitCode\)/);
+  assert.match(fetchSource, /VirtualConsole/);
+  assert.match(fetchSource, /dom\.window\.close\(\)/);
   assert.match(wordpress, /sanatcin_hero_eligible/);
 });
