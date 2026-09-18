@@ -57,6 +57,9 @@ test('açıklayıcı yabancı kültür-sanat adları doğal Türkçeye aktarıl�
   assert.match(translate, /açıklayıcı nitelikteyse anlamını koruyan doğal bir Türkçe karşılık üret/);
   assert.match(translate, /Okur İngilizce bilmeden metni anlayabilmeli/);
   assert.match(translate, /gereksiz biçimde İngilizce bırakılmış açıklayıcı sergi/);
+  assert.match(translate, /Türkçeye “Doğal Türkçe Karşılık” diye çevrilebilecek özgün adıyla “中文名称” \(Pinyin\)/);
+  assert.match(translate, /İlk kullanımdan sonra yalnız doğal Türkçe karşılığı kullan/);
+  assert.match(translate, /Kaynakta olmayan Çince adı asla uydurma/);
   assert.doesNotMatch(translate, /Yerleşik karşılığı olmayan eser ve etkinlik adlarını uydurma biçimde çevirmeden özgün adıyla koru/);
 });
 
@@ -72,7 +75,7 @@ test('başlık üretimi katalog kalıbı ve klişe heyecan dilinden kaçınır',
   assert.match(translate, /yer adı \+ iki isimden oluşan katalog kalıbına bırakma/);
   assert.match(translate, /“heyecanı yaşandı”/);
   assert.match(translate, /daha doğal bir fiille yeniden kur/);
-  assert.match(translate, /fact-ledger-turkish-newsroom-v9-headline-naturalness/);
+  assert.match(translate, /fact-ledger-turkish-newsroom-v10-native-title-standard/);
 });
 
 test('source health taslak kaydı, dinamik sürüm ve hero meta bağlantıları kodda bulunur', () => {
