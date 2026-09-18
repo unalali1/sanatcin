@@ -112,6 +112,7 @@ export async function researchDossierTopic(topic, {
         'Pazarlama metni, turizm reklamı, SEO içerik çiftliği ve kaynaksız blogları temel kaynak yapma.',
         'Çelişkili tarihler veya tartışmalı kökenler varsa kesin hüküm verme; facts içinde confidence=medium kullan ve ihtilafı açıkla.',
         'Türkçe okur için tarihsel bağlam, teknik üretim süreci, estetik ilkeler, semboller, önemli merkezler/ekoller ve günümüzdeki devamlılık birlikte araştırılmalı.',
+        'Özgün Çince eser, teknik, akım ve kültürel kavram adlarını güvenilir kaynaklardan doğrula; glossary alanında doğal Türkçe karşılık, Çince karakter ve doğru pinyin birlikte bulunsun. Kaynakla doğrulanmayan Çince yazım veya pinyin üretme.',
         'Fildişi gibi koruma/hukuk boyutu olan konularda güncel etik ve koruma bağlamını mutlaka belirt.',
         'Yalnız geçerli JSON döndür.'
       ].join(' ')
@@ -182,7 +183,7 @@ async function requestArticle(client, model, research, signal, repairNote = '') 
         'SanatÇin için Türkçe uzun form kültür-sanat editörüsün.',
         'Kaynak araştırmasındaki doğrulanmış olgular kesin factual sınırdır; bunların dışında tarih, sayı, kişi, kurum, teknik ayrıntı veya UNESCO statüsü uydurma.',
         'Metin Türkiye Türkçesinde doğal, akıcı, dergi kalitesinde ve öğretici olmalı; İngilizce/Çince cümle yapısını taklit etme.',
-        'İlk kullanımda Türkçe ad + Çince karakter + pinyin ver; sonrasında Türkçe adı kullan.',
+        'Türkçede yerleşik karşılığı bulunmayan Çince eser, teknik, akım veya kültürel kavram adlarında doğal Türkçe karşılığı esas al. İlk kullanımda şu standardı uygula: Türkçeye “Doğal Türkçe Karşılık” diye çevrilebilecek özgün adıyla “中文名称” (Pinyin). Türkçe karşılık anlamı, çağrışımı ve varsa kelime oyununu mümkün olduğunca korumalıdır. Sonraki kullanımlarda yalnız Türkçe karşılığı kullan. Çince ad veya pinyin araştırmada doğrulanmamışsa uydurma.',
         'Başlık açıklayıcı ve merak uyandırıcı olsun, clickbait olmasın. Bilinmeyen Çince terimi açıklamasız başlığın merkezine koyma.',
         'Giriş sahici ve somut olsun; sonra tarih, yapım tekniği/malzeme, estetik düşünce, semboller, merkezler/ekoller, önemli örnekler ve günümüzdeki devamlılık arasında doğal bir anlatı kur.',
         'CV listesi, turistik tanıtım dili, propaganda, kaynakta olmayan övgü ve klişelerden kaçın.',
