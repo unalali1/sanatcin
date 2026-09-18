@@ -25,7 +25,11 @@ function escapeHtml(value) {
 }
 
 function cleanString(value) {
-  return String(value ?? '').replace(/\s+/g, ' ').trim();
+  return String(value ?? '')
+    .replace(/\bOrta Sonbahar Bayramı\b/giu, 'Güz Ortası Bayramı')
+    .replace(/\bOrta Sonbahar Festivali\b/giu, 'Güz Ortası Bayramı')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function normalizeDraft(article, draft) {
@@ -141,6 +145,7 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
           '“Ambassador”, “envoy”, “representative” gibi unvanları bağlamına göre çevir; marka elçisini veya moda haftası temsilcisini diplomatik büyükelçi gibi gösterme.',
           'Ay ve gün içeren geçmiş/gelecek olaylarda yıl belirsizliği doğuracaksa kaynakta bulunan yılı Türkçe metne ekle. Haberin yayımlandığı tarihe göre “kasım ayında” gibi ifadelerin yanlış zaman algısı yaratmasına izin verme.',
           'Kaynakta geçen her ayrıntıyı kullanmak zorunda değilsin; anlamı bozmayan özetleme, sadeleştirme ve seçme olgu hatası değildir.',
+          'Çin’deki Mid-Autumn Festival için Türkçede “Güz Ortası Bayramı” karşılığını kullan; “Orta Sonbahar Bayramı” veya “Orta Sonbahar Festivali” yazma.',
           'Başlığı somutlaştır; spot, başlık ve giriş tekrarlarını gider. Zorunlu olmayan İngilizce sözcükleri, uzun yabancı etkinlik/sergi adlarını, yapay tamlamaları, ham Pinyin zincirlerini ve propaganda dilini temizle. Okur İngilizce bilmeden metni anlayabilmeli.',
           'Başlık Türkiye’deki okuyucunun dış bağlam bilmeden tek okumada anlayacağı kadar açıklayıcı olmalı. Türkiye’de geniş ölçüde bilinmeyen bir etkinlik, program, kurum veya marka adını tek başına başlığın merkezine koyma; önce bunun ne olduğunu Türkçe olarak anlat.',
           'Başlıkta mümkünse haberin en ayırt edici somut unsurunu öne çıkar: önemli ödül, sıra dışı mekân, güçlü sayı, ilk olma, tanınmış isim veya özgün kültürel gelişme. Clickbait yapma ve kaynakta olmayan üstünlük ekleme. Başlığı yalnız yer adı + iki isimden oluşan katalog kalıbına bırakma; kaynak izin veriyorsa somut bir eylem, gelişme veya etkinlik türüyle tamamla.',
@@ -195,6 +200,7 @@ async function polishTurkishNews(article, factSheet, draft, { signal, completeJs
           'Çeviri yanlış anlaşılmasına açık meslek/unvanları bağlama göre düzelt. Marka elçisi ile diplomatik büyükelçiyi, küratör ile yönetici/temsilciyi birbirine karıştırma.',
           'Tarih ve zaman bağlamını denetle. Kaynakta yıl varsa ve “kasım ayında” gibi ifade okuyucuyu yanlış yıla götürebilecekse yılı açıkça yaz.',
           'Olgu fişindeki gerçekleri, kişi/kurum/marka adlarını, tarihleri, sayıları ve alıntı anlamlarını kesinlikle değiştirme. Eser, sergi, etkinlik, belgesel ve program adlarının anlamını koru; açıklayıcı yabancı adları doğal Türkçeye aktar. Kaynakta olmayan hiçbir bilgi ekleme.',
+          'Mid-Autumn Festival terminolojisini denetle: Türkçe metinde yalnız “Güz Ortası Bayramı” kullan.',
           'Bir ifade zaten doğal Türkçeyse sırf değişiklik yapmak için değiştirme. Ama İngilizce veya Çince cümle iskeletini taşıyan ifadeleri yeniden kur. Metinde gereksiz biçimde İngilizce bırakılmış açıklayıcı sergi, etkinlik, belgesel veya program adı varsa Türkçeleştir.',
           'Haber değerine göre 3-7 kısa paragraf, doğal bir başlık ve tek cümlelik spot üret. Küçük haberi sırf uzunluk hedefi için şişirme.',
           'Yanıtlamadan önce başlığı sessizce tek okumada anlaşılırlık, somutluk, Türkçe doğallık ve haber ritmi açısından kontrol et. Yer adı + isim listesi, çeviri kokusu veya takvim başlığı hissi veriyorsa daha doğal bir fiille yeniden kur.',
