@@ -4,13 +4,17 @@ import { dateFromUrl, discoverFromFeedXml, discoverFromHtml, extractBestArticleT
 import { SOURCES, SOURCE_SET_VERSION } from '../src/sources.js';
 
 test('Excel kaynak havuzu eksiksiz ve eski havuzdan bağımsızdır', () => {
-  assert.equal(SOURCE_SET_VERSION, '2026-09-17-en-02');
+  assert.equal(SOURCE_SET_VERSION, '2026-09-18-en-03');
   assert.equal(SOURCES.length, 17);
   assert.equal(SOURCES.filter((source) => source.enabled).length, 14);
-  assert.equal(SOURCES.filter((source) => source.mode === 'rss').length, 6);
+  assert.equal(SOURCES.filter((source) => source.mode === 'rss').length, 5);
   assert.equal(SOURCES.find((source) => source.id === 'ocula-magazine')?.enabled, false);
   assert.equal(SOURCES.find((source) => source.id === 'smartshanghai-exhibitions')?.enabled, false);
   assert.equal(SOURCES.find((source) => source.id === 'smartshanghai-stage')?.enabled, false);
+  assert.equal(SOURCES.find((source) => source.id === 'china-org-movies')?.defaultCategory, 'sinema');
+  assert.equal(SOURCES.find((source) => source.id === 'china-org-style')?.defaultCategory, 'moda-tasarim');
+  assert.equal(SOURCES.some((source) => source.id === 'dao-fashion-retail'), false);
+  assert.equal(SOURCES.some((source) => source.id === 'cns-exhibitions'), false);
   for (const retired of ['xinhua-zh-culture', 'global-times-arts', 'scmp-arts-culture', '1905-film', 'vogue-china']) {
     assert.equal(SOURCES.some((source) => source.id === retired), false);
   }
@@ -26,6 +30,7 @@ test('izleme parametrelerini ve çift eğik çizgiyi canonical URL’den kaldır
 test('China Daily ve Xinhua tarihlerini URL yolundan çıkarır', () => {
   assert.equal(dateFromUrl('https://www.chinadaily.com.cn/a/202609/11/WS1.html'), '2026-09-10T16:00:00.000Z');
   assert.equal(dateFromUrl('https://english.news.cn/20260911/abcdef/c.html'), '2026-09-10T16:00:00.000Z');
+  assert.equal(dateFromUrl('https://www.china.cn/culture/2026-09/10/content_118688751.shtml'), '2026-09-09T16:00:00.000Z');
 });
 
 test('China Daily adaptörü yalnız tarihli haber bağlantılarını alır', () => {
@@ -62,6 +67,22 @@ test('RSS adaptörü kaynak konu filtresini uygular', async () => {
   const items = await discoverFromFeedXml(xml, source);
   assert.equal(items.length, 1);
   assert.equal(items[0].url, 'https://www.sixthtone.com/news/1');
+});
+
+
+test('China.org.cn film ve moda sayfaları yalnız tarihli kültür haberlerini aday yapar', () => {
+  const movieSource = SOURCES.find((item) => item.id === 'china-org-movies');
+  const styleSource = SOURCES.find((item) => item.id === 'china-org-style');
+  const movieHtml = `
+    <main><article><a href="/culture/2026-09/10/content_118688751.shtml">Chinese film premiere opens in Australia</a><p>A new Chinese film premiere and cinema release.</p></article></main>`;
+  const styleHtml = `
+    <main><article><a href="/culture/2026-09/11/content_118688999.shtml">2026 China Fashion Week concludes in Beijing</a><p>Designers presented new collections on the runway.</p></article></main>`;
+  const movieItems = discoverFromHtml(movieHtml, movieSource);
+  const styleItems = discoverFromHtml(styleHtml, styleSource);
+  assert.equal(movieItems.length, 1);
+  assert.equal(styleItems.length, 1);
+  assert.equal(movieItems[0].publishedAt, '2026-09-09T16:00:00.000Z');
+  assert.equal(styleItems[0].publishedAt, '2026-09-10T16:00:00.000Z');
 });
 
 test('Readability kısa kaldığında JSON-LD haber gövdesini kullanır', () => {
