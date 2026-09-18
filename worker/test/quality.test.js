@@ -11,6 +11,24 @@ test('Çince karakterleri yakalar', () => {
   }).some((item) => item.includes('Çince')));
 });
 
+test('Türkçe karşılıkla açıklanan özgün Çince adı ilk kullanımda kabul eder', () => {
+  const intro = 'Çin’in yeni dönem dizisi, Türkçeye “Orkide Kokusu Hâlâ Aynı” diye çevrilebilecek özgün adıyla “兰香如故” (Lán Xiāng Rú Gù), çekimler için kurulan geleneksel bahçesiyle izleyiciyle buluştu.';
+  const paragraphs = [
+    intro,
+    'Yapım ekibi, bahçenin yalnızca görkemli görünmesini değil, gerçekten yaşanmış bir mekân hissi vermesini amaçladı ve avlular ile köşkleri aylar boyunca yeniden düzenledi.',
+    'Dizinin görsel dünyasında Jiangnan bahçelerinden yararlanıldı; su, bitki örtüsü ve geleneksel mimari unsurlar aynı yerleşim içinde bir araya getirildi.',
+    'Yapımcılar, ayrıntılı fiziksel setin karakterlerin gündelik hayatını daha inandırıcı bir atmosfer içinde anlatmaya yardımcı olduğunu belirtti.'
+  ];
+  const text = `${paragraphs.join('\\n\\n')} ${'Bu yaklaşım dönemin gündelik yaşamını daha doğal bir görsel dille aktarmayı amaçlıyor. '.repeat(8)}`;
+  const issues = translationIssues({
+    title: 'Bir dönem dizisi için sekiz ayda geleneksel Çin bahçesi kuruldu',
+    excerpt: 'Çin’in yeni dönem dizisi için sekiz ayda kurulan geleneksel bahçe seti, yapımın dönem atmosferini gerçek mekân duygusuyla güçlendiriyor.',
+    paragraphs,
+    text
+  });
+  assert.ok(!issues.some((item) => item.includes('Çince')));
+});
+
 test('Akıcı Türkçe metni kabul eder', () => {
   const issues = translationIssues({
     title: 'Pekin’de kültürel mirasa çağdaş yöntemlerle yeni bir bakış',
