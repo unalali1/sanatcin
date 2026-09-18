@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import * as cheerio from 'cheerio';
 import Parser from 'rss-parser';
-import { JSDOM } from 'jsdom';
+import { JSDOM, VirtualConsole } from 'jsdom';
 import { Readability } from '@mozilla/readability';
 import { chromium } from 'playwright';
 import { config } from './config.js';
@@ -10,6 +10,13 @@ import { assertSourceContentQuality, isUsableImageUrl } from './quality.js';
 const parser = new Parser({ timeout: config.requestTimeoutMs });
 const defaultItemSelector = 'article, li, .item, .news-item, .card, .story, .post';
 const defaultLinkSelector = 'article a[href], main a[href], .content a[href], .list a[href], a[href]';
+
+function createDom(html, url = 'https://example.com/') {
+  // JSDOM's internal CSS parser can emit thousands of non-fatal lines for modern site CSS.
+  // Keep those implementation warnings out of Railway logs; application errors still throw normally.
+  const virtualConsole = new VirtualConsole();
+  return new JSDOM(html, { url, virtualConsole });
+}
 
 export function sourceHash(url) {
   return crypto.createHash('sha256').update(url).digest('hex');
@@ -98,8 +105,9 @@ export function dateFromUrl(value = '') {
   }
   const compact = pathname.match(/\/(20\d{2})(\d{2})(\d{2})(?:\/|$)/);
   const chinaDaily = pathname.match(/\/a\/(20\d{2})(\d{2})\/(\d{2})(?:\/|$)/);
+  const dashed = pathname.match(/\/(20\d{2})-(\d{1,2})\/(\d{1,2})(?:\/|$)/);
   const divided = pathname.match(/\/(20\d{2})\/(\d{1,2})\/(\d{1,2})(?:\/|$)/);
-  const match = compact || chinaDaily || divided;
+  const match = compact || chinaDaily || dashed || divided;
   if (!match) return null;
   return dateValue(`${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}T00:00:00+08:00`);
 }
@@ -245,27 +253,32 @@ function jsonLdArticles($) {
   return articles;
 }
 
-export function extractBestArticleTextFromHtml(html, url = 'https://example.com/') {
+export function extractBestArticleTextFromHtml(html, url = 'https://example.com/', { dom: existingDom = null, readable: existingReadable = null } = {}) {
   const $ = cheerio.load(html);
-  const dom = new JSDOM(html, { url });
-  const readable = new Readability(dom.window.document).parse();
-  const selectors = [
-    'article [itemprop="articleBody"] p',
-    '[itemprop="articleBody"] p',
-    'article .article-content p',
-    'article .post-content p',
-    'article .entry-content p',
-    'article p',
-    'main article p'
-  ];
-  const candidates = [readable?.textContent ?? '', ...jsonLdArticles($)];
-  for (const selector of selectors) {
-    const text = $(selector).map((_, element) => $(element).text().replace(/\s+/g, ' ').trim()).get().filter(Boolean).join('\n\n');
-    if (text) candidates.push(text);
+  const dom = existingDom ?? createDom(html, url);
+  const ownsDom = !existingDom;
+  try {
+    const readable = existingReadable ?? new Readability(dom.window.document).parse();
+    const selectors = [
+      'article [itemprop="articleBody"] p',
+      '[itemprop="articleBody"] p',
+      'article .article-content p',
+      'article .post-content p',
+      'article .entry-content p',
+      'article p',
+      'main article p'
+    ];
+    const candidates = [readable?.textContent ?? '', ...jsonLdArticles($)];
+    for (const selector of selectors) {
+      const text = $(selector).map((_, element) => $(element).text().replace(/\s+/g, ' ').trim()).get().filter(Boolean).join('\n\n');
+      if (text) candidates.push(text);
+    }
+    return candidates
+      .map((value) => String(value).replace(/\n{3,}/g, '\n\n').replace(/[ \t]+/g, ' ').trim())
+      .sort((left, right) => right.length - left.length)[0] ?? '';
+  } finally {
+    if (ownsDom) dom.window.close();
   }
-  return candidates
-    .map((value) => String(value).replace(/\n{3,}/g, '\n\n').replace(/[ \t]+/g, ' ').trim())
-    .sort((left, right) => right.length - left.length)[0] ?? '';
 }
 
 function imagesFromSrcset(value = '') {
@@ -282,41 +295,45 @@ export async function extractArticle(candidate) {
   }
 
   const $ = cheerio.load(html);
-  const dom = new JSDOM(html, { url: candidate.url });
-  const article = new Readability(dom.window.document).parse();
-  const publishedAt = candidate.publishedAt || dateValue(
-    $('meta[property="article:published_time"]').attr('content') ||
-    $('meta[name="publishdate"]').attr('content') ||
-    $('meta[name="publish_date"]').attr('content') ||
-    $('meta[itemprop="datePublished"]').attr('content') ||
-    $('time').first().attr('datetime')
-  ) || dateFromText($('body').text().slice(0, 5000)) || dateFromUrl(candidate.url);
-  const text = extractBestArticleTextFromHtml(html, candidate.url);
-  if (candidate.source.rejectBodyPatterns?.some((pattern) => pattern.test(text))) {
-    throw new Error('Ödeme duvarlı veya üyelik gerektiren haber gövdesi atlandı.');
+  const dom = createDom(html, candidate.url);
+  try {
+    const article = new Readability(dom.window.document).parse();
+    const publishedAt = candidate.publishedAt || dateValue(
+      $('meta[property="article:published_time"]').attr('content') ||
+      $('meta[name="publishdate"]').attr('content') ||
+      $('meta[name="publish_date"]').attr('content') ||
+      $('meta[itemprop="datePublished"]').attr('content') ||
+      $('time').first().attr('datetime')
+    ) || dateFromText($('body').text().slice(0, 5000)) || dateFromUrl(candidate.url);
+    const text = extractBestArticleTextFromHtml(html, candidate.url, { dom, readable: article });
+    if (candidate.source.rejectBodyPatterns?.some((pattern) => pattern.test(text))) {
+      throw new Error('Ödeme duvarlı veya üyelik gerektiren haber gövdesi atlandı.');
+    }
+    assertSourceContentQuality(text);
+
+    const readable = cheerio.load(article?.content ?? '');
+    const rawImages = [
+      ...readable('img').map((_, element) => readable(element).attr('data-src') || readable(element).attr('data-lazy-src') || readable(element).attr('data-original') || readable(element).attr('src')).get(),
+      ...readable('img').map((_, element) => imagesFromSrcset(readable(element).attr('srcset') || readable(element).attr('data-srcset'))).get().flat(),
+      $('meta[property="og:image"]').attr('content'),
+      $('meta[name="twitter:image"]').attr('content'),
+      ...$('article img, main img, .article img, .content img').map((_, element) => $(element).attr('data-src') || $(element).attr('data-lazy-src') || $(element).attr('data-original') || $(element).attr('src')).get(),
+      ...$('article img, main img, .article img, .content img').map((_, element) => imagesFromSrcset($(element).attr('srcset') || $(element).attr('data-srcset'))).get().flat()
+    ];
+    const sourceImageUrls = [...new Set(rawImages
+      .filter(Boolean)
+      .map((image) => normalizeUrl(image, candidate.url))
+      .filter((image) => image && isUsableImageUrl(image)))];
+
+    return {
+      ...candidate,
+      title: cleanTitle(article?.title || candidate.title),
+      publishedAt,
+      sourceImageUrl: sourceImageUrls[0] ?? null,
+      sourceImageUrls,
+      text
+    };
+  } finally {
+    dom.window.close();
   }
-  assertSourceContentQuality(text);
-
-  const readable = cheerio.load(article?.content ?? '');
-  const rawImages = [
-    ...readable('img').map((_, element) => readable(element).attr('data-src') || readable(element).attr('data-lazy-src') || readable(element).attr('data-original') || readable(element).attr('src')).get(),
-    ...readable('img').map((_, element) => imagesFromSrcset(readable(element).attr('srcset') || readable(element).attr('data-srcset'))).get().flat(),
-    $('meta[property="og:image"]').attr('content'),
-    $('meta[name="twitter:image"]').attr('content'),
-    ...$('article img, main img, .article img, .content img').map((_, element) => $(element).attr('data-src') || $(element).attr('data-lazy-src') || $(element).attr('data-original') || $(element).attr('src')).get(),
-    ...$('article img, main img, .article img, .content img').map((_, element) => imagesFromSrcset($(element).attr('srcset') || $(element).attr('data-srcset'))).get().flat()
-  ];
-  const sourceImageUrls = [...new Set(rawImages
-    .filter(Boolean)
-    .map((image) => normalizeUrl(image, candidate.url))
-    .filter((image) => image && isUsableImageUrl(image)))];
-
-  return {
-    ...candidate,
-    title: cleanTitle(article?.title || candidate.title),
-    publishedAt,
-    sourceImageUrl: sourceImageUrls[0] ?? null,
-    sourceImageUrls,
-    text
-  };
 }
