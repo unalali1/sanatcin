@@ -29,7 +29,7 @@ SanatÇin'de haftada bir kez geleneksel Çin sanatları hakkında kaynak temelli
 
 - Hedef uzunluk: 1.200–1.800 Türkçe kelime.
 - 6–10 anlamlı H2 ara başlık.
-- İlk kullanımda Türkçe ad + Çince karakter + pinyin.
+- Türkçede yerleşik karşılığı bulunmayan Çince eser, teknik, akım ve kültürel kavramlarda ilk kullanım standardı: **Türkçeye “Doğal Türkçe Karşılık” diye çevrilebilecek özgün adıyla “中文名称” (Pinyin)**. Sonraki kullanımlarda yalnız Türkçe karşılık kullanılır; doğrulanmamış Çince yazım veya pinyin üretilmez.
 - Tarih, hanedan, teknik, malzeme, coğrafya, kişi/usta ve UNESCO statüleri kaynakla doğrulanmadan kesin ifade edilmez.
 - Pazarlama, turizm tanıtımı, propaganda, kaynaksız övgü ve çeviri kokan cümleler kullanılmaz.
 - Kaynaklar yazının sonunda `Kaynaklar ve ileri okuma` bölümünde listelenir.
