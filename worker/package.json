@@ -10,7 +10,7 @@
     "start": "node src/index.js",
     "newsletter": "node src/newsletter-run.js",
     "dossier": "node src/dossier-run.js",
-    "check": "node --check src/index.js && node --check src/config.js && node --check src/logger.js && node --check src/rank.js && node --check src/wordpress.js && node --check src/secondary-image.js && node --check src/newsletter.js && node --check src/newsletter-score.js && node --check src/newsletter-dossier.js && node --check src/newsletter-run.js && node --check src/dossier-topics.js && node --check src/dossier-research.js && node --check src/dossier-polish.js && node --check src/dossier-images.js && node --check src/dossier-wordpress.js && node --check src/dossier-run.js && node --check src/sources.js && node --check src/fetch.js && node --check dev/brevo-admin.mjs && node dev/check-php.mjs",
+    "check": "node --check src/index.js && node --check src/translate.js && node --check src/quality.js && node --check src/config.js && node --check src/logger.js && node --check src/rank.js && node --check src/wordpress.js && node --check src/secondary-image.js && node --check src/newsletter.js && node --check src/newsletter-score.js && node --check src/newsletter-dossier.js && node --check src/newsletter-run.js && node --check src/dossier-topics.js && node --check src/dossier-research.js && node --check src/dossier-polish.js && node --check src/dossier-images.js && node --check src/dossier-wordpress.js && node --check src/dossier-run.js && node --check src/sources.js && node --check src/fetch.js && node --check dev/brevo-admin.mjs && node dev/check-php.mjs",
     "test": "node --test"
   },
   "devDependencies": {
