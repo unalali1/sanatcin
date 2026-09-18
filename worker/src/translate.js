@@ -143,15 +143,15 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
           'Kaynakta geçen her ayrıntıyı kullanmak zorunda değilsin; anlamı bozmayan özetleme, sadeleştirme ve seçme olgu hatası değildir.',
           'Başlığı somutlaştır; spot, başlık ve giriş tekrarlarını gider. Zorunlu olmayan İngilizce sözcükleri, uzun yabancı etkinlik/sergi adlarını, yapay tamlamaları, ham Pinyin zincirlerini ve propaganda dilini temizle. Okur İngilizce bilmeden metni anlayabilmeli.',
           'Başlık Türkiye’deki okuyucunun dış bağlam bilmeden tek okumada anlayacağı kadar açıklayıcı olmalı. Türkiye’de geniş ölçüde bilinmeyen bir etkinlik, program, kurum veya marka adını tek başına başlığın merkezine koyma; önce bunun ne olduğunu Türkçe olarak anlat.',
-          'Başlıkta mümkünse haberin en ayırt edici somut unsurunu öne çıkar: önemli ödül, sıra dışı mekân, güçlü sayı, ilk olma, tanınmış isim veya özgün kültürel gelişme. Clickbait yapma ve kaynakta olmayan üstünlük ekleme.',
-          '“Çin bağlantılı”, “sahnede”, “buluştu”, “görücüye çıktı” gibi muğlak/kalıp ifadeler yerine kaynak izin veriyorsa daha kesin özne ve fiil kullan.',
-          'Başlık doğal ve somut bir Türkçe cümle olsun; kaynak başlığı kopyalanmasın. 32-82 karakter kullan, mümkünse 45-75 karakterde kal.',
+          'Başlıkta mümkünse haberin en ayırt edici somut unsurunu öne çıkar: önemli ödül, sıra dışı mekân, güçlü sayı, ilk olma, tanınmış isim veya özgün kültürel gelişme. Clickbait yapma ve kaynakta olmayan üstünlük ekleme. Başlığı yalnız yer adı + iki isimden oluşan katalog kalıbına bırakma; kaynak izin veriyorsa somut bir eylem, gelişme veya etkinlik türüyle tamamla.',
+          '“Çin bağlantılı”, “sahnede”, “buluştu”, “görücüye çıktı”, “heyecanı yaşandı” gibi muğlak veya klişe ifadeler yerine kaynak izin veriyorsa daha kesin özne ve fiil kullan. “X’te Y ve Z” gibi eksik isim dizilerini yalnız güçlü bir dergi başlığı etkisi yaratıyorsa kullan; sıradan haberlerde cümleyi doğal bir fiille tamamla.',
+          'Başlık doğal, akıcı ve somut bir Türkçe cümle olsun; kaynak başlığı kopyalanmasın. Okunduğunda çeviri, etkinlik takvimi veya kategori etiketi gibi durmamalı. 32-82 karakter kullan, mümkünse 45-75 karakterde kal.',
           'Spot başlığı tekrarlamayan, haberin önemini açıklayan tek cümle olsun; 105-180 karakter kullan, mümkünse 115-165 karakterde kal.',
           'Haber değerine göre 3-7 kısa paragraf üret. Küçük bir atama veya sergi haberini gereksiz ayrıntıyla uzatma; güçlü trend ve dosya haberinde gerekli bağlamı koru. Gövde en az 600 karakter olmalı ve Çince karakter içermemeli.',
           'Kaynakta olmayan bilgi, alıntı, yorum veya kesinlik ekleme. Doğrulanamayan bir boşluğu tahminle doldurma.',
           'Düzeltilebilir dil, uzunluk veya biçim sorunu gördüğünde reddetme; metni düzelt ve accepted=true ver.',
           'Yalnız kaynak haber yazmaya gerçekten yetmiyorsa, önemli bir olgu çelişkisi giderilemiyorsa veya güvenilir metin kaynak dışı bilgi eklemeden kurulamıyorsa accepted=false ver.',
-          'Yanıtlamadan önce başlığı sessizce şu üç soruyla kontrol et: Türk okur başlığı anlıyor mu, haberin ayırt edici unsurunu görüyor mu, başlık kaynak dilden çevrilmiş gibi mi duruyor? Sorun varsa başlığı yeniden yaz.',
+          'Yanıtlamadan önce başlığı sessizce şu beş soruyla kontrol et: Türk okur başlığı tek okumada anlıyor mu; haberin ayırt edici unsurunu görüyor mu; başlık kaynak dilden çevrilmiş gibi mi duruyor; yalnız isimleri yan yana diziyor mu; daha doğal ve canlı ama aynı ölçüde doğru bir Türkçe fiille kurulabilir mi? Sorun varsa başlığı yeniden yaz.',
           'Yalnız geçerli JSON ver.'
         ].join(' ')
       },
@@ -197,7 +197,7 @@ async function polishTurkishNews(article, factSheet, draft, { signal, completeJs
           'Olgu fişindeki gerçekleri, kişi/kurum/marka adlarını, tarihleri, sayıları ve alıntı anlamlarını kesinlikle değiştirme. Eser, sergi, etkinlik, belgesel ve program adlarının anlamını koru; açıklayıcı yabancı adları doğal Türkçeye aktar. Kaynakta olmayan hiçbir bilgi ekleme.',
           'Bir ifade zaten doğal Türkçeyse sırf değişiklik yapmak için değiştirme. Ama İngilizce veya Çince cümle iskeletini taşıyan ifadeleri yeniden kur. Metinde gereksiz biçimde İngilizce bırakılmış açıklayıcı sergi, etkinlik, belgesel veya program adı varsa Türkçeleştir.',
           'Haber değerine göre 3-7 kısa paragraf, doğal bir başlık ve tek cümlelik spot üret. Küçük haberi sırf uzunluk hedefi için şişirme.',
-          'Yanıtlamadan önce başlığı sessizce tek okumada anlaşılırlık, somutluk ve Türkçe doğallık açısından kontrol et; gerekiyorsa yeniden yaz.',
+          'Yanıtlamadan önce başlığı sessizce tek okumada anlaşılırlık, somutluk, Türkçe doğallık ve haber ritmi açısından kontrol et. Yer adı + isim listesi, çeviri kokusu veya takvim başlığı hissi veriyorsa daha doğal bir fiille yeniden kur.',
           'Yalnız geçerli JSON ver.'
         ].join(' ')
       },
@@ -323,5 +323,5 @@ export async function translateArticle(article, { signal, completeJson = request
     title: final.draft.title,
     elapsedSeconds: elapsedSeconds(startedAt)
   });
-  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v8-natural-turkish' };
+  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v9-headline-naturalness' };
 }
