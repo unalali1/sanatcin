@@ -147,11 +147,12 @@ export async function verifyDossierResearch(research, {
         'Aşağıdaki her olguyu web üzerinden yeniden kontrol et.',
         'verified yalnız en az bir güvenilir kaynakla desteklenen iddialara verilmeli.',
         'Tarih, hanedan, UNESCO statüsü, teknik süreç veya köken konusunda belirsizlik varsa caution; yanlışsa drop.',
+        'Ayrıca glossary içindeki Türkçe karşılık, Çince karakter ve pinyin üçlüsünü kaynaklarla ayrı ayrı doğrula. Yalnız üçü de destekleniyorsa verified ver; düzeltilebiliyorsa corrected, doğrulanamıyorsa drop ver.',
         'Yalnız geçerli JSON döndür.'
       ].join(' ')
     }, {
       role: 'user',
-      content: `Konu: ${topicDisplayName(research.topic)}\nOlgular: ${JSON.stringify(research.facts)}\nJSON: {"checks":[{"id":1,"status":"verified|caution|drop","correctedClaim":"gerekirse düzeltilmiş ifade","sourceUrls":["https://..."]}]}`
+      content: `Konu: ${research.topic.title}\nOlgular: ${JSON.stringify(research.facts)}\nDoğrulanacak terimler: ${JSON.stringify(research.glossary.map((item, index) => ({ id: index + 1, ...item })))}\nJSON: {"checks":[{"id":1,"status":"verified|caution|drop","correctedClaim":"gerekirse düzeltilmiş ifade","sourceUrls":["https://..."]}],"glossaryChecks":[{"id":1,"status":"verified|corrected|drop","tr":"doğrulanmış Türkçe karşılık","zh":"doğrulanmış Çince karakterler","pinyin":"doğrulanmış pinyin","sourceUrls":["https://..."]}]}`
     }]
   }, signal);
   const raw = parseJson(response.output_text);
@@ -166,7 +167,20 @@ export async function verifyDossierResearch(research, {
     facts.push({ ...fact, claim, sourceUrls, verification: check.status === 'caution' ? 'caution' : 'verified' });
   }
   if (facts.length < 9) throw new Error(`İkinci fact-check sonrası yeterli olgu kalmadı: ${facts.length}.`);
-  return { ...research, facts };
+  const glossaryChecks = new Map((Array.isArray(raw?.glossaryChecks) ? raw.glossaryChecks : []).map((x) => [Number(x.id), x]));
+  const glossary = [];
+  for (const [index, item] of research.glossary.entries()) {
+    const check = glossaryChecks.get(index + 1);
+    if (!check || check.status === 'drop') continue;
+    const tr = text(check.tr || item.tr).slice(0, 120);
+    const zh = text(check.zh || item.zh).slice(0, 80);
+    const pinyin = text(check.pinyin || item.pinyin).slice(0, 100);
+    const sourceUrls = [...new Set((Array.isArray(check.sourceUrls) ? check.sourceUrls : []).map(canonicalUrl).filter(Boolean))].slice(0, 5);
+    if (!tr || !zh || !pinyin || !sourceUrls.length) continue;
+    glossary.push({ ...item, tr, zh, pinyin, sourceUrls, verification: check.status === 'corrected' ? 'corrected' : 'verified' });
+  }
+  if (!glossary.length) throw new Error('İkinci fact-check sonrası doğrulanmış Çince terim kalmadı.');
+  return { ...research, facts, glossary };
 }
 
 function sourceListHtml(sources) {
@@ -183,7 +197,7 @@ async function requestArticle(client, model, research, signal, repairNote = '') 
         'SanatÇin için Türkçe uzun form kültür-sanat editörüsün.',
         'Kaynak araştırmasındaki doğrulanmış olgular kesin factual sınırdır; bunların dışında tarih, sayı, kişi, kurum, teknik ayrıntı veya UNESCO statüsü uydurma.',
         'Metin Türkiye Türkçesinde doğal, akıcı, dergi kalitesinde ve öğretici olmalı; İngilizce/Çince cümle yapısını taklit etme.',
-        'Türkçede yerleşik karşılığı bulunmayan Çince eser, teknik, akım veya kültürel kavram adlarında doğal Türkçe karşılığı esas al. İlk kullanımda şu standardı uygula: Türkçeye “Doğal Türkçe Karşılık” diye çevrilebilecek özgün adıyla “中文名称” (Pinyin). Türkçe karşılık anlamı, çağrışımı ve varsa kelime oyununu mümkün olduğunca korumalıdır. Sonraki kullanımlarda yalnız Türkçe karşılığı kullan. Çince ad veya pinyin araştırmada doğrulanmamışsa uydurma.',
+        'Türkçede yerleşik karşılığı bulunmayan Çince eser, teknik, akım veya kültürel kavram adlarında doğal Türkçe karşılığı esas al. İlk kullanımda kısa standardı uygula: Doğal Türkçe Karşılık (“中文名称”, Pinyin). Türkçe karşılık anlamı, çağrışımı ve varsa kelime oyununu mümkün olduğunca korumalıdır. Sonraki kullanımlarda yalnız Türkçe karşılığı kullan. Çince ad veya pinyin araştırmada doğrulanmamışsa uydurma.',
         'Başlık açıklayıcı ve merak uyandırıcı olsun, clickbait olmasın. Bilinmeyen Çince terimi açıklamasız başlığın merkezine koyma.',
         'Giriş sahici ve somut olsun; sonra tarih, yapım tekniği/malzeme, estetik düşünce, semboller, merkezler/ekoller, önemli örnekler ve günümüzdeki devamlılık arasında doğal bir anlatı kur.',
         'CV listesi, turistik tanıtım dili, propaganda, kaynakta olmayan övgü ve klişelerden kaçın.',
