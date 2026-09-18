@@ -52,6 +52,14 @@ test('son okuma güçlü kültür başlığını idari veya metrik başlığa ç
   assert.equal(headlineQualityRegression('Pekin’de çağdaş sanat sergisi açıldı', 'Pekin’de çağdaş sanat sergisi yeni eserlerle açıldı'), false);
 });
 
+test('açıklayıcı yabancı kültür-sanat adları doğal Türkçeye aktarılır', () => {
+  const translate = readFileSync(new URL('../src/translate.js', import.meta.url), 'utf8');
+  assert.match(translate, /açıklayıcı nitelikteyse anlamını koruyan doğal bir Türkçe karşılık üret/);
+  assert.match(translate, /Okur İngilizce bilmeden metni anlayabilmeli/);
+  assert.match(translate, /gereksiz biçimde İngilizce bırakılmış açıklayıcı sergi/);
+  assert.doesNotMatch(translate, /Yerleşik karşılığı olmayan eser ve etkinlik adlarını uydurma biçimde çevirmeden özgün adıyla koru/);
+});
+
 test('source health taslak kaydı, dinamik sürüm ve hero meta bağlantıları kodda bulunur', () => {
   const rank = readFileSync(new URL('../src/rank.js', import.meta.url), 'utf8');
   const logger = readFileSync(new URL('../src/logger.js', import.meta.url), 'utf8');
