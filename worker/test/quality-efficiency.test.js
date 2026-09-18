@@ -63,6 +63,17 @@ test('açıklayıcı yabancı kültür-sanat adları doğal Türkçeye aktarıl�
   assert.doesNotMatch(translate, /Yerleşik karşılığı olmayan eser ve etkinlik adlarını uydurma biçimde çevirmeden özgün adıyla koru/);
 });
 
+test('günlük haber ve haftalık dosya aynı Çince ad standardını kullanır', () => {
+  const translate = readFileSync(new URL('../src/translate.js', import.meta.url), 'utf8');
+  const dossierResearch = readFileSync(new URL('../src/dossier-research.js', import.meta.url), 'utf8');
+  const dossierPolish = readFileSync(new URL('../src/dossier-polish.js', import.meta.url), 'utf8');
+  const standard = /Türkçeye “Doğal Türkçe Karşılık” diye çevrilebilecek özgün adıyla “中文名称” \(Pinyin\)/;
+  assert.match(translate, standard);
+  assert.match(dossierResearch, standard);
+  assert.match(dossierPolish, standard);
+  assert.match(translate, /açıklanmamış ham Pinyin zincirlerini/);
+});
+
 test('Güz Ortası Bayramı terminolojisi deterministik olarak korunur', () => {
   const translate = readFileSync(new URL('../src/translate.js', import.meta.url), 'utf8');
   assert.match(translate, /Güz Ortası Bayramı/);
