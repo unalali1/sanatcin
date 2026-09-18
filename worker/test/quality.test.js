@@ -29,6 +29,24 @@ test('Türkçe karşılıkla açıklanan özgün Çince adı ilk kullanımda kab
   assert.ok(!issues.some((item) => item.includes('Çince')));
 });
 
+test('doğrulanmış özgün ad içindeki Pinyin ham Pinyin sayılmaz', () => {
+  const paragraphs = [
+    'Yeni sergi, Türkçeye “Çin Kültürü Müzesi” diye çevrilebilecek özgün adıyla “中国文化博物馆” (Zhongguo Wenhua Bowuguan) çevresinde şekillenen bir kültürel miras seçkisini ziyaretçilerle buluşturuyor.',
+    'Sergide geleneksel üretim yöntemleri, farklı dönemlere ait nesneler ve çağdaş yorumlar aynı anlatı içinde bir araya getiriliyor.',
+    'Küratörler, seçkinin tarihsel malzemeyi bugünün izleyicisine daha açık bir bağlam içinde sunmayı amaçladığını belirtiyor.',
+    'Program kapsamında konuşmalar ve atölyeler de düzenleniyor; etkinliklerin ayrıntıları kurumun duyurularında paylaşılacak.'
+  ];
+  const text = `${paragraphs.join('\\n\\n')} ${'Bu yaklaşım kültürel mirası doğal ve anlaşılır bir Türkçe anlatımla aktarmayı amaçlıyor. '.repeat(8)}`;
+  const issues = translationIssues({
+    title: 'Pekin’de kültürel mirasa odaklanan yeni sergi kapılarını açtı',
+    excerpt: 'Yeni sergi, geleneksel üretim yöntemleriyle çağdaş yorumları bir araya getirerek Çin kültürel mirasına farklı bir bakış sunuyor.',
+    paragraphs,
+    text
+  });
+  assert.ok(!issues.some((item) => item.includes('Pinyin')));
+  assert.ok(!issues.some((item) => item.includes('Çince')));
+});
+
 test('Akıcı Türkçe metni kabul eder', () => {
   const issues = translationIssues({
     title: 'Pekin’de kültürel mirasa çağdaş yöntemlerle yeni bir bakış',
