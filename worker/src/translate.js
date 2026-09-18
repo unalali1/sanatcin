@@ -94,6 +94,7 @@ async function extractFactSheet(article, signal, completeJson = requestJson) {
           'Bir kültür-sanat haberinin olgu fişini hazırlayan dikkatli bir araştırma editörüsün.',
           'Bu aşamada haber, çeviri, başlık, spot veya Türkçe taslak YAZMA. Yalnız kaynakta açıkça bulunan doğrulanabilir bilgileri çıkar.',
           'Kişi adlarını kaynakta kullanılan tam Latin yazımıyla koru; ad veya soyadı kısaltma. Tarihleri, sayıları, yerleri, kurumları, eser ve etkinlik adlarını değiştirme.',
+          'Eser, dizi, film, program, sergi, akım veya kültürel kavramın özgün Çince adı ve pinyin yazımı kaynakta açıkça bulunuyorsa olgu fişinde kaybetme. İngilizce başlığı otomatik olarak özgün ad kabul etme; kaynakta olmayan Çince adı tahmin etme veya uydurma.',
           'Alıntıları konuşanı ve ihtiyat düzeyiyle birlikte kaydet. Kaynakta olmayan yorum, neden-sonuç, duygu, sıfat veya arka plan ekleme.',
           'Kaynak tam bir haber, röportaj, eleştiri, etkinlik haberi ya da açıklayıcı fotoğraf haberiyse; somut bir gelişme ve en az dört doğrulanabilir olgu varsa publishable=true ver.',
           'Kısa ama yeterli bir kültür-sanat haberi yalnız uzun olmadığı için reddedilmemeli. Navigasyon, reklam, salt takvim kaydı veya olgusuz tanıtım metni publishable=false olmalı.',
@@ -141,6 +142,7 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
           '“Dikkat çekiyor”, “öne çıkıyor”, “gözler önüne seriyor”, “önemli bir adım” ve “büyük ilgi gördü” gibi hazır ifadeleri ancak kaynakta somut dayanağı varsa kullan.',
           'Kurum açıklamalarındaki övgü ve iddiaları haberin kendi hükmü gibi yazma; söyleyeni açıkça belirt. Kaynaktaki neden-sonuç ilişkisini güçlendirme veya yeni bir önem atfetme.',
           'Türkiye Türkçesinde yerleşik karşılığı olan şehir ve kavramları Türkçeleştir; Pekin ve Şanghay yazımlarını kullan. Sergi, etkinlik, belgesel, program ve benzeri kültür-sanat adlarının resmî veya yerleşik Türkçe karşılığı varsa onu kullan. Böyle bir karşılık yoksa, ad açıklayıcı nitelikteyse anlamını koruyan doğal bir Türkçe karşılık üret; özgün yabancı adı ancak marka niteliği, uluslararası tanınırlık veya anlam belirsizliği nedeniyle gerçekten gerekliyse ilk kullanımda parantez içinde ver.',
+          'Türkçede yerleşik karşılığı bulunmayan Çince eser, dizi, film, program, sergi, sanat akımı veya kültürel kavram adlarında doğal Türkçe karşılığı metnin ana adı yap. Özgün Çince ad ve pinyin kaynakta doğrulanabiliyorsa ilk kullanımda şu editoryal biçimi uygula: Türkçeye “Doğal Türkçe Karşılık” diye çevrilebilecek özgün adıyla “中文名称” (Pinyin). Türkçe karşılık kelime kelime olmak zorunda değildir; anlamı, çağrışımı ve varsa kelime oyununu mümkün olduğunca korumalıdır. İlk kullanımdan sonra yalnız doğal Türkçe karşılığı kullan. Kaynakta verilen İngilizce ad, ancak uluslararası yerleşik ad veya eseri bulmayı kolaylaştıran ayırt edici bilgi ise ilk kullanımda ayrıca tırnak içinde ver; İngilizce adı Türkçe metnin ana adı yapma. Özgün Çince ad kaynakta yoksa tahmin etme veya uydurma; bu durumda doğal Türkçe karşılığı esas al ve gerekirse kaynakta verilen İngilizce adı ilk kullanımda parantez içinde belirt.',
           'Kişi, kurum ve marka adlarını eksiksiz koru; Lu ya da Liu gibi kısaltmalar yapma. Sayıları, tarihleri ve alıntı anlamlarını değiştirme. Eser ve etkinlik adlarında anlamı, sayıları ve ayırt edici unsurları koru; açıklayıcı yabancı adları Türkçede doğal okunacak biçimde aktar.',
           '“Ambassador”, “envoy”, “representative” gibi unvanları bağlamına göre çevir; marka elçisini veya moda haftası temsilcisini diplomatik büyükelçi gibi gösterme.',
           'Ay ve gün içeren geçmiş/gelecek olaylarda yıl belirsizliği doğuracaksa kaynakta bulunan yılı Türkçe metne ekle. Haberin yayımlandığı tarihe göre “kasım ayında” gibi ifadelerin yanlış zaman algısı yaratmasına izin verme.',
@@ -200,6 +202,7 @@ async function polishTurkishNews(article, factSheet, draft, { signal, completeJs
           'Çeviri yanlış anlaşılmasına açık meslek/unvanları bağlama göre düzelt. Marka elçisi ile diplomatik büyükelçiyi, küratör ile yönetici/temsilciyi birbirine karıştırma.',
           'Tarih ve zaman bağlamını denetle. Kaynakta yıl varsa ve “kasım ayında” gibi ifade okuyucuyu yanlış yıla götürebilecekse yılı açıkça yaz.',
           'Olgu fişindeki gerçekleri, kişi/kurum/marka adlarını, tarihleri, sayıları ve alıntı anlamlarını kesinlikle değiştirme. Eser, sergi, etkinlik, belgesel ve program adlarının anlamını koru; açıklayıcı yabancı adları doğal Türkçeye aktar. Kaynakta olmayan hiçbir bilgi ekleme.',
+          'Çince eser, dizi, film, program, sergi, sanat akımı veya kültürel kavram adı için ilk taslakta doğal Türkçe karşılık + doğrulanmış özgün Çince ad + pinyin biçimi kullanılmışsa bunu koru. Tercih edilen ilk kullanım kalıbı: Türkçeye “Doğal Türkçe Karşılık” diye çevrilebilecek özgün adıyla “中文名称” (Pinyin). Sonraki kullanımlarda yalnız Türkçe karşılığı bırak. İngilizce adı ancak uluslararası tanınırlık veya bulunabilirlik için gerçekten yararlıysa ilk kullanımda tırnak içinde koru; metni yeniden İngilizce ad merkezli hale getirme. Kaynakta olmayan Çince adı asla uydurma.',
           'Mid-Autumn Festival terminolojisini denetle: Türkçe metinde yalnız “Güz Ortası Bayramı” kullan.',
           'Bir ifade zaten doğal Türkçeyse sırf değişiklik yapmak için değiştirme. Ama İngilizce veya Çince cümle iskeletini taşıyan ifadeleri yeniden kur. Metinde gereksiz biçimde İngilizce bırakılmış açıklayıcı sergi, etkinlik, belgesel veya program adı varsa Türkçeleştir.',
           'Haber değerine göre 3-7 kısa paragraf, doğal bir başlık ve tek cümlelik spot üret. Küçük haberi sırf uzunluk hedefi için şişirme.',
@@ -329,5 +332,5 @@ export async function translateArticle(article, { signal, completeJson = request
     title: final.draft.title,
     elapsedSeconds: elapsedSeconds(startedAt)
   });
-  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v9-headline-naturalness' };
+  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v10-native-title-standard' };
 }
