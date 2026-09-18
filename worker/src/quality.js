@@ -1,5 +1,4 @@
 const CJK_PATTERN = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/gu;
-const ALLOWED_CJK_NATIVE_NAME_PATTERN = /Türkçeye\s+[“"][^“”"\n]{1,140}[”"]\s+diye\s+çevrilebilecek[^“”"\n]{0,100}[“"][^“”"\n]*[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF][^“”"\n]*[”"]\s*(?:\([^)\n]{1,100}\))?/giu;
 const TURKISH_WORD_PATTERN = /\b(?:ve|bir|bu|için|ile|olarak|olan|daha|ancak|ise|göre|tarafından|üzerine|arasında|sonra|önce)\b/giu;
 const BAD_IMAGE_PATTERN = /(?:^|[\/_-])(?:logo|avatar|icon|placeholder|default|sprite|qrcode|qr-code)(?:[\/_\.\?-]|$)/i;
 const BOILERPLATE_PATTERNS = [
@@ -35,21 +34,55 @@ export function countCjk(value = '') {
   return value.match(CJK_PATTERN)?.length ?? 0;
 }
 
-function stripAllowedNativeNames(value = '') {
-  return String(value).replace(ALLOWED_CJK_NATIVE_NAME_PATTERN, '');
+function normalizedNativeNames(nativeNames = []) {
+  return (Array.isArray(nativeNames) ? nativeNames : [])
+    .filter((item) => item?.verified === true && item?.turkish && item?.hanzi && item?.pinyin)
+    .map((item) => ({
+      turkish: String(item.turkish).trim(),
+      hanzi: String(item.hanzi).trim(),
+      pinyin: String(item.pinyin).trim()
+    }));
 }
 
-function countUnexpectedCjk(value = '') {
-  return countCjk(stripAllowedNativeNames(value));
+function nativeNameForms(nativeName) {
+  return [
+    `${nativeName.turkish} (“${nativeName.hanzi}”, ${nativeName.pinyin})`,
+    `${nativeName.turkish} ("${nativeName.hanzi}", ${nativeName.pinyin})`
+  ];
 }
 
-export function translationIssues({ title = '', excerpt = '', text = '', paragraphs = [] }) {
+function stripAllowedNativeNames(value = '', nativeNames = []) {
+  let stripped = String(value);
+  for (const nativeName of normalizedNativeNames(nativeNames)) {
+    for (const form of nativeNameForms(nativeName)) stripped = stripped.split(form).join('');
+  }
+  return stripped;
+}
+
+function countUnexpectedCjk(value = '', nativeNames = []) {
+  return countCjk(stripAllowedNativeNames(value, nativeNames));
+}
+
+export function nativeNameRegression(before = {}, after = {}, nativeNames = []) {
+  const beforeCombined = `${before.title || ''}\n${before.excerpt || ''}\n${before.text || ''}`;
+  const afterCombined = `${after.title || ''}\n${after.excerpt || ''}\n${after.text || ''}`;
+  if (countUnexpectedCjk(afterCombined, nativeNames) > 0) return true;
+  return normalizedNativeNames(nativeNames).some((nativeName) => {
+    const forms = nativeNameForms(nativeName);
+    const existedBefore = forms.some((form) => beforeCombined.includes(form));
+    const existsAfter = forms.some((form) => afterCombined.includes(form));
+    return existedBefore && !existsAfter;
+  });
+}
+
+export function translationIssues({ title = '', excerpt = '', text = '', paragraphs = [] }, factSheet = {}) {
   const issues = [];
   const combined = `${title}\n${excerpt}\n${text}`.trim();
   const paragraphCount = paragraphs.length || text.split(/\n{2,}/).filter((item) => item.trim()).length;
   if (text.trim().length < 600) issues.push('Türkçe haber gövdesi 600 karakterden kısa.');
   if (paragraphCount < 3) issues.push('Türkçe haber gövdesi en az üç paragraf içermiyor.');
-  if (countUnexpectedCjk(combined) > 0) issues.push('Metinde açıklanmamış veya izin verilen ilk kullanım biçimi dışında Çince karakterler bulunuyor.');
+  if (countUnexpectedCjk(combined, factSheet.nativeNames) > 0) issues.push('Metinde olgu fişinde doğrulanmamış veya izin verilen kısa ilk kullanım biçimi dışında Çince karakterler bulunuyor.');
+  if (countCjk(`${title}\n${excerpt}`) > 0) issues.push('Başlık veya spotta Çince karakter bulunuyor; özgün ad yalnız gövdede ilk kullanımda verilmeli.');
   const words = text.match(/\p{L}+/gu) ?? [];
   const turkishSignals = text.match(TURKISH_WORD_PATTERN)?.length ?? 0;
   if (words.length >= 80 && turkishSignals < 4) issues.push('Metin akıcı Türkçe haber dili olarak doğrulanamadı.');
@@ -58,7 +91,7 @@ export function translationIssues({ title = '', excerpt = '', text = '', paragra
   if (OUTPUT_BOILERPLATE_PATTERNS.some((pattern) => pattern.test(combined))) {
     issues.push('Türkçe metinde navigasyon, editoryal not veya kaynak-site artığı bulunuyor.');
   }
-  const pinyinMarkers = stripAllowedNativeNames(combined).match(RAW_PINYIN_MARKERS)?.length ?? 0;
+  const pinyinMarkers = stripAllowedNativeNames(combined, factSheet.nativeNames).match(RAW_PINYIN_MARKERS)?.length ?? 0;
   if (pinyinMarkers >= 2) issues.push('Kurum veya yer adlarında açıklanmamış ham Pinyin zinciri bulunuyor.');
 
   const rawSentences = text.split(/(?<=[.!?])\s+/u).map((item) => item.replace(/\s+/g, ' ').trim()).filter(Boolean);
