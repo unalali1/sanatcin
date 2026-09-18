@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { config } from './config.js';
 import { log } from './logger.js';
-import { headlineQualityRegression, translationIssues } from './quality.js';
+import { headlineQualityRegression, nativeNameRegression, translationIssues } from './quality.js';
 
 // A failed editorial request should move to the next candidate quickly. The old
 // pipeline retried every one of its many AI calls and could spend minutes on one
@@ -71,7 +71,18 @@ function normalizeFactSheet(sheet = {}) {
       .map((quote) => ({ speaker: cleanString(quote?.speaker), text: cleanString(quote?.text) }))
       .filter((quote) => quote.text)
       .slice(0, 8),
-    context: list(sheet.context, 15)
+    context: list(sheet.context, 15),
+    nativeNames: (Array.isArray(sheet.nativeNames) ? sheet.nativeNames : [])
+      .map((item) => ({
+        type: cleanString(item?.type).toLowerCase(),
+        turkish: cleanString(item?.turkish),
+        hanzi: cleanString(item?.hanzi),
+        pinyin: cleanString(item?.pinyin),
+        sourceForm: cleanString(item?.sourceForm),
+        verified: item?.verified === true
+      }))
+      .filter((item) => item.verified && item.turkish && item.hanzi && item.pinyin)
+      .slice(0, 15)
   };
 }
 
@@ -94,7 +105,7 @@ async function extractFactSheet(article, signal, completeJson = requestJson) {
           'Bir kültür-sanat haberinin olgu fişini hazırlayan dikkatli bir araştırma editörüsün.',
           'Bu aşamada haber, çeviri, başlık, spot veya Türkçe taslak YAZMA. Yalnız kaynakta açıkça bulunan doğrulanabilir bilgileri çıkar.',
           'Kişi adlarını kaynakta kullanılan tam Latin yazımıyla koru; ad veya soyadı kısaltma. Tarihleri, sayıları, yerleri, kurumları, eser ve etkinlik adlarını değiştirme.',
-          'Eser, dizi, film, program, sergi, akım veya kültürel kavramın özgün Çince adı ve pinyin yazımı kaynakta açıkça bulunuyorsa olgu fişinde kaybetme. İngilizce başlığı otomatik olarak özgün ad kabul etme; kaynakta olmayan Çince adı tahmin etme veya uydurma.',
+          'Eser, dizi, film, program, sergi, akım veya kültürel kavramın özgün Çince adı ve pinyin yazımı kaynakta açıkça bulunuyorsa nativeNames alanına yapılandırılmış biçimde kaydet. Yalnız hem Çince karakter hem pinyin kaynakta açıkça bulunuyorsa verified=true ver. İngilizce başlığı otomatik olarak özgün ad kabul etme; kaynakta olmayan Çince adı veya pinyin yazımını tahmin etme ya da uydurma.',
           'Alıntıları konuşanı ve ihtiyat düzeyiyle birlikte kaydet. Kaynakta olmayan yorum, neden-sonuç, duygu, sıfat veya arka plan ekleme.',
           'Kaynak tam bir haber, röportaj, eleştiri, etkinlik haberi ya da açıklayıcı fotoğraf haberiyse; somut bir gelişme ve en az dört doğrulanabilir olgu varsa publishable=true ver.',
           'Kısa ama yeterli bir kültür-sanat haberi yalnız uzun olmadığı için reddedilmemeli. Navigasyon, reklam, salt takvim kaydı veya olgusuz tanıtım metni publishable=false olmalı.',
@@ -110,7 +121,7 @@ async function extractFactSheet(article, signal, completeJson = requestJson) {
           `Kaynak başlığı: ${article.title}`,
           `Önerilen kategori: ${article.category}`,
           `Kaynak metin:\n${sourceExcerpt(article.text)}`,
-          'JSON şeması: {"factSheet":{"publishable":true,"sourceType":"article|interview|review|announcement|gallery","newsValue":"somut haber değeri","angle":"somut gelişme","facts":["doğrulanmış olgu"],"people":["tam kişi adı"],"organisations":["kurum"],"places":["yer"],"numbers":["sayı veya tarih"],"quotes":[{"speaker":"konuşan","text":"kaynak dilindeki kısa alıntı"}],"context":["kaynakta bulunan bağlam"]}}'
+          'JSON şeması: {"factSheet":{"publishable":true,"sourceType":"article|interview|review|announcement|gallery","newsValue":"somut haber değeri","angle":"somut gelişme","facts":["doğrulanmış olgu"],"people":["tam kişi adı"],"organisations":["kurum"],"places":["yer"],"numbers":["sayı veya tarih"],"quotes":[{"speaker":"konuşan","text":"kaynak dilindeki kısa alıntı"}],"context":["kaynakta bulunan bağlam"],"nativeNames":[{"type":"work|event|programme|concept|institution","turkish":"doğal Türkçe karşılık","hanzi":"kaynakta geçen Çince karakterler","pinyin":"kaynakta geçen pinyin","sourceForm":"kaynakta geçen tam biçim","verified":true}]}}'
         ].join('\n\n')
       }
     ]
@@ -142,7 +153,7 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
           '“Dikkat çekiyor”, “öne çıkıyor”, “gözler önüne seriyor”, “önemli bir adım” ve “büyük ilgi gördü” gibi hazır ifadeleri ancak kaynakta somut dayanağı varsa kullan.',
           'Kurum açıklamalarındaki övgü ve iddiaları haberin kendi hükmü gibi yazma; söyleyeni açıkça belirt. Kaynaktaki neden-sonuç ilişkisini güçlendirme veya yeni bir önem atfetme.',
           'Türkiye Türkçesinde yerleşik karşılığı olan şehir ve kavramları Türkçeleştir; Pekin ve Şanghay yazımlarını kullan. Sergi, etkinlik, belgesel, program ve benzeri kültür-sanat adlarının resmî veya yerleşik Türkçe karşılığı varsa onu kullan. Çince olmayan yabancı adlarda böyle bir karşılık yoksa, ad açıklayıcı nitelikteyse anlamını koruyan doğal bir Türkçe karşılık üret; özgün yabancı adı ancak marka niteliği, uluslararası tanınırlık veya anlam belirsizliği nedeniyle gerçekten gerekliyse ilk kullanımda parantez içinde ver. Çince adlandırmalarda ise bir sonraki özel kuralı uygula.',
-          'Türkçede yerleşik karşılığı bulunmayan Çince eser, dizi, film, program, sergi, sanat akımı veya kültürel kavram adlarında doğal Türkçe karşılığı metnin ana adı yap. Özgün Çince ad ve pinyin kaynakta doğrulanabiliyorsa ilk kullanımda şu editoryal biçimi uygula: Türkçeye “Doğal Türkçe Karşılık” diye çevrilebilecek özgün adıyla “中文名称” (Pinyin). Türkçe karşılık kelime kelime olmak zorunda değildir; anlamı, çağrışımı ve varsa kelime oyununu mümkün olduğunca korumalıdır. İlk kullanımdan sonra yalnız doğal Türkçe karşılığı kullan. Kaynakta verilen İngilizce ad, ancak uluslararası yerleşik ad veya eseri bulmayı kolaylaştıran ayırt edici bilgi ise ilk kullanımda ayrıca tırnak içinde ver; İngilizce adı Türkçe metnin ana adı yapma. Özgün Çince ad kaynakta yoksa tahmin etme veya uydurma; bu durumda doğal Türkçe karşılığı esas al ve gerekirse kaynakta verilen İngilizce adı ilk kullanımda parantez içinde belirt.',
+          'Türkçede yerleşik karşılığı bulunmayan Çince eser, dizi, film, program, sergi, sanat akımı veya kültürel kavram adlarında doğal Türkçe karşılığı metnin ana adı yap. Özgün Çince ad ve pinyin olgu fişindeki nativeNames alanında verified=true olarak bulunuyorsa ilk kullanımda kısa editoryal biçimi uygula: Doğal Türkçe Karşılık (“中文名称”, Pinyin). Türkçe karşılık kelime kelime olmak zorunda değildir; anlamı, çağrışımı ve varsa kelime oyununu mümkün olduğunca korumalıdır. İlk kullanımdan sonra yalnız doğal Türkçe karşılığı kullan. Kaynakta verilen İngilizce ad, ancak uluslararası yerleşik ad veya eseri bulmayı kolaylaştıran ayırt edici bilgi ise ilk kullanımda ayrıca tırnak içinde ver; İngilizce adı Türkçe metnin ana adı yapma. Özgün Çince ad kaynakta yoksa tahmin etme veya uydurma; bu durumda doğal Türkçe karşılığı esas al ve gerekirse kaynakta verilen İngilizce adı ilk kullanımda parantez içinde belirt.',
           'Kişi, kurum ve marka adlarını eksiksiz koru; Lu ya da Liu gibi kısaltmalar yapma. Sayıları, tarihleri ve alıntı anlamlarını değiştirme. Eser ve etkinlik adlarında anlamı, sayıları ve ayırt edici unsurları koru; açıklayıcı yabancı adları Türkçede doğal okunacak biçimde aktar.',
           '“Ambassador”, “envoy”, “representative” gibi unvanları bağlamına göre çevir; marka elçisini veya moda haftası temsilcisini diplomatik büyükelçi gibi gösterme.',
           'Ay ve gün içeren geçmiş/gelecek olaylarda yıl belirsizliği doğuracaksa kaynakta bulunan yılı Türkçe metne ekle. Haberin yayımlandığı tarihe göre “kasım ayında” gibi ifadelerin yanlış zaman algısı yaratmasına izin verme.',
@@ -202,7 +213,7 @@ async function polishTurkishNews(article, factSheet, draft, { signal, completeJs
           'Çeviri yanlış anlaşılmasına açık meslek/unvanları bağlama göre düzelt. Marka elçisi ile diplomatik büyükelçiyi, küratör ile yönetici/temsilciyi birbirine karıştırma.',
           'Tarih ve zaman bağlamını denetle. Kaynakta yıl varsa ve “kasım ayında” gibi ifade okuyucuyu yanlış yıla götürebilecekse yılı açıkça yaz.',
           'Olgu fişindeki gerçekleri, kişi/kurum/marka adlarını, tarihleri, sayıları ve alıntı anlamlarını kesinlikle değiştirme. Eser, sergi, etkinlik, belgesel ve program adlarının anlamını koru; açıklayıcı yabancı adları doğal Türkçeye aktar. Kaynakta olmayan hiçbir bilgi ekleme.',
-          'Çince eser, dizi, film, program, sergi, sanat akımı veya kültürel kavram adı için ilk taslakta doğal Türkçe karşılık + doğrulanmış özgün Çince ad + pinyin biçimi kullanılmışsa bunu koru. Tercih edilen ilk kullanım kalıbı: Türkçeye “Doğal Türkçe Karşılık” diye çevrilebilecek özgün adıyla “中文名称” (Pinyin). Sonraki kullanımlarda yalnız Türkçe karşılığı bırak. İngilizce adı ancak uluslararası tanınırlık veya bulunabilirlik için gerçekten yararlıysa ilk kullanımda tırnak içinde koru; metni yeniden İngilizce ad merkezli hale getirme. Kaynakta olmayan Çince adı asla uydurma.',
+          'Çince eser, dizi, film, program, sergi, sanat akımı veya kültürel kavram adı için ilk taslakta doğal Türkçe karşılık + doğrulanmış özgün Çince ad + pinyin biçimi kullanılmışsa bunu koru. Tercih edilen ilk kullanım kalıbı: Doğal Türkçe Karşılık (“中文名称”, Pinyin). Sonraki kullanımlarda yalnız Türkçe karşılığı bırak. İngilizce adı ancak uluslararası tanınırlık veya bulunabilirlik için gerçekten yararlıysa ilk kullanımda tırnak içinde koru; metni yeniden İngilizce ad merkezli hale getirme. Kaynakta olmayan Çince adı asla uydurma.',
           'Mid-Autumn Festival terminolojisini denetle: Türkçe metinde yalnız “Güz Ortası Bayramı” kullan.',
           'Bir ifade zaten doğal Türkçeyse sırf değişiklik yapmak için değiştirme. Ama İngilizce veya Çince cümle iskeletini taşıyan ifadeleri yeniden kur. Metinde gereksiz biçimde İngilizce bırakılmış açıklayıcı sergi, etkinlik, belgesel veya program adı varsa Türkçeleştir.',
           'Haber değerine göre 3-7 kısa paragraf, doğal bir başlık ve tek cümlelik spot üret. Küçük haberi sırf uzunluk hedefi için şişirme.',
@@ -263,7 +274,7 @@ export async function translateArticle(article, { signal, completeJson = request
     elapsedSeconds: elapsedSeconds(startedAt)
   });
 
-  let mechanicalIssues = translationIssues(final.draft);
+  let mechanicalIssues = translationIssues(final.draft, factSheet);
   if (mechanicalIssues.length) {
     log('warn', 'Son taslakta mekanik sorun bulundu; tek düzeltme uygulanacak', {
       source: article.source.id,
@@ -275,7 +286,7 @@ export async function translateArticle(article, { signal, completeJson = request
       signal,
       completeJson
     });
-    mechanicalIssues = translationIssues(final.draft);
+    mechanicalIssues = translationIssues(final.draft, factSheet);
   }
 
   if (!final.accepted) {
@@ -285,14 +296,15 @@ export async function translateArticle(article, { signal, completeJson = request
   // Son Türkçe editör geçişi kaliteyi artırır; ancak bu isteğin başarısız olması
   // çalışan sistemi durdurmaz. Daha önce doğrulanmış taslak güvenli fallback'tir.
   const prePolish = final;
-  const prePolishIssues = translationIssues(prePolish.draft);
+  const prePolishIssues = translationIssues(prePolish.draft, factSheet);
   try {
     const polished = await polishTurkishNews(article, factSheet, prePolish.draft, { signal, completeJson });
     if (polished.accepted) {
       assertUsableEditorialOutput(polished.draft);
-      const polishedIssues = translationIssues(polished.draft);
+      const polishedIssues = translationIssues(polished.draft, factSheet);
       const headlineRegression = headlineQualityRegression(prePolish.draft.title, polished.draft.title);
-      if (polishedIssues.length <= prePolishIssues.length && !headlineRegression) {
+      const namingRegression = nativeNameRegression(prePolish.draft, polished.draft, factSheet.nativeNames);
+      if (polishedIssues.length <= prePolishIssues.length && !headlineRegression && !namingRegression) {
         final = polished;
         mechanicalIssues = polishedIssues;
         log('info', 'Türkçe son okuma tamamlandı', {
@@ -309,7 +321,8 @@ export async function translateArticle(article, { signal, completeJson = request
           afterIssues: polishedIssues,
           beforeTitle: prePolish.draft.title,
           afterTitle: polished.draft.title,
-          headlineRegression
+          headlineRegression,
+          namingRegression
         });
       }
     }
@@ -321,7 +334,11 @@ export async function translateArticle(article, { signal, completeJson = request
   }
 
   if (mechanicalIssues.length) {
-    log('warn', 'Son metinde kalan dil/biçim notları yayını engellemeyecek', {
+    const blockingIssues = mechanicalIssues.filter((issue) => /Çince karakterler|Pinyin|doğrulanmış yerel ad|kaynak-site artığı|yinelenen cümle/iu.test(issue));
+    if (blockingIssues.length) {
+      throw new Error(`Yayın engellendi: ${blockingIssues.join(' ')}`);
+    }
+    log('warn', 'Son metinde kalan ikincil dil/biçim notları yayını engellemeyecek', {
       source: article.source.id,
       issues: mechanicalIssues
     });
@@ -332,6 +349,6 @@ export async function translateArticle(article, { signal, completeJson = request
     title: final.draft.title,
     elapsedSeconds: elapsedSeconds(startedAt)
   });
-  // v10: doğal Türkçe ad + doğrulanmış özgün Çince ad + pinyin ilk kullanım standardı; günlük haber ve haftalık dosya kuralları eşlenmiştir.
-  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v10-native-title-standard' };
+  // v11: kısa Türkçe ad biçimi yalnız olgu fişinde doğrulanmış Çince ad ve pinyin ile kullanılabilir.
+  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v11-verified-native-names' };
 }

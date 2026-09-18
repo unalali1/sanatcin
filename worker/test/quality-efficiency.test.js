@@ -57,7 +57,7 @@ test('açıklayıcı yabancı kültür-sanat adları doğal Türkçeye aktarıl�
   assert.match(translate, /açıklayıcı nitelikteyse anlamını koruyan doğal bir Türkçe karşılık üret/);
   assert.match(translate, /Okur İngilizce bilmeden metni anlayabilmeli/);
   assert.match(translate, /gereksiz biçimde İngilizce bırakılmış açıklayıcı sergi/);
-  assert.match(translate, /Türkçeye “Doğal Türkçe Karşılık” diye çevrilebilecek özgün adıyla “中文名称” \(Pinyin\)/);
+  assert.match(translate, /Doğal Türkçe Karşılık \([“"]中文名称[”"], Pinyin\)/);
   assert.match(translate, /İlk kullanımdan sonra yalnız doğal Türkçe karşılığı kullan/);
   assert.match(translate, /Kaynakta olmayan Çince adı asla uydurma/);
   assert.doesNotMatch(translate, /Yerleşik karşılığı olmayan eser ve etkinlik adlarını uydurma biçimde çevirmeden özgün adıyla koru/);
@@ -67,7 +67,7 @@ test('günlük haber ve haftalık dosya aynı Çince ad standardını kullanır'
   const translate = readFileSync(new URL('../src/translate.js', import.meta.url), 'utf8');
   const dossierResearch = readFileSync(new URL('../src/dossier-research.js', import.meta.url), 'utf8');
   const dossierPolish = readFileSync(new URL('../src/dossier-polish.js', import.meta.url), 'utf8');
-  const standard = /Türkçeye “Doğal Türkçe Karşılık” diye çevrilebilecek özgün adıyla “中文名称” \(Pinyin\)/;
+  const standard = /Doğal Türkçe Karşılık \([“"]中文名称[”"], Pinyin\)/;
   assert.match(translate, standard);
   assert.match(dossierResearch, standard);
   assert.match(dossierPolish, standard);
@@ -86,7 +86,7 @@ test('başlık üretimi katalog kalıbı ve klişe heyecan dilinden kaçınır',
   assert.match(translate, /yer adı \+ iki isimden oluşan katalog kalıbına bırakma/);
   assert.match(translate, /“heyecanı yaşandı”/);
   assert.match(translate, /daha doğal bir fiille yeniden kur/);
-  assert.match(translate, /fact-ledger-turkish-newsroom-v10-native-title-standard/);
+  assert.match(translate, /fact-ledger-turkish-newsroom-v11-verified-native-names/);
 });
 
 test('source health taslak kaydı, dinamik sürüm ve hero meta bağlantıları kodda bulunur', () => {

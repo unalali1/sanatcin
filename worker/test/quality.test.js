@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertImageDimensions, countCjk, imageDimensions, isUsableImageUrl, sourceContentIssues, titleSimilarity, translationIssues } from '../src/quality.js';
+import { assertImageDimensions, countCjk, imageDimensions, isUsableImageUrl, sourceContentIssues, nativeNameRegression, titleSimilarity, translationIssues } from '../src/quality.js';
 
 test('Çince karakterleri yakalar', () => {
   assert.equal(countCjk('Türkçe metin 龟兹'), 2);
@@ -12,7 +12,7 @@ test('Çince karakterleri yakalar', () => {
 });
 
 test('Türkçe karşılıkla açıklanan özgün Çince adı ilk kullanımda kabul eder', () => {
-  const intro = 'Çin’in yeni dönem dizisi, Türkçeye “Orkide Kokusu Hâlâ Aynı” diye çevrilebilecek özgün adıyla “兰香如故” (Lán Xiāng Rú Gù), çekimler için kurulan geleneksel bahçesiyle izleyiciyle buluştu.';
+  const intro = 'Çin’in yeni dönem dizisi Orkide Kokusu Hâlâ Aynı (“兰香如故”, Lán Xiāng Rú Gù), çekimler için kurulan geleneksel bahçesiyle izleyiciyle buluştu.';
   const paragraphs = [
     intro,
     'Yapım ekibi, bahçenin yalnızca görkemli görünmesini değil, gerçekten yaşanmış bir mekân hissi vermesini amaçladı ve avlular ile köşkleri aylar boyunca yeniden düzenledi.',
@@ -25,13 +25,13 @@ test('Türkçe karşılıkla açıklanan özgün Çince adı ilk kullanımda kab
     excerpt: 'Çin’in yeni dönem dizisi için sekiz ayda kurulan geleneksel bahçe seti, yapımın dönem atmosferini gerçek mekân duygusuyla güçlendiriyor.',
     paragraphs,
     text
-  });
+  }, { nativeNames: [{ type: 'work', turkish: 'Orkide Kokusu Hâlâ Aynı', hanzi: '兰香如故', pinyin: 'Lán Xiāng Rú Gù', verified: true }] });
   assert.ok(!issues.some((item) => item.includes('Çince')));
 });
 
 test('doğrulanmış özgün ad içindeki Pinyin ham Pinyin sayılmaz', () => {
   const paragraphs = [
-    'Yeni sergi, Türkçeye “Çin Kültürü Müzesi” diye çevrilebilecek özgün adıyla “中国文化博物馆” (Zhongguo Wenhua Bowuguan) çevresinde şekillenen bir kültürel miras seçkisini ziyaretçilerle buluşturuyor.',
+    'Yeni sergi, Çin Kültürü Müzesi (“中国文化博物馆”, Zhongguo Wenhua Bowuguan) çevresinde şekillenen bir kültürel miras seçkisini ziyaretçilerle buluşturuyor.',
     'Sergide geleneksel üretim yöntemleri, farklı dönemlere ait nesneler ve çağdaş yorumlar aynı anlatı içinde bir araya getiriliyor.',
     'Küratörler, seçkinin tarihsel malzemeyi bugünün izleyicisine daha açık bir bağlam içinde sunmayı amaçladığını belirtiyor.',
     'Program kapsamında konuşmalar ve atölyeler de düzenleniyor; etkinliklerin ayrıntıları kurumun duyurularında paylaşılacak.'
@@ -42,9 +42,30 @@ test('doğrulanmış özgün ad içindeki Pinyin ham Pinyin sayılmaz', () => {
     excerpt: 'Yeni sergi, geleneksel üretim yöntemleriyle çağdaş yorumları bir araya getirerek Çin kültürel mirasına farklı bir bakış sunuyor.',
     paragraphs,
     text
-  });
+  }, { nativeNames: [{ type: 'institution', turkish: 'Çin Kültürü Müzesi', hanzi: '中国文化博物馆', pinyin: 'Zhongguo Wenhua Bowuguan', verified: true }] });
   assert.ok(!issues.some((item) => item.includes('Pinyin')));
   assert.ok(!issues.some((item) => item.includes('Çince')));
+});
+
+test('olgu fişinde doğrulanmamış Çince ad kısa kalıpta olsa da reddedilir', () => {
+  const text = `Yeni dizi Orkide Kokusu Hâlâ Aynı (“兰香如故”, Lán Xiāng Rú Gù) adıyla tanıtıldı. ${'Yapım, geleneksel bahçe mimarisini dönem anlatısının bir parçası olarak kullanıyor. '.repeat(10)}`;
+  const issues = translationIssues({
+    title: 'Çin dönem dizisi için geleneksel bahçe seti kuruldu',
+    excerpt: 'Yeni dönem dizisi için kurulan geleneksel bahçe seti, yapımın tarihsel atmosferini gerçek mekân ayrıntılarıyla güçlendiriyor.',
+    paragraphs: text.split('\n\n'),
+    text
+  }, { nativeNames: [] });
+  assert.ok(issues.some((item) => item.includes('doğrulanmamış')));
+});
+
+test('son okuma doğrulanmış yerel adı silemez veya değiştiremez', () => {
+  const nativeNames = [{ type: 'work', turkish: 'Orkide Kokusu Hâlâ Aynı', hanzi: '兰香如故', pinyin: 'Lán Xiāng Rú Gù', verified: true }];
+  const before = { text: 'Dizi Orkide Kokusu Hâlâ Aynı (“兰香如故”, Lán Xiāng Rú Gù) adıyla gösterime girdi.' };
+  const removed = { text: 'Dizi Orkide Kokusu Hâlâ Aynı adıyla gösterime girdi.' };
+  const changed = { text: 'Dizi Orkide Kokusu Hâlâ Aynı (“兰香如旧”, Lán Xiāng Rú Jiù) adıyla gösterime girdi.' };
+  assert.equal(nativeNameRegression(before, removed, nativeNames), true);
+  assert.equal(nativeNameRegression(before, changed, nativeNames), true);
+  assert.equal(nativeNameRegression(before, before, nativeNames), false);
 });
 
 test('Akıcı Türkçe metni kabul eder', () => {
