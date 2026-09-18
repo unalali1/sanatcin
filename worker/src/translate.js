@@ -332,6 +332,6 @@ export async function translateArticle(article, { signal, completeJson = request
     title: final.draft.title,
     elapsedSeconds: elapsedSeconds(startedAt)
   });
-  // v10: doğal Türkçe ad + doğrulanmış özgün Çince ad + pinyin ilk kullanım standardı.
+  // v10: doğal Türkçe ad + doğrulanmış özgün Çince ad + pinyin ilk kullanım standardı; günlük haber ve haftalık dosya kuralları eşlenmiştir.
   return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v10-native-title-standard' };
 }
