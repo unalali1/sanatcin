@@ -60,7 +60,7 @@ test('olgu çıkarımı, haber yazımı ve Türkçe son okuma ardışık çalı�
   assert.equal(calls[1].model, config.openaiEditorModel);
   assert.equal(calls[2].model, config.openaiEditorModel);
   assert.match(calls[2].input[0].content, /son okuma.*editörüsün/);
-  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v8-natural-turkish');
+  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v9-headline-naturalness');
   assert.equal(result.factSheet.facts.length, 4);
   assert.match(result.title, /Şanghay/);
 });

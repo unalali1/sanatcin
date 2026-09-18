@@ -60,6 +60,21 @@ test('açıklayıcı yabancı kültür-sanat adları doğal Türkçeye aktarıl�
   assert.doesNotMatch(translate, /Yerleşik karşılığı olmayan eser ve etkinlik adlarını uydurma biçimde çevirmeden özgün adıyla koru/);
 });
 
+test('Güz Ortası Bayramı terminolojisi deterministik olarak korunur', () => {
+  const translate = readFileSync(new URL('../src/translate.js', import.meta.url), 'utf8');
+  assert.match(translate, /Güz Ortası Bayramı/);
+  assert.match(translate, /Orta Sonbahar Bayramı/);
+  assert.match(translate, /Mid-Autumn Festival terminolojisini denetle/);
+});
+
+test('başlık üretimi katalog kalıbı ve klişe heyecan dilinden kaçınır', () => {
+  const translate = readFileSync(new URL('../src/translate.js', import.meta.url), 'utf8');
+  assert.match(translate, /yer adı \+ iki isimden oluşan katalog kalıbına bırakma/);
+  assert.match(translate, /“heyecanı yaşandı”/);
+  assert.match(translate, /daha doğal bir fiille yeniden kur/);
+  assert.match(translate, /fact-ledger-turkish-newsroom-v9-headline-naturalness/);
+});
+
 test('source health taslak kaydı, dinamik sürüm ve hero meta bağlantıları kodda bulunur', () => {
   const rank = readFileSync(new URL('../src/rank.js', import.meta.url), 'utf8');
   const logger = readFileSync(new URL('../src/logger.js', import.meta.url), 'utf8');
