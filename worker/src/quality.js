@@ -1,4 +1,5 @@
 const CJK_PATTERN = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/gu;
+const ALLOWED_CJK_NATIVE_NAME_PATTERN = /Türkçeye\s+[“"][^“”"\n]{1,140}[”"]\s+diye\s+çevrilebilecek[^“”"\n]{0,100}[“"][^“”"\n]*[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF][^“”"\n]*[”"]\s*(?:\([^)\n]{1,100}\))?/giu;
 const TURKISH_WORD_PATTERN = /\b(?:ve|bir|bu|için|ile|olarak|olan|daha|ancak|ise|göre|tarafından|üzerine|arasında|sonra|önce)\b/giu;
 const BAD_IMAGE_PATTERN = /(?:^|[\/_-])(?:logo|avatar|icon|placeholder|default|sprite|qrcode|qr-code)(?:[\/_\.\?-]|$)/i;
 const BOILERPLATE_PATTERNS = [
@@ -34,13 +35,18 @@ export function countCjk(value = '') {
   return value.match(CJK_PATTERN)?.length ?? 0;
 }
 
+function countUnexpectedCjk(value = '') {
+  const withoutAllowedNativeNames = String(value).replace(ALLOWED_CJK_NATIVE_NAME_PATTERN, '');
+  return countCjk(withoutAllowedNativeNames);
+}
+
 export function translationIssues({ title = '', excerpt = '', text = '', paragraphs = [] }) {
   const issues = [];
   const combined = `${title}\n${excerpt}\n${text}`.trim();
   const paragraphCount = paragraphs.length || text.split(/\n{2,}/).filter((item) => item.trim()).length;
   if (text.trim().length < 600) issues.push('Türkçe haber gövdesi 600 karakterden kısa.');
   if (paragraphCount < 3) issues.push('Türkçe haber gövdesi en az üç paragraf içermiyor.');
-  if (countCjk(combined) > 0) issues.push('Metinde çevrilmemiş Çince karakterler bulunuyor.');
+  if (countUnexpectedCjk(combined) > 0) issues.push('Metinde açıklanmamış veya izin verilen ilk kullanım biçimi dışında Çince karakterler bulunuyor.');
   const words = text.match(/\p{L}+/gu) ?? [];
   const turkishSignals = text.match(TURKISH_WORD_PATTERN)?.length ?? 0;
   if (words.length >= 80 && turkishSignals < 4) issues.push('Metin akıcı Türkçe haber dili olarak doğrulanamadı.');
