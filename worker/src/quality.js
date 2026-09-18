@@ -35,9 +35,12 @@ export function countCjk(value = '') {
   return value.match(CJK_PATTERN)?.length ?? 0;
 }
 
+function stripAllowedNativeNames(value = '') {
+  return String(value).replace(ALLOWED_CJK_NATIVE_NAME_PATTERN, '');
+}
+
 function countUnexpectedCjk(value = '') {
-  const withoutAllowedNativeNames = String(value).replace(ALLOWED_CJK_NATIVE_NAME_PATTERN, '');
-  return countCjk(withoutAllowedNativeNames);
+  return countCjk(stripAllowedNativeNames(value));
 }
 
 export function translationIssues({ title = '', excerpt = '', text = '', paragraphs = [] }) {
@@ -55,7 +58,7 @@ export function translationIssues({ title = '', excerpt = '', text = '', paragra
   if (OUTPUT_BOILERPLATE_PATTERNS.some((pattern) => pattern.test(combined))) {
     issues.push('Türkçe metinde navigasyon, editoryal not veya kaynak-site artığı bulunuyor.');
   }
-  const pinyinMarkers = combined.match(RAW_PINYIN_MARKERS)?.length ?? 0;
+  const pinyinMarkers = stripAllowedNativeNames(combined).match(RAW_PINYIN_MARKERS)?.length ?? 0;
   if (pinyinMarkers >= 2) issues.push('Kurum veya yer adlarında açıklanmamış ham Pinyin zinciri bulunuyor.');
 
   const rawSentences = text.split(/(?<=[.!?])\s+/u).map((item) => item.replace(/\s+/g, ' ').trim()).filter(Boolean);
