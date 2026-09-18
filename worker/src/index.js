@@ -3,7 +3,7 @@ import { config, validateConfig } from './config.js';
 import { mapLimit } from './concurrency.js';
 import { discover, extractArticle, sourceHash } from './fetch.js';
 import { classifyError } from './errors.js';
-import { log, setLogContext } from './logger.js';
+import { flushLogs, log, setLogContext } from './logger.js';
 import { scoreCandidate } from './score.js';
 import { diversifyBySource, diversifyByTopic, rerankCandidates, sourceCrowdingPenalty } from './rank.js';
 import { createRunBudget } from './run-budget.js';
@@ -417,7 +417,19 @@ async function run() {
   if (results.length === 0) process.exitCode = 2;
 }
 
-run().catch((error) => {
-  log('fatal', 'İşleyici durdu', { errorCode: classifyError(error).code, error: error.stack ?? error.message });
-  process.exitCode = 1;
-});
+async function main() {
+  let exitCode = 0;
+  try {
+    await run();
+    exitCode = process.exitCode ?? 0;
+  } catch (error) {
+    log('fatal', 'İşleyici durdu', { errorCode: classifyError(error).code, error: error.stack ?? error.message });
+    exitCode = 1;
+  } finally {
+    await flushLogs();
+    await new Promise((resolve) => process.stdout.write('', resolve));
+  }
+  process.exit(exitCode);
+}
+
+main();
