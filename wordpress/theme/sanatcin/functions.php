@@ -221,3 +221,109 @@ function sanatcin_related_posts($post_id, $limit = 3) {
         'ignore_sticky_posts' => true
     ]);
 }
+
+
+/**
+ * SanatÇin X/Buffer editorial layer.
+ *
+ * Keeps WP to Buffer Pro's existing account, scheduling and link/image handling,
+ * while replacing only the X/Twitter status text with a compact editorial hook.
+ */
+function sanatcin_x_trim_chars($text, $limit) {
+    $text = trim(preg_replace('/\s+/u', ' ', wp_strip_all_tags((string) $text)));
+    if ($limit < 1) return '';
+    $length = function_exists('mb_strlen') ? mb_strlen($text, 'UTF-8') : strlen($text);
+    if ($length <= $limit) return $text;
+
+    $slice = function_exists('mb_substr')
+        ? mb_substr($text, 0, max(1, $limit - 1), 'UTF-8')
+        : substr($text, 0, max(1, $limit - 1));
+
+    $slice = preg_replace('/\s+\S*$/u', '', $slice);
+    return rtrim($slice, " \t\n\r\0\x0B,;:-–—") . '…';
+}
+
+function sanatcin_x_emoji($post) {
+    $title = wp_strip_all_tags((string) $post->post_title);
+    $excerpt = wp_strip_all_tags((string) $post->post_excerpt);
+    $haystack = function_exists('mb_strtolower')
+        ? mb_strtolower($title . ' ' . $excerpt, 'UTF-8')
+        : strtolower($title . ' ' . $excerpt);
+
+    $keyword_map = [
+        '/akşam|gece|ay ışığı|ayışığı/u' => '🌙',
+        '/yemek|mutfak|sofra|restoran|çay|kahve/u' => '🍜',
+        '/opera|tiyatro|müzikal|sahne|performans/u' => '🎭',
+        '/film|sinema|dizi|festival/u' => '🎬',
+        '/moda|tasarım|koleksiyon|podyum|couture/u' => '✨',
+        '/sergi|müze|resim|heykel|kaligrafi|sanat/u' => '🎨',
+        '/şehir|sokak|mahalle|park|yürüyüş/u' => '🌆'
+    ];
+    foreach ($keyword_map as $pattern => $emoji) {
+        if (preg_match($pattern, $haystack)) return $emoji;
+    }
+
+    $categories = get_the_category($post->ID);
+    $slug = $categories ? $categories[0]->slug : '';
+    return [
+        'kultur-sanat' => '🎨',
+        'sinema' => '🎬',
+        'moda-tasarim' => '✨',
+        'sehir-yasam' => '🌆',
+        'editorden' => '✍️'
+    ][$slug] ?? '🔎';
+}
+
+function sanatcin_x_editorial_hook($post) {
+    $manual = trim((string) get_post_meta($post->ID, 'sanatcin_social_x_text', true));
+    if ($manual !== '') return $manual;
+
+    $hook = trim((string) $post->post_excerpt);
+    if ($hook === '') {
+        $content = preg_replace('/<aside\b[^>]*>.*?<\/aside>/isu', ' ', (string) $post->post_content);
+        $hook = wp_strip_all_tags(strip_shortcodes($content));
+    }
+
+    $hook = trim(preg_replace('/\s+/u', ' ', $hook));
+    $title = trim(wp_strip_all_tags((string) $post->post_title));
+    if ($title !== '' && $hook !== '') {
+        $pattern = '/^' . preg_quote($title, '/') . '\s*[-–—:,.!?]*\s*/iu';
+        $hook = trim((string) preg_replace($pattern, '', $hook, 1));
+    }
+
+    return $hook !== '' ? $hook : $title;
+}
+
+function sanatcin_buffer_x_build_args($args, $post, $profile_id, $service, $status, $action) {
+    if (!is_array($args) || !($post instanceof WP_Post) || $post->post_type !== 'post') return $args;
+
+    $network = strtolower((string) $service);
+    if (!in_array($network, ['twitter', 'x'], true)) return $args;
+
+    $url = get_permalink($post);
+    if (!$url) return $args;
+
+    $emoji = sanatcin_x_emoji($post);
+    $hook = sanatcin_x_editorial_hook($post);
+
+    // Keep the raw payload below 280 characters as well; this is stricter than
+    // X's fixed t.co URL accounting and prevents Buffer-side length failures.
+    $reserved = strlen("\n") + (function_exists('mb_strlen') ? mb_strlen($url, 'UTF-8') : strlen($url));
+    $max_hook = max(40, 278 - $reserved - 3);
+    $hook = sanatcin_x_trim_chars($hook, $max_hook);
+
+    $args['text'] = trim($emoji . ' ' . $hook) . "\n" . $url;
+    return $args;
+}
+add_filter('wp_to_buffer_pro_publish_build_args', 'sanatcin_buffer_x_build_args', 10, 6);
+
+function sanatcin_buffer_x_prevent_update_duplicates($conditions_met, $status, $post, $profile_id, $service, $action) {
+    if (!$conditions_met) return false;
+    $network = strtolower((string) $service);
+    if (!in_array($network, ['twitter', 'x'], true)) return $conditions_met;
+
+    // A normal editorial correction must not create a second X post.
+    if ($action === 'update') return false;
+    return $conditions_met;
+}
+add_filter('wp_to_buffer_pro_publish_status_conditions_met', 'sanatcin_buffer_x_prevent_update_duplicates', 10, 6);
