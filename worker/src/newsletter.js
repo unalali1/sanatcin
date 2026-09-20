@@ -207,6 +207,100 @@ export function renderNewsletterHtml(posts, { siteUrl = 'https://sanatcin.com', 
 </html>`;
 }
 
+
+function newsletterAuthHeader(username = '', password = '') {
+  if (!username || !password) return '';
+  return 'Basic ' + Buffer.from(username + ':' + String(password).replace(/\s+/g, '')).toString('base64');
+}
+
+async function wordpressJson(siteUrl, path, { username = '', password = '', method = 'GET', body, signal } = {}) {
+  const auth = newsletterAuthHeader(username, password);
+  const response = await fetch(siteUrl.replace(/\/$/, '') + '/wp-json' + path, {
+    method,
+    signal,
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      ...(auth ? { authorization: auth } : {})
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) })
+  });
+  if (!response.ok) throw new Error('WordPress newsletter işlemi başarısız: HTTP ' + response.status + ' ' + (await response.text()).slice(0, 400));
+  return response.status === 204 ? null : response.json();
+}
+
+export function isNewsletterReadyDossierDraft(post, {
+  dossierCategoryId,
+  now = new Date(),
+  minWords = 650
+} = {}) {
+  if (!post || post.status !== 'draft') return false;
+  if (!String(post.slug || '').startsWith('cin-sanatlari-dosyasi-')) return false;
+  if (!Number(post.featured_media)) return false;
+  if (dossierCategoryId && !(post.categories || []).map(Number).includes(Number(dossierCategoryId))) return false;
+
+  const title = text(post?.title?.raw || post?.title?.rendered || '');
+  const excerpt = text(post?.excerpt?.raw || post?.excerpt?.rendered || '');
+  const content = text(post?.content?.raw || post?.content?.rendered || '');
+  if (title.length < 12 || excerpt.length < 50 || content.length < 2500) return false;
+  if (/\b(?:todo|lorem ipsum|taslak notu)\b/iu.test(content)) return false;
+
+  const words = content.split(/\s+/).filter(Boolean).length;
+  if (words < minWords) return false;
+
+  const timestamp = Date.parse(post.date_gmt || post.date || 0);
+  if (!Number.isFinite(timestamp)) return false;
+  const ageDays = (now.getTime() - timestamp) / 86400000;
+  return ageDays >= -0.01 && ageDays <= 8;
+}
+
+export async function publishReadyDossierForNewsletter({
+  siteUrl,
+  username,
+  password,
+  now = new Date(),
+  signal
+} = {}) {
+  if (!username || !password) return { status: 'skipped', reason: 'missing_wordpress_credentials' };
+
+  const categories = await wordpressJson(
+    siteUrl,
+    '/wp/v2/categories?slug=cin-sanatlari-dosyasi&per_page=1&_fields=id,slug',
+    { username, password, signal }
+  );
+  const dossierCategoryId = Number(categories?.[0]?.id || 0);
+  if (!dossierCategoryId) return { status: 'skipped', reason: 'dossier_category_missing' };
+
+  const drafts = await wordpressJson(
+    siteUrl,
+    '/wp/v2/posts?categories=' + dossierCategoryId
+      + '&status=draft&context=edit&orderby=date&order=desc&per_page=10'
+      + '&_fields=id,slug,status,date,date_gmt,title,excerpt,content,featured_media,categories,link',
+    { username, password, signal }
+  );
+  const ready = (Array.isArray(drafts) ? drafts : []).filter((post) =>
+    isNewsletterReadyDossierDraft(post, { dossierCategoryId, now })
+  );
+
+  if (!ready.length) return { status: 'skipped', reason: 'no_ready_dossier_draft' };
+  if (ready.length > 1) {
+    throw new Error('Newsletter öncesi yayıma hazır birden fazla Çin Sanatları Dosyası taslağı bulundu; otomatik yayın durduruldu.');
+  }
+
+  const candidate = ready[0];
+  const published = await wordpressJson(
+    siteUrl,
+    '/wp/v2/posts/' + Number(candidate.id),
+    { username, password, method: 'POST', body: { status: 'publish' }, signal }
+  );
+  return {
+    status: 'published',
+    postId: published?.id,
+    link: published?.link,
+    title: text(published?.title?.rendered || candidate?.title?.raw || '')
+  };
+}
+
 export async function fetchRecentWordPressPosts({ siteUrl, lookbackDays = 7, perPage = 50, signal } = {}) {
   const after = new Date(Date.now() - lookbackDays * 86400000).toISOString();
   const url = new URL('/wp-json/wp/v2/posts', siteUrl);
