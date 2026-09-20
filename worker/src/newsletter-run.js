@@ -6,9 +6,12 @@ import {
   isNewsletterSendWindow,
   newsletterCampaignDate,
   renderNewsletterHtml,
-  sendBrevoCampaign
+  sendBrevoCampaign,
+  publishReadyDossierForNewsletter,
+  updateBrevoCampaignDraft
 } from './newsletter.js';
 import { buildNewsletterSelectionWithDossierBonus } from './newsletter-dossier.js';
+import { buildNewsletterSubject, validateNewsletterSelection } from './newsletter-score.js';
 
 function integer(name, fallback) {
   const value = Number.parseInt(process.env[name] ?? '', 10);
@@ -20,14 +23,17 @@ async function run() {
   const siteUrl = (process.env.WP_BASE_URL || 'https://sanatcin.com').replace(/\/$/, '');
   const mode = (process.env.NEWSLETTER_MODE || 'preview').toLowerCase();
   const lookbackDays = Math.max(1, Math.min(integer('NEWSLETTER_LOOKBACK_DAYS', 7), 21));
-  const maxItems = Math.max(4, Math.min(integer('NEWSLETTER_MAX_ITEMS', 6), 8));
+  const maxItems = Math.max(4, Math.min(integer('NEWSLETTER_MAX_ITEMS', 8), 8));
+  const minScore = Math.max(50, Math.min(integer('NEWSLETTER_MIN_SCORE', 68), 95));
+  const maxPerSource = Math.max(1, Math.min(integer('NEWSLETTER_MAX_PER_SOURCE', 2), 4));
+  const categoryDiversityBonus = Math.max(0, Math.min(integer('NEWSLETTER_CATEGORY_DIVERSITY_BONUS', 5), 15));
   const dossierBonus = Math.max(0, Math.min(integer('NEWSLETTER_DOSSIER_BONUS', 10), 20));
   const senderEmail = process.env.NEWSLETTER_SENDER_EMAIL || 'editor@sanatcin.com';
   const senderName = process.env.NEWSLETTER_SENDER_NAME || 'SanatÇin';
   const logoUrl = process.env.NEWSLETTER_LOGO_URL || `${siteUrl}/wp-content/uploads/2026/09/SanatCin-Logo.png`;
   const campaignDate = newsletterCampaignDate(now);
   const campaignName = `${process.env.NEWSLETTER_CAMPAIGN_PREFIX || 'SanatÇin Haftalık Seçki'} · ${campaignDate}`;
-  const subject = process.env.NEWSLETTER_SUBJECT || 'SanatÇin Haftalık Seçki';
+  const subjectFallback = process.env.NEWSLETTER_SUBJECT || 'SanatÇin Haftalık Seçki';
 
   setLogContext({ runId: `newsletter-${campaignDate}`, worker: 'newsletter', newsletterVersion: '0.10.0' });
   log('info', 'Newsletter seçkisi hazırlanıyor', {
@@ -35,6 +41,9 @@ async function run() {
     siteUrl,
     lookbackDays,
     maxItems,
+    minScore,
+    maxPerSource,
+    categoryDiversityBonus,
     campaignName,
     dossierBonus,
     scoreModel: process.env.NEWSLETTER_SCORE_MODEL || process.env.OPENAI_SELECTION_MODEL || 'gpt-5-mini'
@@ -52,6 +61,17 @@ async function run() {
     return;
   }
 
+  if (mode === 'send') {
+    const dossierPublish = await publishReadyDossierForNewsletter({
+      siteUrl,
+      username: process.env.WP_USERNAME || '',
+      password: process.env.WP_APP_PASSWORD || '',
+      now,
+      signal: AbortSignal.timeout(30000)
+    });
+    log('info', 'Newsletter öncesi Çin Sanatları Dosyası kontrolü tamamlandı', dossierPublish);
+  }
+
   const posts = await fetchRecentWordPressPosts({
     siteUrl,
     lookbackDays,
@@ -63,15 +83,26 @@ async function run() {
     model: process.env.NEWSLETTER_SCORE_MODEL || process.env.OPENAI_SELECTION_MODEL || 'gpt-5-mini',
     now,
     dossierBonus,
+    minScore,
+    maxPerSource,
+    categoryDiversityBonus,
     signal: AbortSignal.timeout(90000)
   });
-  if (selected.length < 4) {
-    throw new Error(`Newsletter için yeterli içerik yok: ${selected.length} içerik bulundu.`);
+  const validation = validateNewsletterSelection(selected, {
+    minItems: 4,
+    maxItems,
+    minScore,
+    maxPerSource
+  });
+  if (!validation.ok) {
+    throw new Error('Newsletter final kalite kontrolü başarısız: ' + validation.errors.join(' | '));
   }
 
+  const subject = buildNewsletterSubject(selected, { fallback: subjectFallback });
   const htmlContent = renderNewsletterHtml(selected, { siteUrl, logoUrl });
   log('info', 'Newsletter seçkisi hazır', {
     count: selected.length,
+    subject,
     heroPostId: selected[0]?.id ?? null,
     items: selected.map((post) => ({
       id: post.id,
@@ -97,10 +128,28 @@ async function run() {
 
   if (mode === 'draft') {
     if (existing) {
-      log('info', 'Bu tarihli Brevo kampanyası zaten mevcut; yinelenmedi', {
+      if (existing.status !== 'draft') {
+        log('info', 'Bu tarihli Brevo kampanyası zaten mevcut; taslak olmadığı için değiştirilmedi', {
+          campaignId: existing.id,
+          campaignName,
+          status: existing.status
+        });
+        return;
+      }
+      await updateBrevoCampaignDraft({
+        apiKey,
+        campaignId: existing.id,
+        listId,
+        senderEmail,
+        senderName,
+        subject,
+        campaignName,
+        htmlContent
+      });
+      log('info', 'Mevcut Brevo newsletter taslağı güncel seçkiyle yenilendi', {
         campaignId: existing.id,
         campaignName,
-        status: existing.status
+        subject
       });
       return;
     }
@@ -154,7 +203,17 @@ async function run() {
       recipientsListId: listId
     });
   } else {
-    log('info', 'Mevcut taslak kampanya yeniden kullanılacak', { campaignId, campaignName });
+    await updateBrevoCampaignDraft({
+      apiKey,
+      campaignId,
+      listId,
+      senderEmail,
+      senderName,
+      subject,
+      campaignName,
+      htmlContent
+    });
+    log('info', 'Mevcut taslak kampanya güncel seçki ve konu satırıyla yenilendi', { campaignId, campaignName, subject });
   }
 
   await sendBrevoCampaign({ apiKey, campaignId });
