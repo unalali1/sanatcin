@@ -91,7 +91,7 @@ export function newsletterSourceKey(post) {
       return 'host:' + new URL(sourceUrl).hostname.replace(/^www\./, '').toLowerCase();
     } catch {}
   }
-  return 'post:' + String(post?.id ?? Math.random());
+  return 'post:' + String(post?.id ?? 'unknown');
 }
 
 function regularCategorySlugs(post) {
@@ -444,7 +444,7 @@ export function validateNewsletterSelection(posts, {
   return { ok: errors.length === 0, errors };
 }
 
-export async function buildNewsletterSelection(posts, maxItems = 6, options = {}) {
+export async function buildNewsletterSelection(posts, maxItems = 8, options = {}) {
   const scored = await scoreNewsletterPosts(posts, options);
   return selectNewsletterPostsByScore(scored, maxItems, options);
 }
