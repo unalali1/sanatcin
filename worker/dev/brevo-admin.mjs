@@ -3,6 +3,7 @@ import {
   renderNewsletterHtml
 } from '../src/newsletter.js';
 import { buildNewsletterSelectionWithDossierBonus } from '../src/newsletter-dossier.js';
+import { buildNewsletterSubject, validateNewsletterSelection } from '../src/newsletter-score.js';
 
 const action = String(process.env.BREVO_ADMIN_ACTION || 'idle').trim();
 const apiKey = process.env.BREVO_API_KEY || '';
@@ -80,7 +81,10 @@ async function main() {
 
     const siteUrl = (process.env.WP_BASE_URL || 'https://sanatcin.com').replace(/\/$/, '');
     const lookbackDays = Math.max(1, Math.min(integer('NEWSLETTER_LOOKBACK_DAYS', 7), 21));
-    const maxItems = Math.max(4, Math.min(integer('NEWSLETTER_MAX_ITEMS', 6), 8));
+    const maxItems = Math.max(4, Math.min(integer('NEWSLETTER_MAX_ITEMS', 8), 8));
+    const minScore = Math.max(50, Math.min(integer('NEWSLETTER_MIN_SCORE', 68), 95));
+    const maxPerSource = Math.max(1, Math.min(integer('NEWSLETTER_MAX_PER_SOURCE', 2), 4));
+    const categoryDiversityBonus = Math.max(0, Math.min(integer('NEWSLETTER_CATEGORY_DIVERSITY_BONUS', 5), 15));
     const dossierBonus = Math.max(0, Math.min(integer('NEWSLETTER_DOSSIER_BONUS', 10), 20));
     const logoUrl = process.env.NEWSLETTER_LOGO_URL || `${siteUrl}/wp-content/uploads/2026/09/SanatCin-Logo.png`;
 
@@ -95,14 +99,24 @@ async function main() {
       model: process.env.NEWSLETTER_SCORE_MODEL || process.env.OPENAI_SELECTION_MODEL || 'gpt-5-mini',
       now: new Date(),
       dossierBonus,
+      minScore,
+      maxPerSource,
+      categoryDiversityBonus,
       signal: AbortSignal.timeout(90000)
     });
-    if (selected.length < 4) throw new Error(`Newsletter için yeterli içerik yok: ${selected.length}`);
+    const validation = validateNewsletterSelection(selected, {
+      minItems: 4,
+      maxItems,
+      minScore,
+      maxPerSource
+    });
+    if (!validation.ok) throw new Error('Newsletter final kalite kontrolü başarısız: ' + validation.errors.join(' | '));
 
+    const subject = buildNewsletterSubject(selected, { fallback: campaign?.subject || 'SanatÇin Haftalık Seçki' });
     const htmlContent = renderNewsletterHtml(selected, { siteUrl, logoUrl });
     await brevo(`/emailCampaigns/${campaignId}`, {
       method: 'PUT',
-      body: JSON.stringify({ htmlContent })
+      body: JSON.stringify({ htmlContent, subject })
     });
 
     const verify = await brevo(`/emailCampaigns/${campaignId}`);
