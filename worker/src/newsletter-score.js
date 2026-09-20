@@ -4,6 +4,11 @@ import { titleSimilarity } from './quality.js';
 
 const REGULAR_CATEGORY_SLUGS = ['kultur-sanat', 'sinema', 'moda-tasarim', 'sehir-yasam'];
 const DUPLICATE_THRESHOLD = 0.45;
+const DEFAULT_MIN_NEWSLETTER_SCORE = 68;
+const DEFAULT_MAX_PER_SOURCE = 2;
+const DEFAULT_CATEGORY_DIVERSITY_BONUS = 5;
+const HERO_MIN_VISUAL_SCORE = 72;
+const TOPIC_STOPWORDS = new Set(['ve','ile','icin','gibi','olan','olarak','daha','yeni','cinde','cin','bir','bu','da','de','den','dan','nin','nun','nın','un','in','the','of','and','to','in','on','at']);
 const SCORE_WEIGHTS = Object.freeze({
   weeklyImportance: 0.30,
   editorialFit: 0.20,
@@ -43,8 +48,61 @@ function hasCategory(post, slug) {
   return categorySlugs(post).includes(slug);
 }
 
+
+function normalizedTopicTokens(value = '') {
+  return text(value)
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9çğıöşü\s]/giu, ' ')
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 4 && !TOPIC_STOPWORDS.has(token));
+}
+
+function topicTokenSet(post) {
+  return new Set(normalizedTopicTokens(titleText(post) + ' ' + excerptText(post)));
+}
+
+export function newsletterTopicSimilarity(left, right) {
+  const title = titleSimilarity(titleText(left), titleText(right));
+  const a = topicTokenSet(left);
+  const b = topicTokenSet(right);
+  const shared = [...a].filter((token) => b.has(token)).length;
+  const containment = a.size && b.size ? shared / Math.min(a.size, b.size) : 0;
+  return {
+    score: Math.max(Number(title.score || 0), containment),
+    titleScore: Number(title.score || 0),
+    titleShared: Number(title.shared || 0),
+    semanticScore: containment,
+    semanticShared: shared
+  };
+}
+
+export function newsletterSourceKey(post) {
+  const rawName = text(post?.meta?.sanatcin_source_name || '');
+  if (rawName) {
+    const provider = rawName.split(/[–—|]/)[0].replace(/\s+/g, ' ').trim().toLocaleLowerCase('tr-TR');
+    if (provider) return 'name:' + provider;
+  }
+  const sourceUrl = String(post?.meta?.sanatcin_source_url || '').trim();
+  if (sourceUrl) {
+    try {
+      return 'host:' + new URL(sourceUrl).hostname.replace(/^www\./, '').toLowerCase();
+    } catch {}
+  }
+  return 'post:' + String(post?.id ?? Math.random());
+}
+
+function regularCategorySlugs(post) {
+  return categorySlugs(post).filter((slug) => REGULAR_CATEGORY_SLUGS.includes(slug));
+}
+
 function baseScore(post) {
-  return clamp(post?.meta?.sanatcin_score ?? 0, 50);
+  const raw = Number(post?.meta?.sanatcin_score ?? 0);
+  if (Number.isFinite(raw) && raw > 0) return clamp(raw, 50);
+  if (hasCategory(post, 'editorden') || hasCategory(post, 'cin-sanatlari-dosyasi')) return 75;
+  return 50;
 }
 
 function dateValue(post) {
@@ -237,43 +295,156 @@ function sortByNewsletterScore(posts) {
 }
 
 function isDuplicateTopic(candidate, selected) {
-  const candidateTitle = titleText(candidate);
-  if (!candidateTitle) return true;
   return selected.some((existing) => {
-    const similarity = titleSimilarity(candidateTitle, titleText(existing));
-    return similarity.score >= DUPLICATE_THRESHOLD && similarity.shared >= 2;
+    const similarity = newsletterTopicSimilarity(candidate, existing);
+    return (
+      (similarity.titleScore >= DUPLICATE_THRESHOLD && similarity.titleShared >= 2)
+      || (similarity.semanticScore >= 0.5 && similarity.semanticShared >= 4)
+    );
   });
 }
 
-export function selectNewsletterPostsByScore(posts, maxItems = 6) {
+function heroRank(post) {
+  const components = post?.newsletterScoreComponents || {};
+  const visual = Number(components.visualStrength ?? newsletterVisualStrength(post)) || 0;
+  const reader = Number(components.readerInterest ?? baseScore(post)) || 0;
+  const overall = Number(post?.newsletterScore ?? 0) || 0;
+  return overall * 0.65 + visual * 0.20 + reader * 0.15;
+}
+
+function sourceCount(selected, candidate) {
+  const key = newsletterSourceKey(candidate);
+  return selected.filter((post) => newsletterSourceKey(post) === key).length;
+}
+
+function diversityAdjustment(candidate, selected, categoryDiversityBonus) {
+  const seenCategories = new Set(selected.flatMap(regularCategorySlugs));
+  const hasNewRegularCategory = regularCategorySlugs(candidate).some((slug) => !seenCategories.has(slug));
+  const hasEditor = selected.some((post) => hasCategory(post, 'editorden'));
+  const editorBonus = hasCategory(candidate, 'editorden') && !hasEditor ? Math.min(3, categoryDiversityBonus) : 0;
+  return (hasNewRegularCategory ? categoryDiversityBonus : 0) + editorBonus;
+}
+
+export function selectNewsletterPostsByScore(posts, maxItems = 8, {
+  minScore = DEFAULT_MIN_NEWSLETTER_SCORE,
+  maxPerSource = DEFAULT_MAX_PER_SOURCE,
+  categoryDiversityBonus = DEFAULT_CATEGORY_DIVERSITY_BONUS
+} = {}) {
   const selected = [];
   const selectedIds = new Set();
-  const pick = (candidate) => {
-    if (!candidate || selectedIds.has(candidate.id) || selected.length >= maxItems) return false;
-    if (isDuplicateTopic(candidate, selected)) return false;
-    selected.push(candidate);
-    selectedIds.add(candidate.id);
-    return true;
-  };
-  const pickBest = (items) => {
-    for (const candidate of sortByNewsletterScore(items)) {
-      if (pick(candidate)) return candidate;
-    }
-    return null;
-  };
+  const candidates = sortByNewsletterScore(
+    posts.filter((post) => Number(post.newsletterScore ?? 0) >= minScore)
+  );
 
-  pickBest(posts.filter((post) => hasCategory(post, 'editorden')));
-  for (const slug of REGULAR_CATEGORY_SLUGS) {
-    pickBest(posts.filter((post) => hasCategory(post, slug) && !selectedIds.has(post.id)));
+  while (selected.length < maxItems) {
+    let best = null;
+    let bestAdjusted = -Infinity;
+    for (const candidate of candidates) {
+      if (selectedIds.has(candidate.id)) continue;
+      if (isDuplicateTopic(candidate, selected)) continue;
+      if (sourceCount(selected, candidate) >= maxPerSource) continue;
+
+      const sourcePenalty = sourceCount(selected, candidate) * 1.5;
+      const adjusted = Number(candidate.newsletterScore ?? 0)
+        + diversityAdjustment(candidate, selected, categoryDiversityBonus)
+        - sourcePenalty;
+      if (
+        adjusted > bestAdjusted
+        || (adjusted === bestAdjusted && dateValue(candidate) > dateValue(best))
+      ) {
+        best = candidate;
+        bestAdjusted = adjusted;
+      }
+    }
+    if (!best) break;
+    selected.push(best);
+    selectedIds.add(best.id);
   }
-  for (const post of sortByNewsletterScore(posts.filter((post) => !selectedIds.has(post.id)))) pick(post);
 
   if (!selected.length) return [];
-  const hero = sortByNewsletterScore(selected)[0];
+  const heroPool = selected.filter((post) => newsletterVisualStrength(post) >= HERO_MIN_VISUAL_SCORE);
+  const heroCandidates = heroPool.length ? heroPool : selected;
+  const hero = [...heroCandidates].sort((a, b) => heroRank(b) - heroRank(a) || dateValue(b) - dateValue(a))[0];
   return [hero, ...selected.filter((post) => post.id !== hero.id)].slice(0, maxItems);
+}
+
+function truncateSubject(value, maxLength) {
+  const clean = text(value);
+  if (clean.length <= maxLength) return clean;
+  const sliced = clean.slice(0, Math.max(1, maxLength - 1));
+  const boundary = sliced.lastIndexOf(' ');
+  return (boundary >= Math.floor(maxLength * 0.65) ? sliced.slice(0, boundary) : sliced).trimEnd() + '…';
+}
+
+export function buildNewsletterSubject(posts, {
+  brand = 'SanatÇin',
+  maxLength = 72,
+  fallback = 'SanatÇin Haftalık Seçki'
+} = {}) {
+  const first = titleText(posts?.[0]);
+  const second = titleText(posts?.[1]);
+  if (!first) return fallback;
+
+  const twoStory = brand + ' | ' + truncateSubject(first, 34) + ' · ' + truncateSubject(second, 26);
+  if (second && twoStory.length <= maxLength) return twoStory;
+  return truncateSubject(brand + ' | ' + first, maxLength);
+}
+
+export function validateNewsletterSelection(posts, {
+  minItems = 4,
+  maxItems = 8,
+  minScore = DEFAULT_MIN_NEWSLETTER_SCORE,
+  maxPerSource = DEFAULT_MAX_PER_SOURCE
+} = {}) {
+  const errors = [];
+  if (!Array.isArray(posts)) return { ok: false, errors: ['Seçki bir dizi değil.'] };
+  if (posts.length < minItems) errors.push('Yeterli sayıda güçlü içerik yok: ' + posts.length + '/' + minItems + '.');
+  if (posts.length > maxItems) errors.push('Seçki üst sınırı aşıyor: ' + posts.length + '/' + maxItems + '.');
+
+  const ids = new Set();
+  const links = new Set();
+  const sources = new Map();
+  for (const post of posts) {
+    if (ids.has(post.id)) errors.push('Aynı içerik kimliği iki kez seçilmiş: ' + post.id + '.');
+    ids.add(post.id);
+
+    const link = String(post?.link || '').trim();
+    if (!/^https:\/\//i.test(link)) errors.push('Geçersiz veya güvensiz haber bağlantısı: ' + (post.id ?? '?') + '.');
+    if (links.has(link)) errors.push('Aynı haber bağlantısı iki kez seçilmiş: ' + link + '.');
+    if (link) links.add(link);
+
+    if (!titleText(post)) errors.push('Başlığı olmayan içerik var: ' + (post.id ?? '?') + '.');
+    if (!excerptText(post)) errors.push('Spotu olmayan içerik var: ' + (post.id ?? '?') + '.');
+    if (!post?._embedded?.['wp:featuredmedia']?.[0]?.source_url) errors.push('Öne çıkan görseli olmayan içerik var: ' + (post.id ?? '?') + '.');
+    if (Number(post?.newsletterScore ?? 0) < minScore) errors.push('Kalite eşiğinin altında içerik seçilmiş: ' + (post.id ?? '?') + '.');
+
+    const source = newsletterSourceKey(post);
+    const count = (sources.get(source) || 0) + 1;
+    sources.set(source, count);
+    if (!source.startsWith('post:') && count > maxPerSource) {
+      errors.push('Aynı kaynaktan izin verilenden fazla içerik seçilmiş: ' + source + '.');
+    }
+  }
+
+  for (let i = 0; i < posts.length; i += 1) {
+    for (let j = i + 1; j < posts.length; j += 1) {
+      const similarity = newsletterTopicSimilarity(posts[i], posts[j]);
+      if (
+        (similarity.titleScore >= DUPLICATE_THRESHOLD && similarity.titleShared >= 2)
+        || (similarity.semanticScore >= 0.5 && similarity.semanticShared >= 4)
+      ) {
+        errors.push('Benzer iki konu seçilmiş: ' + posts[i].id + ' / ' + posts[j].id + '.');
+      }
+    }
+  }
+
+  if (posts.length && newsletterVisualStrength(posts[0]) < HERO_MIN_VISUAL_SCORE) {
+    errors.push('Hero haberin görsel gücü minimum eşiğin altında.');
+  }
+  return { ok: errors.length === 0, errors };
 }
 
 export async function buildNewsletterSelection(posts, maxItems = 6, options = {}) {
   const scored = await scoreNewsletterPosts(posts, options);
-  return selectNewsletterPostsByScore(scored, maxItems);
+  return selectNewsletterPostsByScore(scored, maxItems, options);
 }
