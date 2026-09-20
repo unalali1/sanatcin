@@ -7,7 +7,8 @@ import {
   newsletterCampaignDate,
   renderNewsletterHtml,
   sendBrevoCampaign,
-  publishReadyDossierForNewsletter
+  publishReadyDossierForNewsletter,
+  updateBrevoCampaignDraft
 } from './newsletter.js';
 import { buildNewsletterSelectionWithDossierBonus } from './newsletter-dossier.js';
 import { buildNewsletterSubject, validateNewsletterSelection } from './newsletter-score.js';
@@ -68,7 +69,7 @@ async function run() {
       now,
       signal: AbortSignal.timeout(30000)
     });
-    log(dossierPublish.status === 'published' ? 'info' : 'info', 'Newsletter öncesi Çin Sanatları Dosyası kontrolü tamamlandı', dossierPublish);
+    log('info', 'Newsletter öncesi Çin Sanatları Dosyası kontrolü tamamlandı', dossierPublish);
   }
 
   const posts = await fetchRecentWordPressPosts({
@@ -127,10 +128,28 @@ async function run() {
 
   if (mode === 'draft') {
     if (existing) {
-      log('info', 'Bu tarihli Brevo kampanyası zaten mevcut; yinelenmedi', {
+      if (existing.status !== 'draft') {
+        log('info', 'Bu tarihli Brevo kampanyası zaten mevcut; taslak olmadığı için değiştirilmedi', {
+          campaignId: existing.id,
+          campaignName,
+          status: existing.status
+        });
+        return;
+      }
+      await updateBrevoCampaignDraft({
+        apiKey,
+        campaignId: existing.id,
+        listId,
+        senderEmail,
+        senderName,
+        subject,
+        campaignName,
+        htmlContent
+      });
+      log('info', 'Mevcut Brevo newsletter taslağı güncel seçkiyle yenilendi', {
         campaignId: existing.id,
         campaignName,
-        status: existing.status
+        subject
       });
       return;
     }
@@ -184,7 +203,17 @@ async function run() {
       recipientsListId: listId
     });
   } else {
-    log('info', 'Mevcut taslak kampanya yeniden kullanılacak', { campaignId, campaignName });
+    await updateBrevoCampaignDraft({
+      apiKey,
+      campaignId,
+      listId,
+      senderEmail,
+      senderName,
+      subject,
+      campaignName,
+      htmlContent
+    });
+    log('info', 'Mevcut taslak kampanya güncel seçki ve konu satırıyla yenilendi', { campaignId, campaignName, subject });
   }
 
   await sendBrevoCampaign({ apiKey, campaignId });
