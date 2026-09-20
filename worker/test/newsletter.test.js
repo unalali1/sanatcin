@@ -6,7 +6,8 @@ import {
   isNewsletterSendWindow,
   newsletterCampaignDate,
   renderNewsletterHtml,
-  selectNewsletterPosts
+  selectNewsletterPosts,
+  isNewsletterReadyDossierDraft
 } from '../src/newsletter.js';
 
 function post(id, slug, score, date, title = `Haber ${id}`) {
@@ -75,4 +76,30 @@ test('otomatik gönderim yalnız pazar 06:00-06:19 UTC penceresinde açıktır',
   assert.equal(isNewsletterSendWindow(new Date('2026-09-20T06:20:00Z')), false);
   assert.equal(isNewsletterSendWindow(new Date('2026-09-19T06:00:00Z')), false);
   assert.equal(isNewsletterSendWindow(new Date('2026-09-20T05:59:59Z')), false);
+});
+
+
+test('newsletter yalnız tamamlanmış ve güncel Çin Sanatları Dosyası taslağını otomatik yayına uygun sayar', () => {
+  const content = '<p>' + Array.from({ length: 700 }, (_, index) => 'kaligrafi' + index).join(' ') + '</p>';
+  const ready = {
+    id: 90,
+    status: 'draft',
+    slug: 'cin-sanatlari-dosyasi-cin-kaligrafisi',
+    date_gmt: '2026-09-18T01:00:00Z',
+    title: { raw: 'Çin kaligrafisi: Bir fırça darbesinin binlerce yıllık hikâyesi' },
+    excerpt: { raw: 'Çin kaligrafisinin tarihini, tekniklerini ve estetik ilkelerini kaynaklarla ele alan haftalık dosya.' },
+    content: { raw: content },
+    featured_media: 321,
+    categories: [12, 44]
+  };
+  assert.equal(isNewsletterReadyDossierDraft(ready, {
+    dossierCategoryId: 44,
+    now: new Date('2026-09-20T06:00:00Z'),
+    minWords: 650
+  }), true);
+
+  assert.equal(isNewsletterReadyDossierDraft({ ...ready, featured_media: 0 }, {
+    dossierCategoryId: 44,
+    now: new Date('2026-09-20T06:00:00Z')
+  }), false);
 });
