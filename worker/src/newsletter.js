@@ -349,6 +349,34 @@ export async function createBrevoDraft({ apiKey, listId, senderEmail, senderName
   });
 }
 
+
+export async function updateBrevoCampaignDraft({
+  apiKey,
+  campaignId,
+  listId,
+  senderEmail,
+  senderName = 'SanatÇin',
+  subject,
+  campaignName,
+  htmlContent
+}) {
+  if (!apiKey) throw new Error('BREVO_API_KEY eksik.');
+  if (!Number.isInteger(Number(campaignId)) || Number(campaignId) <= 0) throw new Error('Brevo campaignId geçerli değil.');
+  if (!Number.isInteger(Number(listId)) || Number(listId) <= 0) throw new Error('BREVO_LIST_ID geçerli değil.');
+  return brevo('/emailCampaigns/' + Number(campaignId), apiKey, {
+    method: 'PUT',
+    body: JSON.stringify({
+      name: campaignName,
+      subject,
+      sender: { name: senderName, email: senderEmail },
+      recipients: { listIds: [Number(listId)] },
+      htmlContent,
+      inlineImageActivation: false,
+      mirrorActive: true
+    })
+  });
+}
+
 export async function findBrevoCampaignByName({ apiKey, campaignName }) {
   if (!apiKey) return null;
   const data = await brevo('/emailCampaigns?type=classic&limit=100&offset=0&sort=desc', apiKey);
