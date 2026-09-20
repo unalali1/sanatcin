@@ -22,5 +22,5 @@ export function applyDossierNewsletterBonus(posts, bonus = 10) {
 export async function buildNewsletterSelectionWithDossierBonus(posts, maxItems = 6, options = {}) {
   const scored = await scoreNewsletterPosts(posts, options);
   const boosted = applyDossierNewsletterBonus(scored, options.dossierBonus ?? 10);
-  return selectNewsletterPostsByScore(boosted, maxItems);
+  return selectNewsletterPostsByScore(boosted, maxItems, options);
 }
