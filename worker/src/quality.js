@@ -27,6 +27,21 @@ const OUTPUT_BOILERPLATE_PATTERNS = [
 const RAW_PINYIN_MARKERS = /\b(?:sheng|shi|xian|qu|zhen|zhou|zizhiqu|renmin|zhengfu|wenhua|bowuguan|meishuguan|daxue|ribao|dianshitai)\b/giu;
 const NEWSROOM_CLICHES = /\b(?:dikkat çekiyor|öne çıkıyor|gözler önüne seriyor|önemli bir adım|büyük ilgi gördü|sahnede|görücüye çıktı)\b/giu;
 const NOMINALIZATION_PATTERN = /\b\p{L}{4,}(?:ılması|ilmesi|ulması|ülmesi|lanması|lenmesi)\b/giu;
+const TRANSLATIONESE_PATTERNS = [
+  /\bartık yalnızca\b.{0,90}\bdeğil\b/giu,
+  /\bbu (?:dönüşüm|eğilim|yaklaşım|model)\b/giu,
+  /\bfarklı deneyimsel\b/giu,
+  /\bmüziğin mek[aâ]nla birlikte deneyimlenmesi\b/giu,
+  /\bdaha geniş bir söz alanı aç/giu,
+  /\byeni bir (?:kültürel |tartışma )?alan yarat/giu,
+  /\bbir araya getir(?:iyor|di|en|erek)\b/giu,
+  /\bdeneyim sun(?:uyor|du|an|mak)\b/giu,
+  /\b(?:dikkat çeken|öne çıkan) örneklerinden biri\b/giu,
+  /\b(?:dönüşüyor|dönüştü|dönüşümüne)\b/giu
+];
+const ABSTRACT_REPEAT_WORDS = new Set([
+  'deneyim', 'yaklaşım', 'dönüşüm', 'etkinlik', 'süreç', 'alan', 'model', 'unsur', 'bağlam'
+]);
 const TURKISH_HEADLINE_CONTEXT = /\b(?:sergi|festival|film|sinema|moda|müze|ödül|sanat|edebiyat|şiir|tasarım|konser|tiyatro|opera|mimari|kent|şehir|Pekin|Şanghay|Çin)\b/iu;
 const FOREIGN_PROPER_NAME_LEAD = /^[“"'‘]?[A-Z][A-Za-z-]+(?:\s+[A-Z][A-Za-z-]+){1,4}[”"'’]?(?:,|\s)/u;
 
@@ -118,6 +133,41 @@ export function translationIssues({ title = '', excerpt = '', text = '', paragra
     issues.push('Başlık bilinmeyen yabancı özel adla başlıyor; Türk okuyucu için ne olduğunu açıklayan bağlam eklenmeli.');
   }
   return issues;
+}
+
+export function editorialFluencyProfile({ title = '', excerpt = '', text = '' } = {}) {
+  const combined = `${title}\n${excerpt}\n${text}`.replace(/\s+/g, ' ').trim();
+  const words = combined.toLocaleLowerCase('tr-TR').match(/\p{L}+/gu) ?? [];
+  const translationeseHits = TRANSLATIONESE_PATTERNS.reduce((total, pattern) => {
+    pattern.lastIndex = 0;
+    return total + (combined.match(pattern)?.length ?? 0);
+  }, 0);
+  const nominalizations = combined.match(NOMINALIZATION_PATTERN)?.length ?? 0;
+  const clichéCount = combined.match(NEWSROOM_CLICHES)?.length ?? 0;
+  const abstractCounts = words.reduce((counts, word) => {
+    if (ABSTRACT_REPEAT_WORDS.has(word)) counts[word] = (counts[word] ?? 0) + 1;
+    return counts;
+  }, {});
+  const repeatedAbstractWords = Object.entries(abstractCounts)
+    .filter(([, count]) => count >= 4)
+    .map(([word, count]) => ({ word, count }));
+  const densityFactor = Math.max(1, words.length / 180);
+  const penalty = Math.round(
+    (translationeseHits * 7 + Math.max(0, nominalizations - 3) * 2 + clichéCount * 3
+      + repeatedAbstractWords.reduce((sum, item) => sum + (item.count - 3) * 2, 0)) / densityFactor
+  );
+  return {
+    score: Math.max(0, Math.min(100, 100 - penalty)),
+    translationeseHits,
+    nominalizations,
+    clichéCount,
+    repeatedAbstractWords
+  };
+}
+
+export function editorialDraftChanged(before = {}, after = {}) {
+  return JSON.stringify({ title: before.title, excerpt: before.excerpt, paragraphs: before.paragraphs })
+    !== JSON.stringify({ title: after.title, excerpt: after.excerpt, paragraphs: after.paragraphs });
 }
 
 export function headlineQualityRegression(before = '', after = '') {
@@ -222,6 +272,11 @@ const TITLE_STOP_WORDS = new Set([
   've', 'ile', 'bir', 'bu', 'için', 'da', 'de', 'mi', 'mı', 'mu', 'mü',
   'the', 'and', 'of', 'in', 'to', 'çin', 'cin', 'china', 'chinese'
 ]);
+const GENERIC_EVENT_TOKENS = new Set([
+  'pekin', 'beijing', 'şanghay', 'shanghai', 'çin', 'china', 'chinese',
+  'moda', 'fashion', 'haftası', 'week', 'festival', 'festivali', 'sergi',
+  'exhibition', 'etkinlik', 'event', 'sanat', 'art'
+]);
 
 function normalizedTitleTokenList(value = '') {
   return value
@@ -266,4 +321,14 @@ export function titleSimilarity(left, right) {
     score: Math.max(shared / union, sequenceBoost),
     shared: longestRun >= 3 ? Math.max(shared, 4) : shared
   };
+}
+
+export function likelyDuplicateTitles(left, right) {
+  const similarity = titleSimilarity(left, right);
+  if (similarity.shared < 4 || similarity.score < 0.62) return false;
+  if (similarity.score >= 0.82) return true;
+  const leftDistinctive = new Set(normalizedTitleTokenList(left).filter((token) => !GENERIC_EVENT_TOKENS.has(token)));
+  const rightDistinctive = new Set(normalizedTitleTokenList(right).filter((token) => !GENERIC_EVENT_TOKENS.has(token)));
+  const distinctiveShared = [...leftDistinctive].filter((token) => rightDistinctive.has(token)).length;
+  return distinctiveShared >= 2;
 }

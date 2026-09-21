@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { config } from './config.js';
 import { sourceHash } from './fetch.js';
 import { log } from './logger.js';
-import { assertImageDimensions, isUsableImageUrl, titleSimilarity } from './quality.js';
+import { assertImageDimensions, isUsableImageUrl, likelyDuplicateTitles, titleSimilarity } from './quality.js';
 import { SITE_PAGES } from './site-content.js';
 
 const auth = `Basic ${Buffer.from(`${config.wpUsername}:${config.wpAppPassword}`).toString('base64')}`;
@@ -172,6 +172,13 @@ function sourceImageReuseAllowed(article) {
     && Boolean(article.source?.imageLicenseUrl);
 }
 
+function sourceImageCandidates(article) {
+  const rawCandidates = sourceImageReuseAllowed(article)
+    ? (article.sourceImageUrls?.length ? article.sourceImageUrls : [article.sourceImageUrl])
+    : [];
+  return [...new Set(rawCandidates.filter((value) => isUsableImageUrl(value)))].slice(0, 6);
+}
+
 function visualPrompt(article) {
   const facts = article.factSheet?.facts?.slice(0, 5).join(' | ') ?? '';
   const personRule = article.realPersonCentered === true
@@ -271,14 +278,10 @@ async function loadSourceImage(article, imageUrl, signal) {
   };
 }
 
-export async function prepareFeaturedImage(article, { signal } = {}) {
-  const rawCandidates = sourceImageReuseAllowed(article)
-    ? (article.sourceImageUrls?.length ? article.sourceImageUrls : [article.sourceImageUrl])
-    : [];
-  const candidates = [...new Set(rawCandidates.filter((value) => isUsableImageUrl(value)))].slice(0, 6);
+export async function preflightFeaturedImage(article, { signal } = {}) {
+  const candidates = sourceImageCandidates(article);
   const errors = [];
   const loaded = [];
-
   for (const imageUrl of candidates) {
     try {
       loaded.push(await loadSourceImage(article, imageUrl, signal));
@@ -286,6 +289,24 @@ export async function prepareFeaturedImage(article, { signal } = {}) {
       errors.push(error.message);
     }
   }
+  if (!loaded.length && !config.generateFallbackImages) {
+    throw new Error(`Haber için kullanılabilir kaynak görseli bulunamadı: ${errors.slice(0, 3).join(' | ') || 'görsel adayı yok'}`);
+  }
+  log('info', 'Görsel ön kontrolü tamamlandı', {
+    source: article.source.id,
+    candidates: candidates.length,
+    usableSourceImages: loaded.length,
+    fallbackAvailable: config.generateFallbackImages,
+    errors: errors.slice(0, 3)
+  });
+  return { candidates, loaded, errors };
+}
+
+export async function prepareFeaturedImage(article, { signal, preflight } = {}) {
+  const prepared = preflight ?? await preflightFeaturedImage(article, { signal });
+  const candidates = prepared.candidates ?? sourceImageCandidates(article);
+  const errors = [...(prepared.errors ?? [])];
+  const loaded = [...(prepared.loaded ?? [])];
 
   loaded.sort((left, right) => resolutionPreference(right.dimensions) - resolutionPreference(left.dimensions));
   let best = null;
@@ -532,8 +553,19 @@ export async function assertNoSimilarPublishedTitle(title, { signal } = {}) {
   for (const post of posts) {
     const existingTitle = decodeTitle(post.title?.rendered);
     const similarity = titleSimilarity(title, existingTitle);
-    if (similarity.shared >= 4 && similarity.score >= 0.62) {
+    if (likelyDuplicateTitles(title, existingTitle)) {
       throw new Error(`Benzer haber daha önce yayımlanmış: "${existingTitle}" (${Math.round(similarity.score * 100)}%).`);
     }
+  }
+}
+
+export async function assertNoSimilarPublishedCandidate(sourceTitle, { signal } = {}) {
+  const posts = await wp('/wp/v2/posts?status=publish&per_page=100&orderby=date&order=desc&_fields=id,link,title,meta', { signal });
+  for (const post of posts) {
+    const existingOriginalTitle = decodeTitle(post.meta?.sanatcin_original_title);
+    if (!existingOriginalTitle || !likelyDuplicateTitles(sourceTitle, existingOriginalTitle)) continue;
+    const similarity = titleSimilarity(sourceTitle, existingOriginalTitle);
+    const existingTitle = decodeTitle(post.title?.rendered) || existingOriginalTitle;
+    throw new Error(`Kaynak başlığı daha önce yayımlanan haberle eşleşiyor: "${existingTitle}" (${Math.round(similarity.score * 100)}%).`);
   }
 }

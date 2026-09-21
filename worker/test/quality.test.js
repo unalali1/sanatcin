@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertImageDimensions, countCjk, imageDimensions, isUsableImageUrl, sourceContentIssues, nativeNameRegression, titleSimilarity, translationIssues } from '../src/quality.js';
+import { assertImageDimensions, countCjk, editorialFluencyProfile, imageDimensions, isUsableImageUrl, likelyDuplicateTitles, sourceContentIssues, nativeNameRegression, titleSimilarity, translationIssues } from '../src/quality.js';
 
 test('Çince karakterleri yakalar', () => {
   assert.equal(countCjk('Türkçe metin 龟兹'), 2);
@@ -80,6 +80,32 @@ test('Akıcı Türkçe metni kabul eder', () => {
     ].join('\n\n')
   });
   assert.deepEqual(issues, []);
+});
+
+test('çeviri kokusu taşıyan kalıpları akıcılık puanında cezalandırır', () => {
+  const natural = editorialFluencyProfile({
+    title: 'Mağaralarda konser dönemi',
+    excerpt: 'Guizhou’daki mağaralar bu sonbaharda konserlere açıldı.',
+    text: 'Müzisyenler doğal akustiği kullanarak üç konser verdi. Dinleyiciler yankının performansa kattığı etkiyi salonda izledi.'
+  });
+  const translated = editorialFluencyProfile({
+    title: 'Mağaralar yeni deneyimlere ev sahipliği yapıyor',
+    excerpt: 'Bu dönüşümün dikkat çeken örneklerinden biri farklı deneyimsel etkinlikleri bir araya getiriyor.',
+    text: 'Mağaralar artık yalnızca doğal güzellikleriyle değil, yeni deneyimler sunmasıyla da öne çıkıyor. Bu yaklaşım yeni bir kültürel alan yaratıyor.'
+  });
+  assert.ok(translated.translationeseHits >= 3);
+  assert.ok(translated.score < natural.score);
+});
+
+test('aynı etkinlikteki farklı özneleri mükerrer saymaz', () => {
+  assert.equal(likelyDuplicateTitles(
+    'ASUS ve Intel, Pekin Moda Haftası’nda yapay zekâ bilgisayarını tanıttı',
+    'Heykeltıraş Zhu Bingren, Pekin Moda Haftası’nın açılışını yaptı'
+  ), false);
+  assert.equal(likelyDuplicateTitles(
+    'Yongle Ansiklopedisi’nin iki cildi Çin’e bağışlandı',
+    'Paris’ten alınan Yongle Ansiklopedisi’nin iki cildi Çin’e bağışlandı'
+  ), true);
 });
 
 test('kaynak süreci notlarını ve ham Pinyin zincirlerini reddeder', () => {

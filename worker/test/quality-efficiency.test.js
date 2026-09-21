@@ -86,7 +86,7 @@ test('başlık üretimi katalog kalıbı ve klişe heyecan dilinden kaçınır',
   assert.match(translate, /yer adı \+ iki isimden oluşan katalog kalıbına bırakma/);
   assert.match(translate, /“heyecanı yaşandı”/);
   assert.match(translate, /daha doğal bir fiille yeniden kur/);
-  assert.match(translate, /fact-ledger-turkish-newsroom-v11-verified-native-names/);
+  assert.match(translate, /fact-ledger-turkish-newsroom-v12-native-fluency-gate/);
 });
 
 test('source health taslak kaydı, dinamik sürüm ve hero meta bağlantıları kodda bulunur', () => {

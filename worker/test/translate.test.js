@@ -60,7 +60,9 @@ test('olgu çıkarımı, haber yazımı ve Türkçe son okuma ardışık çalı�
   assert.equal(calls[1].model, config.openaiEditorModel);
   assert.equal(calls[2].model, config.openaiEditorModel);
   assert.match(calls[2].input[0].content, /son okuma.*editörüsün/);
-  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v11-verified-native-names');
+  assert.doesNotMatch(calls[1].input[1].content, /Kaynak metin:/);
+  assert.match(calls[1].input[1].content, /leadFacts/);
+  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v12-native-fluency-gate');
   assert.equal(result.factSheet.facts.length, 4);
   assert.match(result.title, /Şanghay/);
 });
@@ -81,4 +83,48 @@ test('dil veya biçim notu adayı elemek yerine hedefli düzeltme ve son okuma b
   assert.match(calls[2].input[1].content, /Spot 105-180 karakter aralığında değil/);
   assert.match(calls[3].input[0].content, /son okuma.*editörüsün/);
   assert.ok(result.excerpt.length >= 105);
+});
+
+test('değişen son okuma yalnız bağımsız akıcılık hakemi seçerse kabul edilir', async () => {
+  const calls = [];
+  const first = editorialResult();
+  const polished = { ...editorialResult(), title: 'Şanghay’daki sergi çağdaş zanaata yeni bir yorum getiriyor' };
+  const completeJson = async (request) => {
+    calls.push(request);
+    if (calls.length === 1) return { factSheet };
+    if (calls.length === 2) return first;
+    if (calls.length === 3) return polished;
+    return { preferred: 'A', reason: 'İlk başlık daha somut ve haber ritmi daha güçlü.', aScore: 91, bScore: 84 };
+  };
+
+  const result = await translateArticle(article, { completeJson });
+
+  assert.equal(calls.length, 4);
+  assert.equal(calls[3].model, config.openaiSelectionModel);
+  assert.match(calls[3].input[0].content, /tarafsız bir haber dili hakemisin/);
+  assert.equal(result.title, first.title);
+});
+
+test('düşük Türkçe doğallık puanı yayını kesmeden hedefli düzeltme başlatır', async () => {
+  const calls = [];
+  const awkward = {
+    ...editorialResult(),
+    paragraphs: [
+      'Sergi artık yalnızca geleneksel zanaatı göstermiyor, farklı deneyimsel etkinlikleri de bir araya getiriyor. Bu dönüşümün dikkat çeken örneklerinden biri olarak yeni bir kültürel alan yaratıyor.',
+      'Bu yaklaşım izleyicilere yeni bir deneyim sunuyor ve üretim süreçlerinin deneyimlenmesini mümkün kılıyor. Etkinlik, farklı deneyimleri aynı model içinde bir araya getiriyor.',
+      'Program, sanatçılara daha geniş bir söz alanı açıyor. Bu dönüşüm, çağdaş zanaatın öne çıkan örneklerinden biri olarak dikkat çekiyor.',
+      'Sergi 20 Ekim’e kadar açık kalacak. Programda konuşmalar ve atölyeler düzenlenecek; toplam 42 eser ziyaretçilerle buluşacak.'
+    ]
+  };
+  const completeJson = async (request) => {
+    calls.push(request);
+    if (calls.length === 1) return { factSheet };
+    if (calls.length === 2) return awkward;
+    return editorialResult();
+  };
+
+  await translateArticle(article, { completeJson });
+
+  assert.equal(calls.length, 4);
+  assert.match(calls[2].input[1].content, /Türkçe doğallık puanı düşük/);
 });

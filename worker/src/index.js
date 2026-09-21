@@ -10,7 +10,15 @@ import { createRunBudget } from './run-budget.js';
 import { attachSecondaryImage } from './secondary-image.js';
 import { CATEGORIES, SOURCES, SOURCE_SET_VERSION } from './sources.js';
 import { translateArticle } from './translate.js';
-import { assertNoSimilarPublishedTitle, knownHashes, prepareFeaturedImage, publishArticle, syncSiteContent } from './wordpress.js';
+import {
+  assertNoSimilarPublishedCandidate,
+  assertNoSimilarPublishedTitle,
+  knownHashes,
+  preflightFeaturedImage,
+  prepareFeaturedImage,
+  publishArticle,
+  syncSiteContent
+} from './wordpress.js';
 
 const WORKER_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version ?? 'unknown';
 
@@ -287,9 +295,13 @@ async function run() {
           log('info', 'Yayın tarihi doğrulanamayan makale atlandı', { source: candidate.source.id, url: candidate.url });
           return { slug, skipped: true };
         }
-        const translated = await translateArticle({ ...article, originalTitle: article.title }, { signal: runController.signal });
+        await assertNoSimilarPublishedCandidate(article.title, { signal: runController.signal });
+        const [translated, imagePreflight] = await Promise.all([
+          translateArticle({ ...article, originalTitle: article.title }, { signal: runController.signal }),
+          preflightFeaturedImage(article, { signal: runController.signal })
+        ]);
         await assertNoSimilarPublishedTitle(translated.title, { signal: runController.signal });
-        const image = await prepareFeaturedImage(translated, { signal: runController.signal });
+        const image = await prepareFeaturedImage(translated, { signal: runController.signal, preflight: imagePreflight });
         const publishable = { ...translated, score: candidate.score };
         const post = await publishArticle(publishable, image, { signal: runController.signal });
         let secondaryImage = { attached: false, reason: config.dryRun ? 'dry-run' : 'not-attempted' };
@@ -381,7 +393,11 @@ async function run() {
       log('warn', 'Kategori için yayımlanabilir yeni haber bulunamadı', {
         category: slug,
         attempts: budget.attemptsFor(slug),
-        candidatesRemaining: queues[slug].length
+        candidatesRemaining: queues[slug].length,
+        topRemainingScore: queues[slug].length ? Math.max(...queues[slug].map((candidate) => candidate.score)) : null,
+        topRemainingEditorialFit: queues[slug].length ? Math.max(...queues[slug].map((candidate) => candidate.editorialFit ?? 0)) : null,
+        minimumPublishScore: config.minPublishScore,
+        preferredPublishScore: config.preferredPublishScore
       });
     }
   }
