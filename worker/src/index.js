@@ -62,7 +62,8 @@ function candidateForRound(queue, sourceUseCounts, {
   excludedSourceIds = new Set(),
   topicPortfolio = [],
   enforceTopicDiversity = false,
-  trustedSourceOnly = false
+  rescueBelowScore = null,
+  rescueMinimumFit = 7
 }) {
   let bestIndex = -1;
   let bestEffectiveScore = -Infinity;
@@ -72,7 +73,9 @@ function candidateForRound(queue, sourceUseCounts, {
   for (let index = 0; index < queue.length; index += 1) {
     const candidate = queue[index];
     if (candidate.score < hardMinimum) continue;
-    if (trustedSourceOnly && (candidate.source?.quality ?? 0) < 8) continue;
+    if (rescueBelowScore != null && candidate.score < rescueBelowScore) {
+      if ((candidate.source?.quality ?? 0) < 8 || (candidate.editorialFit ?? 0) < rescueMinimumFit) continue;
+    }
     if (excludedSourceIds.has(candidate.source?.id)) continue;
     if (enforceTopicDiversity && isNearTopicRepeat(candidate, topicPortfolio)) continue;
     hasFallbackCandidate = true;
@@ -222,11 +225,10 @@ async function run() {
     const batchSources = new Set();
     const unfilled = CATEGORIES.filter(({ slug }) => categoryPublished[slug] === 0 && budget.canAttempt(slug));
     const coveragePhase = unfilled.some(({ slug }) => queues[slug].some((candidate) => {
-      const rescueEligible = fallbackActive
-        && candidate.score >= config.categoryRescuePublishScore
+      const potentialRescue = candidate.score >= config.categoryRescuePublishScore
         && (candidate.editorialFit ?? 0) >= config.minEditorialFit
         && (candidate.source?.quality ?? 0) >= 8;
-      return candidate.score >= config.minPublishScore || rescueEligible;
+      return candidate.score >= config.minPublishScore || potentialRescue;
     }));
 
     for (const { slug } of CATEGORIES) {
@@ -251,7 +253,8 @@ async function run() {
         excludedSourceIds: batchSources,
         topicPortfolio: plannedCandidates,
         enforceTopicDiversity: results.length + attempts.length < 4,
-        trustedSourceOnly: rescueSlot
+        rescueBelowScore: rescueSlot ? config.minPublishScore : null,
+        rescueMinimumFit: config.minEditorialFit
       });
 
       if (!selected.candidate) {
