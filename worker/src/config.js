@@ -38,6 +38,7 @@ export const config = {
   minDailyTarget: boundedInteger('MIN_DAILY_TARGET', 4, 1, 8),
   maxDailyTotal: boundedInteger('MAX_DAILY_TOTAL', 8, 1, 8),
   minPublishScore: boundedInteger('MIN_PUBLISH_SCORE', 54, 0, 100),
+  categoryRescuePublishScore: boundedInteger('CATEGORY_RESCUE_PUBLISH_SCORE', 50, 0, 100),
   secondSlotMinScore: boundedInteger('SECOND_SLOT_MIN_SCORE', 58, 0, 100),
   preferredPublishScore: boundedInteger('PREFERRED_PUBLISH_SCORE', 62, 0, 100),
   preferredSecondSlotScore: boundedInteger('PREFERRED_SECOND_SLOT_SCORE', 64, 0, 100),

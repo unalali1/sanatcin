@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { diversifyBySource, diversifyByTopic, rerankInputsResilient, sourceCrowdingPenalty } from '../src/rank.js';
+import { diversifyBySource, diversifyByTopic, isNearTopicRepeat, rerankInputsResilient, sourceCrowdingPenalty } from '../src/rank.js';
 
 const silentLogger = () => {};
 
@@ -86,4 +86,16 @@ test('aynı konudaki adayları elemeden kuyruğa dağıtır', () => {
     { id: 'c', title: 'Pekin film festivali uluslararası seçkisini açıkladı' }
   ];
   assert.deepEqual(diversifyByTopic(input).map((item) => item.id), ['a', 'c', 'b']);
+});
+
+test('AI konu kümesi aynı olayı farklı başlıklarda da yakalar', () => {
+  const prior = { title: 'Bir tasarımcının yeni koleksiyonu', topicCluster: 'beijing-fashion-week-2026' };
+  const candidate = { title: 'Başkentte podyuma çıkan başka bir marka', topicCluster: 'BEIJING-FASHION-WEEK-2026' };
+  assert.equal(isNearTopicRepeat(candidate, [prior]), true);
+});
+
+test('farklı konu kümelerini portföy tekrarı saymaz', () => {
+  const prior = { title: 'Şanghay müzesinde bronz eserler', topicCluster: 'shanghai-bronze-exhibition' };
+  const candidate = { title: 'Pekin film festivalinin yarışma seçkisi', topicCluster: 'beijing-film-festival' };
+  assert.equal(isNearTopicRepeat(candidate, [prior]), false);
 });

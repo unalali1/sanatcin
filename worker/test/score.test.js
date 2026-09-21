@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { freshnessPoints, hasExcludedTopic, inferCategory, isCommercialEconomyDominant, scoreCandidate, selectByCategory } from '../src/score.js';
+import { freshnessPoints, hasExcludedTopic, inferCategory, isCommercialEconomyDominant, isFreshForCategory, scoreCandidate, selectByCategory } from '../src/score.js';
 import { applyAiScores, buildBalancedShortlist } from '../src/rank.js';
 
 const source = { id: 'test', name: 'Test', quality: 9, defaultCategory: null };
@@ -125,4 +125,17 @@ test('AI kısa listesi kategorileri dengeli taşır', () => {
   assert.ok(selected.some((item) => item.category === 'sinema'));
   assert.ok(selected.some((item) => item.category === 'moda-tasarim'));
   assert.ok(selected.some((item) => item.category === 'sehir-yasam'));
+});
+
+test('kategoriye göre tazelik penceresi uygular', () => {
+  const now = new Date('2026-09-21T12:00:00Z');
+  const publishedAt = '2026-09-17T12:00:00Z';
+  assert.equal(isFreshForCategory({ category: 'kultur-sanat', publishedAt }, now), false);
+  assert.equal(isFreshForCategory({ category: 'sehir-yasam', publishedAt }, now), false);
+  assert.equal(isFreshForCategory({ category: 'moda-tasarim', publishedAt }, now), true);
+  assert.equal(isFreshForCategory({ category: 'sinema', publishedAt }, now), true);
+});
+
+test('tarihi olmayan aday keşif aşamasında korunur', () => {
+  assert.equal(isFreshForCategory({ category: 'sinema', publishedAt: null }), true);
 });

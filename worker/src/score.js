@@ -35,6 +35,22 @@ const creativeContextPatterns = [
   /(?:艺术|文化|博物馆|美术馆|展览|遗产|文学|诗歌|图书|戏剧|歌剧|音乐|电影|导演|演员|时尚|设计师|秀场|建筑|工艺|非遗|演出|摄影|绘画|雕塑)/u
 ];
 
+export const CATEGORY_FRESHNESS_HOURS = Object.freeze({
+  'kultur-sanat': 72,
+  'sehir-yasam': 72,
+  'moda-tasarim': 120,
+  sinema: 168
+});
+
+export function isFreshForCategory(candidate, now = new Date()) {
+  if (!candidate?.publishedAt) return true;
+  const publishedAt = new Date(candidate.publishedAt).getTime();
+  if (!Number.isFinite(publishedAt)) return false;
+  const maximumAge = CATEGORY_FRESHNESS_HOURS[candidate.category] ?? 72;
+  const ageHours = (now.getTime() - publishedAt) / 3_600_000;
+  return ageHours >= -6 && ageHours <= maximumAge;
+}
+
 export function isCommercialEconomyDominant(candidate) {
   const haystack = `${candidate.title ?? ''} ${candidate.summary ?? ''}`;
   if (creativeContextPatterns.some((pattern) => pattern.test(haystack))) return false;

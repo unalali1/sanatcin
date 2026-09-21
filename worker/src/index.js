@@ -4,8 +4,8 @@ import { mapLimit } from './concurrency.js';
 import { discover, extractArticle, sourceHash } from './fetch.js';
 import { classifyError } from './errors.js';
 import { flushLogs, log, setLogContext } from './logger.js';
-import { scoreCandidate } from './score.js';
-import { diversifyBySource, diversifyByTopic, rerankCandidates, sourceCrowdingPenalty } from './rank.js';
+import { isFreshForCategory, scoreCandidate } from './score.js';
+import { diversifyBySource, diversifyByTopic, isNearTopicRepeat, rerankCandidates, sourceCrowdingPenalty } from './rank.js';
 import { createRunBudget } from './run-budget.js';
 import { attachSecondaryImage } from './secondary-image.js';
 import { CATEGORIES, SOURCES, SOURCE_SET_VERSION } from './sources.js';
@@ -58,7 +58,11 @@ function distribution(items, key) {
 function candidateForRound(queue, sourceUseCounts, {
   fallbackActive,
   hardMinimum,
-  preferredMinimum
+  preferredMinimum,
+  excludedSourceIds = new Set(),
+  topicPortfolio = [],
+  enforceTopicDiversity = false,
+  trustedSourceOnly = false
 }) {
   let bestIndex = -1;
   let bestEffectiveScore = -Infinity;
@@ -68,6 +72,9 @@ function candidateForRound(queue, sourceUseCounts, {
   for (let index = 0; index < queue.length; index += 1) {
     const candidate = queue[index];
     if (candidate.score < hardMinimum) continue;
+    if (trustedSourceOnly && (candidate.source?.quality ?? 0) < 8) continue;
+    if (excludedSourceIds.has(candidate.source?.id)) continue;
+    if (enforceTopicDiversity && isNearTopicRepeat(candidate, topicPortfolio)) continue;
     hasFallbackCandidate = true;
     const previousCount = sourceUseCounts[candidate.source?.id] ?? 0;
     const sourcePenalty = sourceCrowdingPenalty(previousCount);
@@ -181,7 +188,7 @@ async function run() {
   }
   const queues = Object.fromEntries(CATEGORIES.map(({ slug }) => [
     slug,
-    diversifyByTopic(diversifyBySource(ranked.filter((item) => item.eligible !== false && item.category === slug)))
+    diversifyByTopic(diversifyBySource(ranked.filter((item) => item.eligible !== false && item.category === slug && isFreshForCategory(item))))
   ]));
   selectionStats.topicPenalized = Object.values(queues).flat().filter((item) => item.topicPenalty > 0).length;
   log('info', 'Aday seçimi tamamlandı', {
@@ -197,9 +204,10 @@ async function run() {
   });
 
   const results = [];
+  const publishedCandidates = [];
   const categoryPublished = Object.fromEntries(CATEGORIES.map(({ slug }) => [slug, 0]));
   let timeLimitReached = budget.isExpired() || runController.signal.aborted;
-  for (let round = 1; round <= config.maxAttemptsPerCategory; round += 1) {
+  for (let round = 1; round <= config.maxAttemptsPerCategory * 2; round += 1) {
     if (timeLimitReached || results.length >= config.maxDailyTotal) break;
     if (budget.isExpired() || runController.signal.aborted) {
       timeLimitReached = true;
@@ -210,14 +218,28 @@ async function run() {
     const remainingSlots = config.maxDailyTotal - results.length;
     const attempts = [];
     const plannedSourceCounts = distribution(results, 'source');
+    const plannedCandidates = [...publishedCandidates];
+    const batchSources = new Set();
+    const unfilled = CATEGORIES.filter(({ slug }) => categoryPublished[slug] === 0 && budget.canAttempt(slug));
+    const coveragePhase = unfilled.some(({ slug }) => queues[slug].some((candidate) => {
+      const rescueEligible = fallbackActive
+        && candidate.score >= config.categoryRescuePublishScore
+        && (candidate.editorialFit ?? 0) >= config.minEditorialFit
+        && (candidate.source?.quality ?? 0) >= 8;
+      return candidate.score >= config.minPublishScore || rescueEligible;
+    }));
 
     for (const { slug } of CATEGORIES) {
       if (attempts.length >= remainingSlots) break;
       if (categoryPublished[slug] >= config.maxPerCategory || !budget.canAttempt(slug)) continue;
+      if (coveragePhase && categoryPublished[slug] > 0) continue;
 
       const firstSlot = categoryPublished[slug] === 0;
-      const hardMinimum = firstSlot
-        ? config.minPublishScore
+      const rescueSlot = firstSlot && fallbackActive;
+      const hardMinimum = rescueSlot
+        ? config.categoryRescuePublishScore
+        : firstSlot
+          ? config.minPublishScore
         : Math.max(config.minPublishScore, config.secondSlotMinScore);
       const preferredMinimum = firstSlot
         ? Math.max(hardMinimum, config.preferredPublishScore)
@@ -225,7 +247,11 @@ async function run() {
       const selected = candidateForRound(queues[slug], plannedSourceCounts, {
         fallbackActive,
         hardMinimum,
-        preferredMinimum
+        preferredMinimum,
+        excludedSourceIds: batchSources,
+        topicPortfolio: plannedCandidates,
+        enforceTopicDiversity: results.length + attempts.length < 4,
+        trustedSourceOnly: rescueSlot
       });
 
       if (!selected.candidate) {
@@ -245,6 +271,8 @@ async function run() {
       if (candidate.sourcePenalty > 0) selectionStats.sourcePenalized += 1;
       if (fallbackActive) selectionStats.adaptiveFallbackAttempts += 1;
       increment(plannedSourceCounts, candidate.source.id);
+      batchSources.add(candidate.source.id);
+      plannedCandidates.push(candidate);
       attempts.push({ slug, candidate, attempt: budget.noteAttempt(slug), fallbackActive });
     }
 
@@ -257,6 +285,7 @@ async function run() {
     log('info', 'Kategori dengeli aday turu başladı', {
       round,
       fallbackActive,
+      coveragePhase,
       candidates: attempts.map(({ slug, candidate }) => ({
         category: slug,
         source: candidate.source.id,
@@ -287,7 +316,7 @@ async function run() {
       try {
         const article = await extractArticle(candidate);
         if (budget.isExpired()) throw new Error('Toplam çalışma süresi sınırına ulaşıldı.');
-        if (article.publishedAt && new Date(article.publishedAt).getTime() < cutoff) {
+        if (!isFreshForCategory({ ...article, category: slug })) {
           log('info', 'Eski makale atlandı', { source: candidate.source.id, url: candidate.url, publishedAt: article.publishedAt });
           return { slug, skipped: true };
         }
@@ -342,7 +371,7 @@ async function run() {
         };
         sourceStats[candidate.source.id].published += 1;
         log('info', config.dryRun ? 'Haber simülasyonu tamamlandı' : config.publishStatus === 'draft' ? 'Haber taslak olarak kaydedildi' : 'Haber yayımlandı', result);
-        return { slug, result };
+        return { slug, result, candidate };
       } catch (error) {
         const classified = classifyError(error);
         if (runController.signal.aborted || budget.isExpired()) {
@@ -373,6 +402,7 @@ async function run() {
       if (outcome.timedOut) timeLimitReached = true;
       if (!outcome.result) continue;
       results.push(outcome.result);
+      publishedCandidates.push(outcome.candidate);
       categoryPublished[outcome.slug] += 1;
     }
     if (timeLimitReached) break;
