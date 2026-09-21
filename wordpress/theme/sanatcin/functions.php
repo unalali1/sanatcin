@@ -304,15 +304,34 @@ function sanatcin_buffer_x_build_args($args, $post, $profile_id, $service, $stat
     if (!$url) return $args;
 
     $emoji = sanatcin_x_emoji($post);
+    $title = trim(wp_strip_all_tags((string) $post->post_title));
     $hook = sanatcin_x_editorial_hook($post);
 
-    // Keep the raw payload below 280 characters as well; this is stricter than
-    // X's fixed t.co URL accounting and prevents Buffer-side length failures.
-    $reserved = strlen("\n") + (function_exists('mb_strlen') ? mb_strlen($url, 'UTF-8') : strlen($url));
-    $max_hook = max(40, 278 - $reserved - 3);
+    // X only: emoji + title + one concise explanatory sentence + one URL.
+    // Instagram/Facebook keep WP to Buffer Pro's existing formatting untouched.
+    $title_prefix = trim($emoji . ' ' . $title);
+    $separator = "\n";
+    $reserved = (function_exists('mb_strlen') ? mb_strlen($title_prefix, 'UTF-8') : strlen($title_prefix))
+        + (function_exists('mb_strlen') ? mb_strlen($url, 'UTF-8') : strlen($url))
+        + strlen($separator) * 2;
+
+    $max_hook = max(24, 280 - $reserved);
     $hook = sanatcin_x_trim_chars($hook, $max_hook);
 
-    $args['text'] = trim($emoji . ' ' . $hook) . "\n" . $url;
+    $parts = array_filter([$title_prefix, $hook, $url], static fn($value) => trim((string) $value) !== '');
+    $text = implode($separator, $parts);
+
+    // Hard safety cap for Buffer/X. Preserve the title and URL; trim only the hook.
+    $length = function_exists('mb_strlen') ? mb_strlen($text, 'UTF-8') : strlen($text);
+    if ($length > 280) {
+        $fixed = $title_prefix . $separator . $separator . $url;
+        $fixed_length = function_exists('mb_strlen') ? mb_strlen($fixed, 'UTF-8') : strlen($fixed);
+        $hook = sanatcin_x_trim_chars($hook, max(0, 280 - $fixed_length));
+        $parts = array_filter([$title_prefix, $hook, $url], static fn($value) => trim((string) $value) !== '');
+        $text = implode($separator, $parts);
+    }
+
+    $args['text'] = $text;
     return $args;
 }
 add_filter('wp_to_buffer_pro_publish_build_args', 'sanatcin_buffer_x_build_args', 10, 6);
