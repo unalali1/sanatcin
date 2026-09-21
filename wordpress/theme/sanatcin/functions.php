@@ -305,28 +305,38 @@ function sanatcin_buffer_x_build_args($args, $post, $profile_id, $service, $stat
 
     $emoji = sanatcin_x_emoji($post);
     $title = trim(wp_strip_all_tags((string) $post->post_title));
-    $hook = sanatcin_x_editorial_hook($post);
+    $hook = trim(preg_replace('/\\s+/u', ' ', sanatcin_x_editorial_hook($post)));
+
+    // Keep only the first explanatory sentence.
+    $sentences = preg_split('/(?<=[.!?…])\\s+/u', $hook, 2);
+    if (is_array($sentences) && isset($sentences[0])) $hook = trim($sentences[0]);
 
     // X only: emoji + title + one concise explanatory sentence + one URL.
     // Instagram/Facebook keep WP to Buffer Pro's existing formatting untouched.
-    $title_prefix = trim($emoji . ' ' . $title);
     $separator = "\n";
-    $reserved = (function_exists('mb_strlen') ? mb_strlen($title_prefix, 'UTF-8') : strlen($title_prefix))
-        + (function_exists('mb_strlen') ? mb_strlen($url, 'UTF-8') : strlen($url))
-        + strlen($separator) * 2;
+    $emoji_prefix = trim($emoji . ' ');
+    $url_length = function_exists('mb_strlen') ? mb_strlen($url, 'UTF-8') : strlen($url);
+    $emoji_length = function_exists('mb_strlen') ? mb_strlen($emoji_prefix, 'UTF-8') : strlen($emoji_prefix);
+    $separator_length = strlen($separator);
 
-    $max_hook = max(24, 280 - $reserved);
-    $hook = sanatcin_x_trim_chars($hook, $max_hook);
+    // Reserve room for a useful one-sentence hook before trimming the title.
+    $max_title = max(20, 280 - $url_length - $emoji_length - ($separator_length * 2) - 24);
+    $title = sanatcin_x_trim_chars($title, $max_title);
+    $title_prefix = trim($emoji_prefix . $title);
+
+    $fixed_length = (function_exists('mb_strlen') ? mb_strlen($title_prefix, 'UTF-8') : strlen($title_prefix))
+        + $url_length
+        + ($separator_length * 2);
+    $hook = sanatcin_x_trim_chars($hook, max(0, 280 - $fixed_length));
 
     $parts = array_filter([$title_prefix, $hook, $url], static fn($value) => trim((string) $value) !== '');
     $text = implode($separator, $parts);
 
-    // Hard safety cap for Buffer/X. Preserve the title and URL; trim only the hook.
+    // Absolute raw-payload guard. This should only matter for unusually long permalinks.
     $length = function_exists('mb_strlen') ? mb_strlen($text, 'UTF-8') : strlen($text);
     if ($length > 280) {
-        $fixed = $title_prefix . $separator . $separator . $url;
-        $fixed_length = function_exists('mb_strlen') ? mb_strlen($fixed, 'UTF-8') : strlen($fixed);
-        $hook = sanatcin_x_trim_chars($hook, max(0, 280 - $fixed_length));
+        $max_title = max(1, $max_title - ($length - 280));
+        $title_prefix = trim($emoji_prefix . sanatcin_x_trim_chars($title, $max_title));
         $parts = array_filter([$title_prefix, $hook, $url], static fn($value) => trim((string) $value) !== '');
         $text = implode($separator, $parts);
     }
