@@ -55,7 +55,7 @@ test('olgu çıkarımı, haber yazımı ve Türkçe son okuma ardışık çalı�
 
   const result = await translateArticle(article, { completeJson });
 
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 4);
   assert.equal(calls[0].model, config.openaiFactModel);
   assert.equal(calls[1].model, config.openaiEditorModel);
   assert.equal(calls[2].model, config.openaiEditorModel);
@@ -127,6 +127,6 @@ test('düşük Türkçe doğallık puanı yayını kesmeden hedefli düzeltme ba
 
   await translateArticle(article, { completeJson });
 
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 5);
   assert.match(calls[2].input[1].content, /Türkçe doğallık puanı düşük/);
 });
