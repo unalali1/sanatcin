@@ -38,8 +38,8 @@ const TRANSLATIONESE_PATTERNS = [
   /\bdeneyim sun(?:uyor|du|an|mak)\b/giu,
   /\b(?:dikkat çeken|öne çıkan) örneklerinden biri\b/giu,
   /\b(?:dönüşüyor|dönüştü|dönüşümüne)\b/giu,
-  /\bdemonstrasyon bölgesi\b/giu,
-  /\bözgün Çince olmayan\b/giu,
+  /demonstrasyon bölgesi/giu,
+  /özgün Çince olmayan/giu,
   /\b(?:tecrübe|deneyim) alanı sun(?:uyor|du)\b/giu
 ];
 const ABSTRACT_REPEAT_WORDS = new Set([
