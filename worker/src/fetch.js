@@ -281,8 +281,63 @@ export function extractBestArticleTextFromHtml(html, url = 'https://example.com/
   }
 }
 
-function imagesFromSrcset(value = '') {
-  return String(value).split(',').map((entry) => entry.trim().split(/\s+/)[0]).filter(Boolean);
+export function imagesFromSrcset(value = '') {
+  return String(value)
+    .split(',')
+    .map((entry) => {
+      const parts = entry.trim().split(/\s+/).filter(Boolean);
+      const url = parts[0] ?? '';
+      const descriptor = parts[1] ?? '';
+      const width = descriptor.endsWith('w') ? Number.parseInt(descriptor, 10) : 0;
+      const density = descriptor.endsWith('x') ? Number.parseFloat(descriptor) : 0;
+      const score = Number.isFinite(width) && width > 0
+        ? width
+        : Number.isFinite(density) && density > 0
+          ? density * 1000
+          : 1;
+      return { url, score };
+    })
+    .filter((item) => item.url)
+    .sort((left, right) => right.score - left.score)
+    .map((item) => item.url);
+}
+
+function addJsonLdImage(value, output) {
+  if (!value) return;
+  if (typeof value === 'string') {
+    output.push(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => addJsonLdImage(item, output));
+    return;
+  }
+  if (typeof value === 'object') {
+    addJsonLdImage(value.url, output);
+    addJsonLdImage(value.contentUrl, output);
+    addJsonLdImage(value.thumbnailUrl, output);
+  }
+}
+
+function jsonLdImageUrls($) {
+  const urls = [];
+  $('script[type="application/ld+json"]').each((_, element) => {
+    try {
+      const parsed = JSON.parse($(element).text());
+      const queue = Array.isArray(parsed) ? [...parsed] : [parsed];
+      while (queue.length) {
+        const item = queue.shift();
+        if (!item || typeof item !== 'object') continue;
+        if (Array.isArray(item['@graph'])) queue.push(...item['@graph']);
+        addJsonLdImage(item.image, urls);
+        addJsonLdImage(item.thumbnailUrl, urls);
+        addJsonLdImage(item.primaryImageOfPage, urls);
+      }
+    } catch {
+      // Bozuk JSON-LD görsel keşfini engellememeli.
+    }
+  });
+  return urls;
 }
 
 export async function extractArticle(candidate) {
@@ -313,12 +368,18 @@ export async function extractArticle(candidate) {
 
     const readable = cheerio.load(article?.content ?? '');
     const rawImages = [
-      ...readable('img').map((_, element) => readable(element).attr('data-src') || readable(element).attr('data-lazy-src') || readable(element).attr('data-original') || readable(element).attr('src')).get(),
+      ...readable('picture source').map((_, element) => imagesFromSrcset(readable(element).attr('srcset') || readable(element).attr('data-srcset'))).get().flat(),
       ...readable('img').map((_, element) => imagesFromSrcset(readable(element).attr('srcset') || readable(element).attr('data-srcset'))).get().flat(),
+      ...readable('img').map((_, element) => readable(element).attr('data-src') || readable(element).attr('data-lazy-src') || readable(element).attr('data-original') || readable(element).attr('data-original-src') || readable(element).attr('src')).get(),
+      $('meta[property="og:image:secure_url"]').attr('content'),
       $('meta[property="og:image"]').attr('content'),
+      $('meta[name="twitter:image:src"]').attr('content'),
       $('meta[name="twitter:image"]').attr('content'),
-      ...$('article img, main img, .article img, .content img').map((_, element) => $(element).attr('data-src') || $(element).attr('data-lazy-src') || $(element).attr('data-original') || $(element).attr('src')).get(),
-      ...$('article img, main img, .article img, .content img').map((_, element) => imagesFromSrcset($(element).attr('srcset') || $(element).attr('data-srcset'))).get().flat()
+      $('link[rel="image_src"]').attr('href'),
+      ...jsonLdImageUrls($),
+      ...$('article picture source, main picture source, .article picture source, .content picture source').map((_, element) => imagesFromSrcset($(element).attr('srcset') || $(element).attr('data-srcset'))).get().flat(),
+      ...$('article img, main img, .article img, .content img').map((_, element) => imagesFromSrcset($(element).attr('srcset') || $(element).attr('data-srcset'))).get().flat(),
+      ...$('article img, main img, .article img, .content img').map((_, element) => $(element).attr('data-src') || $(element).attr('data-lazy-src') || $(element).attr('data-original') || $(element).attr('data-original-src') || $(element).attr('src')).get()
     ];
     const sourceImageUrls = [...new Set(rawImages
       .filter(Boolean)
