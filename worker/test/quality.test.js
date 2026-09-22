@@ -179,3 +179,14 @@ test('benzer başlıkları ortak anlamlı kelimelerle yakalar', () => {
   assert.ok(result.shared >= 4);
   assert.ok(result.score >= 0.62);
 });
+
+
+test('kelime kelime idarî terim çevirilerini akıcılık puanında cezalandırır', () => {
+  const profile = editorialFluencyProfile({
+    title: 'Kültürel miras alanında yeni çalışma',
+    excerpt: 'Yeni çalışma koruma uygulamalarını ele alıyor.',
+    text: 'Bölge, Ulusal Kültürel Eserlerin Korunması ve Kullanımı Demonstrasyon Bölgesi olarak tanımlandı. Özgün Çince olmayan yayınlar için ayrı bir bölüm de oluşturuldu.'
+  });
+  assert.ok(profile.translationeseHits >= 2);
+  assert.ok(profile.score < 100);
+});
