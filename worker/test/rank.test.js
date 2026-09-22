@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { diversifyBySource, diversifyByTopic, isNearTopicRepeat, rerankInputsResilient, sourceCrowdingPenalty } from '../src/rank.js';
+import { buildBalancedShortlist, diversifyBySource, diversifyByTopic, isNearTopicRepeat, looksLikeCinemaCandidate, rerankInputsResilient, sourceCrowdingPenalty } from '../src/rank.js';
 
 const silentLogger = () => {};
 
@@ -98,4 +98,45 @@ test('farklı konu kümelerini portföy tekrarı saymaz', () => {
   const prior = { title: 'Şanghay müzesinde bronz eserler', topicCluster: 'shanghai-bronze-exhibition' };
   const candidate = { title: 'Pekin film festivalinin yarışma seçkisi', topicCluster: 'beijing-film-festival' };
   assert.equal(isNearTopicRepeat(candidate, [prior]), false);
+});
+
+
+test('sinema adaylarını AI kısa listesinde ayrı bir rezervle korur', () => {
+  const source = { id: 'culture', name: 'Culture', quality: 9 };
+  const candidates = [
+    ...Array.from({ length: 12 }, (_, index) => ({
+      id: `culture-${index}`,
+      title: `Çağdaş sanat sergisi ${index}`,
+      summary: 'Yeni sergi farklı sanatçıları buluşturuyor.',
+      category: 'kultur-sanat',
+      eligible: true,
+      score: 100 - index,
+      source
+    })),
+    {
+      id: 'hidden-film',
+      title: 'Yeni Çin filmi uluslararası festivalde ilk gösterimini yaptı',
+      summary: 'Yönetmen ve oyuncular filmin prömiyerine katıldı.',
+      category: 'kultur-sanat',
+      eligible: true,
+      score: 55,
+      source
+    }
+  ];
+  const shortlist = buildBalancedShortlist(candidates, 8);
+  assert.equal(looksLikeCinemaCandidate(candidates.at(-1)), true);
+  assert.ok(shortlist.some((item) => item.id === 'hidden-film'));
+});
+
+test('aynı yayıncı ailesindeki farklı kaynakları çeşitlilikte tek grup sayar', () => {
+  const input = [
+    { id: 'cd-culture-1', score: 100, source: { id: 'cd-culture', publisherGroup: 'china-daily-network' } },
+    { id: 'cd-fashion-1', score: 99, source: { id: 'cd-fashion', publisherGroup: 'china-daily-network' } },
+    { id: 'cgtn-1', score: 90, source: { id: 'cgtn', publisherGroup: 'cgtn' } },
+    { id: 'xinhua-1', score: 80, source: { id: 'xinhua', publisherGroup: 'xinhua' } }
+  ];
+  assert.deepEqual(
+    diversifyBySource(input).map((item) => item.id),
+    ['cd-culture-1', 'cgtn-1', 'xinhua-1', 'cd-fashion-1']
+  );
 });
