@@ -14,9 +14,11 @@ import {
   assertNoSimilarPublishedCandidate,
   assertNoSimilarPublishedTitle,
   knownHashes,
+  loadFailedCandidateState,
   preflightFeaturedImage,
   prepareFeaturedImage,
   publishArticle,
+  saveFailedCandidateState,
   syncSiteContent
 } from './wordpress.js';
 
@@ -56,6 +58,7 @@ function distribution(items, key) {
 }
 
 function candidateForRound(queue, sourceUseCounts, {
+  publisherUseCounts = {},
   fallbackActive,
   hardMinimum,
   preferredMinimum,
@@ -63,7 +66,8 @@ function candidateForRound(queue, sourceUseCounts, {
   topicPortfolio = [],
   enforceTopicDiversity = false,
   rescueBelowScore = null,
-  rescueMinimumFit = 7
+  rescueMinimumFit = 7,
+  allowPublisherOverflow = false
 }) {
   let bestIndex = -1;
   let bestEffectiveScore = -Infinity;
@@ -77,6 +81,9 @@ function candidateForRound(queue, sourceUseCounts, {
       if ((candidate.source?.quality ?? 0) < 8 || (candidate.editorialFit ?? 0) < rescueMinimumFit) continue;
     }
     if (excludedSourceIds.has(candidate.source?.id)) continue;
+    const publisherGroup = candidate.source?.publisherGroup ?? candidate.source?.id ?? 'unknown';
+    const publisherCount = publisherUseCounts[publisherGroup] ?? 0;
+    if (!allowPublisherOverflow && publisherCount >= config.maxPublisherGroupDaily) continue;
     if (enforceTopicDiversity && isNearTopicRepeat(candidate, topicPortfolio)) continue;
     hasFallbackCandidate = true;
     const previousCount = sourceUseCounts[candidate.source?.id] ?? 0;
@@ -97,7 +104,8 @@ function candidateForRound(queue, sourceUseCounts, {
     candidate: {
       ...candidate,
       effectiveScore: bestEffectiveScore,
-      sourcePenalty: bestPenalty
+      sourcePenalty: bestPenalty,
+      publisherGroup: candidate.source?.publisherGroup ?? candidate.source?.id ?? 'unknown'
     },
     hasFallbackCandidate
   };
@@ -144,6 +152,9 @@ async function run() {
     aiBatchSize: config.aiBatchSize,
     aiRerankConcurrency: config.aiRerankConcurrency,
     articleConcurrency: config.articleConcurrency,
+    maxPublisherGroupDaily: config.maxPublisherGroupDaily,
+    cinemaAiReserve: config.cinemaAiReserve,
+    editorialJudgeTimeoutMs: config.editorialJudgeTimeoutMs,
     selectionModel: config.openaiSelectionModel,
     factModel: config.openaiFactModel,
     editorModel: config.openaiEditorModel
@@ -156,7 +167,8 @@ async function run() {
     preferredDeferred: 0,
     topicPenalized: 0,
     sourcePenalized: 0,
-    adaptiveFallbackAttempts: 0
+    adaptiveFallbackAttempts: 0,
+    cachedFailedSkipped: 0
   };
   const discovered = await mapLimit(SOURCES.filter((source) => source.enabled), config.discoveryConcurrency, async (source) => {
     try {
@@ -177,7 +189,22 @@ async function run() {
     .filter((item) => !item.publishedAt || (new Date(item.publishedAt).getTime() >= cutoff && new Date(item.publishedAt).getTime() <= futureLimit))
     .map((item) => scoreCandidate(item));
   const known = new Set(await knownHashes(candidates.map((item) => sourceHash(item.url))));
-  const newCandidates = candidates.filter((item) => !known.has(sourceHash(item.url)));
+  const failedCandidateState = await loadFailedCandidateState({ signal: runController.signal });
+  const failedCandidateMap = new Map(failedCandidateState.map((entry) => [entry.url, entry]));
+  const newCandidates = candidates.filter((item) => {
+    if (known.has(sourceHash(item.url))) return false;
+    if (failedCandidateMap.has(item.url)) {
+      selectionStats.cachedFailedSkipped += 1;
+      return false;
+    }
+    return true;
+  });
+  if (selectionStats.cachedFailedSkipped > 0) {
+    log('info', 'Yakın zamanda gövde çıkarımı başarısız olan adaylar geçici önbellekten atlandı', {
+      skipped: selectionStats.cachedFailedSkipped,
+      cacheHours: config.failedCandidateCacheHours
+    });
+  }
   let ranked;
   try {
     ranked = await rerankCandidates(newCandidates, { signal: runController.signal });
@@ -221,6 +248,7 @@ async function run() {
     const remainingSlots = config.maxDailyTotal - results.length;
     const attempts = [];
     const plannedSourceCounts = distribution(results, 'source');
+    const plannedPublisherCounts = distribution(results, 'publisherGroup');
     const plannedCandidates = [...publishedCandidates];
     const batchSources = new Set();
     const unfilled = CATEGORIES.filter(({ slug }) => categoryPublished[slug] === 0 && budget.canAttempt(slug));
@@ -247,6 +275,7 @@ async function run() {
         ? Math.max(hardMinimum, config.preferredPublishScore)
         : Math.max(hardMinimum, config.preferredSecondSlotScore);
       const selected = candidateForRound(queues[slug], plannedSourceCounts, {
+        publisherUseCounts: plannedPublisherCounts,
         fallbackActive,
         hardMinimum,
         preferredMinimum,
@@ -254,7 +283,8 @@ async function run() {
         topicPortfolio: plannedCandidates,
         enforceTopicDiversity: results.length + attempts.length < 4,
         rescueBelowScore: rescueSlot ? config.minPublishScore : null,
-        rescueMinimumFit: config.minEditorialFit
+        rescueMinimumFit: config.minEditorialFit,
+        allowPublisherOverflow: fallbackActive && firstSlot
       });
 
       if (!selected.candidate) {
@@ -274,6 +304,7 @@ async function run() {
       if (candidate.sourcePenalty > 0) selectionStats.sourcePenalized += 1;
       if (fallbackActive) selectionStats.adaptiveFallbackAttempts += 1;
       increment(plannedSourceCounts, candidate.source.id);
+      increment(plannedPublisherCounts, candidate.publisherGroup ?? candidate.source?.publisherGroup ?? candidate.source.id);
       batchSources.add(candidate.source.id);
       plannedCandidates.push(candidate);
       attempts.push({ slug, candidate, attempt: budget.noteAttempt(slug), fallbackActive });
@@ -292,6 +323,7 @@ async function run() {
       candidates: attempts.map(({ slug, candidate }) => ({
         category: slug,
         source: candidate.source.id,
+        publisherGroup: candidate.publisherGroup ?? candidate.source?.publisherGroup ?? candidate.source.id,
         score: candidate.score,
         effectiveScore: candidate.effectiveScore,
         editorialFit: candidate.editorialFit,
@@ -351,6 +383,7 @@ async function run() {
         }
         const result = {
           source: candidate.source.id,
+          publisherGroup: candidate.publisherGroup ?? candidate.source?.publisherGroup ?? candidate.source.id,
           category: candidate.category,
           score: candidate.score,
           effectiveScore: candidate.effectiveScore,
@@ -390,6 +423,13 @@ async function run() {
         }
         sourceStats[candidate.source.id].rejected += 1;
         increment(rejectedReasons, classified.group);
+        if (classified.code === 'SOURCE_EXTRACTION') {
+          failedCandidateMap.set(candidate.url, {
+            url: candidate.url,
+            failedAt: new Date().toISOString(),
+            code: classified.code
+          });
+        }
         log('error', 'Haber işlenemedi; sıradaki aday denenecek', {
           category: slug,
           source: candidate.source.id,
@@ -439,6 +479,8 @@ async function run() {
     log('warn', 'Günlük asgari yayın hedefinin altında kalındı', { target: config.minDailyTarget, processed: results.length });
   }
 
+  await saveFailedCandidateState([...failedCandidateMap.values()]);
+
   const targetReached = results.length >= config.minDailyTarget;
   const hadRejections = Object.keys(rejectedReasons).length > 0;
   const runStatus = results.length === 0
@@ -457,6 +499,7 @@ async function run() {
     elapsedMinutes: Math.round((Date.now() - budget.startedAt) / 6000) / 10,
     categoryPublished,
     sourcePublished: distribution(results, 'source'),
+    publisherPublished: distribution(results, 'publisherGroup'),
     scoreStats: publishedScoreStats(results),
     selectionStats,
     rejectedReasons,

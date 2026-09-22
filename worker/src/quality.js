@@ -37,7 +37,10 @@ const TRANSLATIONESE_PATTERNS = [
   /\bbir araya getir(?:iyor|di|en|erek)\b/giu,
   /\bdeneyim sun(?:uyor|du|an|mak)\b/giu,
   /\b(?:dikkat çeken|öne çıkan) örneklerinden biri\b/giu,
-  /\b(?:dönüşüyor|dönüştü|dönüşümüne)\b/giu
+  /\b(?:dönüşüyor|dönüştü|dönüşümüne)\b/giu,
+  /demonstrasyon bölgesi/giu,
+  /özgün Çince olmayan/giu,
+  /\b(?:tecrübe|deneyim) alanı sun(?:uyor|du)\b/giu
 ];
 const ABSTRACT_REPEAT_WORDS = new Set([
   'deneyim', 'yaklaşım', 'dönüşüm', 'etkinlik', 'süreç', 'alan', 'model', 'unsur', 'bağlam'

@@ -55,14 +55,15 @@ test('olgu çıkarımı, haber yazımı ve Türkçe son okuma ardışık çalı�
 
   const result = await translateArticle(article, { completeJson });
 
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
   assert.equal(calls[0].model, config.openaiFactModel);
   assert.equal(calls[1].model, config.openaiEditorModel);
   assert.equal(calls[2].model, config.openaiEditorModel);
+  assert.equal(calls[3].model, config.openaiEditorModel);
   assert.match(calls[2].input[0].content, /son okuma.*editörüsün/);
   assert.doesNotMatch(calls[1].input[1].content, /Kaynak metin:/);
   assert.match(calls[1].input[1].content, /leadFacts/);
-  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v12-native-fluency-gate');
+  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v13-repair-headline-gate');
   assert.equal(result.factSheet.facts.length, 4);
   assert.match(result.title, /Şanghay/);
 });
@@ -78,7 +79,7 @@ test('dil veya biçim notu adayı elemek yerine hedefli düzeltme ve son okuma b
 
   const result = await translateArticle(article, { completeJson });
 
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 5);
   assert.equal(calls[2].model, config.openaiEditorModel);
   assert.match(calls[2].input[1].content, /Spot 105-180 karakter aralığında değil/);
   assert.match(calls[3].input[0].content, /son okuma.*editörüsün/);
@@ -99,9 +100,10 @@ test('değişen son okuma yalnız bağımsız akıcılık hakemi seçerse kabul 
 
   const result = await translateArticle(article, { completeJson });
 
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 5);
   assert.equal(calls[3].model, config.openaiSelectionModel);
   assert.match(calls[3].input[0].content, /tarafsız bir haber dili hakemisin/);
+  assert.equal(calls[4].model, config.openaiEditorModel);
   assert.equal(result.title, first.title);
 });
 
@@ -125,6 +127,6 @@ test('düşük Türkçe doğallık puanı yayını kesmeden hedefli düzeltme ba
 
   await translateArticle(article, { completeJson });
 
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 5);
   assert.match(calls[2].input[1].content, /Türkçe doğallık puanı düşük/);
 });

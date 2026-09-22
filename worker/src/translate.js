@@ -169,6 +169,7 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
           '“Artık yalnızca ... değil”, “bu dönüşümün dikkat çeken örneklerinden biri”, “farklı deneyimsel”, “söz alanı açıyor”, “yeni bir alan yaratıyor” ve art arda kullanılan “bir araya getiriyor” kalıplarını doğal Türkçe fiillerle yeniden kur.',
           'Aynı soyut sözcüğü — özellikle deneyim, yaklaşım, dönüşüm, süreç, alan veya model — metin boyunca tekrarlama. Somut özne ve eylemi doğrudan söyle.',
           'Bir kişi veya kurumun biyografisindeki her ayrıntıyı taşımak zorunda değilsin. Haberin ana gelişmesi için gerekli olmayan eğitim, görev ve kurum listelerini kısalt; metni özgeçmiş dökümüne dönüştürme.',
+          'Türk okurunun bilmeyebileceği Çince teknik terim, sanat tekniği veya kurum sınıflandırmasını açıklamasız romanizasyonla bırakma. Doğal Türkçe karşılığını ver; özgün terimi ancak gerçekten gerekli ise ilk kullanımda parantez içinde koru.',
           '“Dikkat çekiyor”, “öne çıkıyor”, “gözler önüne seriyor”, “önemli bir adım” ve “büyük ilgi gördü” gibi hazır ifadeleri ancak kaynakta somut dayanağı varsa kullan.',
           'Kurum açıklamalarındaki övgü ve iddiaları haberin kendi hükmü gibi yazma; söyleyeni açıkça belirt. Kaynaktaki neden-sonuç ilişkisini güçlendirme veya yeni bir önem atfetme.',
           'Türkiye Türkçesinde yerleşik karşılığı olan şehir ve kavramları Türkçeleştir; Pekin ve Şanghay yazımlarını kullan. Sergi, etkinlik, belgesel, program ve benzeri kültür-sanat adlarının resmî veya yerleşik Türkçe karşılığı varsa onu kullan. Çince olmayan yabancı adlarda böyle bir karşılık yoksa, ad açıklayıcı nitelikteyse anlamını koruyan doğal bir Türkçe karşılık üret; özgün yabancı adı ancak marka niteliği, uluslararası tanınırlık veya anlam belirsizliği nedeniyle gerçekten gerekliyse ilk kullanımda parantez içinde ver. Çince adlandırmalarda ise bir sonraki özel kuralı uygula.',
@@ -213,41 +214,103 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
 }
 
 async function chooseMoreNaturalDraft(article, factSheet, before, after, { signal, completeJson = requestJson } = {}) {
-  const judgeSignal = signal
-    ? AbortSignal.any([signal, AbortSignal.timeout(8_000)])
-    : AbortSignal.timeout(8_000);
+  let lastError = null;
+  for (let attempt = 0; attempt <= config.editorialJudgeRetries; attempt += 1) {
+    const judgeSignal = signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(config.editorialJudgeTimeoutMs)])
+      : AbortSignal.timeout(config.editorialJudgeTimeoutMs);
+    try {
+      const result = await completeJson({
+        model: config.openaiSelectionModel,
+        signal: judgeSignal,
+        input: [
+          {
+            role: 'system',
+            content: [
+              'Türkiye Türkçesiyle çalışan tarafsız bir haber dili hakemisin.',
+              'İki metin aynı doğrulanmış olgulara dayanıyor. Yalnız dil doğallığı, açıklık, haber ritmi, somut fiil kullanımı ve çeviri kokusunun yokluğu bakımından karşılaştır.',
+              'Bilgi ekleyen, sayı/ad değiştiren, daha muğlaklaşan veya sırf farklı görünmek için cümleleri bozan sürümü seçme.',
+              'B sürümünü yalnız açıkça daha iyi ise seç; eşitlikte veya kuşkuda A sürümünü koru.',
+              'Yalnız geçerli JSON ver.'
+            ].join(' ')
+          },
+          {
+            role: 'user',
+            content: [
+              `Haber açısı: ${factSheet.angle}`,
+              `A sürümü:\n${JSON.stringify({ title: before.title, excerpt: before.excerpt, paragraphs: before.paragraphs })}`,
+              `B sürümü:\n${JSON.stringify({ title: after.title, excerpt: after.excerpt, paragraphs: after.paragraphs })}`,
+              'JSON şeması: {"preferred":"A|B","reason":"kısa gerekçe","aScore":0,"bScore":0}'
+            ].join('\n\n')
+          }
+        ]
+      });
+      return {
+        preferred: result.preferred === 'B' ? 'B' : 'A',
+        reason: cleanString(result.reason).slice(0, 300),
+        aScore: Number(result.aScore) || null,
+        bScore: Number(result.bScore) || null,
+        source: article.source.id
+      };
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      lastError = error;
+      if (attempt < config.editorialJudgeRetries) {
+        log('warn', 'Akıcılık hakemi zaman aşımı/hata sonrası bir kez daha denenecek', {
+          source: article.source.id,
+          attempt: attempt + 1,
+          timeoutMs: config.editorialJudgeTimeoutMs,
+          error: String(error?.message ?? error).slice(0, 220)
+        });
+      }
+    }
+  }
+  throw lastError ?? new Error('Akıcılık hakemi sonuç döndürmedi.');
+}
+
+async function refineHeadline(article, factSheet, draft, { signal, completeJson = requestJson } = {}) {
   const result = await completeJson({
-    model: config.openaiSelectionModel,
-    signal: judgeSignal,
+    model: config.openaiEditorModel,
+    signal,
     input: [
       {
         role: 'system',
         content: [
-          'Türkiye Türkçesiyle çalışan tarafsız bir haber dili hakemisin.',
-          'İki metin aynı doğrulanmış olgulara dayanıyor. Yalnız dil doğallığı, açıklık, haber ritmi, somut fiil kullanımı ve çeviri kokusunun yokluğu bakımından karşılaştır.',
-          'Bilgi ekleyen, sayı/ad değiştiren, daha muğlaklaşan veya sırf farklı görünmek için cümleleri bozan sürümü seçme.',
-          'B sürümünü yalnız açıkça daha iyi ise seç; eşitlikte veya kuşkuda A sürümünü koru.',
+          'Türkçe kültür-sanat haberleri için başlık editörüsün.',
+          'Verilen haber için zihninde üç farklı başlık seçeneği üret ve doğruluk, somutluk, merak, Türkçe doğallık ve haber ritmi bakımından en iyisini seç; yalnız seçtiğin başlığı JSON içinde döndür.',
+          'Başlık kaynakta olmayan bilgi, sıfat, önem atfı veya neden-sonuç eklememeli.',
+          'Türkiye’de bilinmeyen kurum, etkinlik veya teknik terimi açıklamasız biçimde başlığın merkezine koyma.',
+          'Daha somut bir fiil mümkünse “sunuyor”, “genişliyor”, “öne çıkıyor”, “buluşuyor”, “yer alıyor” gibi jenerik fiillere yaslanma.',
+          'Sayı veya sıra dışı ayrıntı ana haber değeriyse kullan; yalnız rakam var diye başlığı mekanikleştirme.',
+          'Başlık yaklaşık 35-95 karakter arasında, tek okumada anlaşılır ve doğal Türkiye Türkçesiyle olmalı.',
           'Yalnız geçerli JSON ver.'
         ].join(' ')
       },
       {
         role: 'user',
         content: [
-          `Haber açısı: ${factSheet.angle}`,
-          `A sürümü:\n${JSON.stringify({ title: before.title, excerpt: before.excerpt, paragraphs: before.paragraphs })}`,
-          `B sürümü:\n${JSON.stringify({ title: after.title, excerpt: after.excerpt, paragraphs: after.paragraphs })}`,
-          'JSON şeması: {"preferred":"A|B","reason":"kısa gerekçe","aScore":0,"bScore":0}'
+          `Kaynak başlığı: ${article.title}`,
+          `Olgu fişi:\n${JSON.stringify(factSheet)}`,
+          `Mevcut başlık: ${draft.title}`,
+          `Spot: ${draft.excerpt}`,
+          `Haber metni:\n${draft.paragraphs.join('\n\n')}`,
+          'JSON şeması: {"title":"seçilen başlık","reason":"kısa gerekçe"}'
         ].join('\n\n')
       }
     ]
   });
-  return {
-    preferred: result.preferred === 'B' ? 'B' : 'A',
-    reason: cleanString(result.reason).slice(0, 300),
-    aScore: Number(result.aScore) || null,
-    bScore: Number(result.bScore) || null,
-    source: article.source.id
-  };
+  const title = cleanString(result.title);
+  if (!title || title.length < 15 || title.length > 120 || title === draft.title) {
+    return { draft, changed: false, reason: cleanString(result.reason).slice(0, 220) };
+  }
+  const candidate = { ...draft, title };
+  const beforeIssues = editorialIssues(draft, factSheet);
+  const afterIssues = editorialIssues(candidate, factSheet);
+  const namingRegression = nativeNameRegression(draft, candidate, factSheet.nativeNames);
+  if (afterIssues.length > beforeIssues.length || namingRegression) {
+    return { draft, changed: false, reason: 'Yeni başlık kalite veya adlandırma kapısından geçmedi.' };
+  }
+  return { draft: candidate, changed: true, reason: cleanString(result.reason).slice(0, 220) };
 }
 
 async function polishTurkishNews(article, factSheet, draft, { signal, completeJson = requestJson } = {}) {
@@ -272,6 +335,7 @@ async function polishTurkishNews(article, factSheet, draft, { signal, completeJs
           'Çince eser, dizi, film, program, sergi, sanat akımı veya kültürel kavram adı için ilk taslakta doğal Türkçe karşılık + doğrulanmış özgün Çince ad + pinyin biçimi kullanılmışsa bunu koru. Tercih edilen ilk kullanım kalıbı: Doğal Türkçe Karşılık (“中文名称”, Pinyin). Sonraki kullanımlarda yalnız Türkçe karşılığı bırak. İngilizce adı ancak uluslararası tanınırlık veya bulunabilirlik için gerçekten yararlıysa ilk kullanımda tırnak içinde koru; metni yeniden İngilizce ad merkezli hale getirme. Kaynakta olmayan Çince adı asla uydurma.',
           'Mid-Autumn Festival terminolojisini denetle: Türkçe metinde yalnız “Güz Ortası Bayramı” kullan.',
           'Bir ifade zaten doğal Türkçeyse sırf değişiklik yapmak için değiştirme. Ama İngilizce veya Çince cümle iskeletini taşıyan ifadeleri yeniden kur. Metinde gereksiz biçimde İngilizce bırakılmış açıklayıcı sergi, etkinlik, belgesel veya program adı varsa Türkçeleştir.',
+          '“demonstrasyon bölgesi” gibi kelime kelime kurum/idarî terim çevirilerini doğal Türkçeyle yeniden kur. Açıklanmamış Pinyin veya yabancı teknik terimi ya Türkçeleştir ya da aynı cümlede kısa biçimde açıkla.',
           'Haber değerine göre 3-7 kısa paragraf, doğal bir başlık ve tek cümlelik spot üret. Küçük haberi sırf uzunluk hedefi için şişirme.',
           'Yanıtlamadan önce başlığı sessizce tek okumada anlaşılırlık, somutluk, Türkçe doğallık ve haber ritmi açısından kontrol et. Yer adı + isim listesi, çeviri kokusu veya takvim başlığı hissi veriyorsa daha doğal bir fiille yeniden kur.',
           'Yalnız geçerli JSON ver.'
@@ -423,15 +487,67 @@ export async function translateArticle(article, { signal, completeJson = request
   }
 
   if (mechanicalIssues.length) {
-    const blockingIssues = mechanicalIssues.filter((issue) => /Çince karakterler|Pinyin|doğrulanmış yerel ad|kaynak-site artığı|yinelenen cümle/iu.test(issue));
+    let blockingIssues = mechanicalIssues.filter((issue) => /Çince karakterler|Pinyin|doğrulanmış yerel ad|kaynak-site artığı|yinelenen cümle/iu.test(issue));
     if (blockingIssues.length) {
-      throw new Error(`Yayın engellendi: ${blockingIssues.join(' ')}`);
+      log('warn', 'Yayın engelleyici dil/adlandırma sorunu için özel onarım turu başlatıldı', {
+        source: article.source.id,
+        issues: blockingIssues
+      });
+      try {
+        const repaired = await writeTurkishNews(article, factSheet, {
+          draft: final.draft,
+          feedback: [
+            ...blockingIssues,
+            'Bu özel onarım turunda yeni bilgi ekleme. Açıklanmamış ham Pinyin veya romanize kurum/yer zincirini doğal Türkçe karşılıkla düzelt; doğrulanmış özgün eser adlarını ise Türkçe karşılık + (“中文”, Pinyin) kuralına göre koru.'
+          ],
+          signal,
+          completeJson
+        });
+        if (repaired.accepted) {
+          assertUsableEditorialOutput(repaired.draft);
+          final = repaired;
+          mechanicalIssues = editorialIssues(final.draft, factSheet);
+          blockingIssues = mechanicalIssues.filter((issue) => /Çince karakterler|Pinyin|doğrulanmış yerel ad|kaynak-site artığı|yinelenen cümle/iu.test(issue));
+          log(blockingIssues.length ? 'warn' : 'info', 'Özel dil/adlandırma onarım turu tamamlandı', {
+            source: article.source.id,
+            remainingBlockingIssues: blockingIssues
+          });
+        }
+      } catch (repairError) {
+        log('warn', 'Özel dil/adlandırma onarımı tamamlanamadı', {
+          source: article.source.id,
+          error: String(repairError?.message ?? repairError).slice(0, 400)
+        });
+      }
+      if (blockingIssues.length) {
+        throw new Error(`Yayın engellendi: ${blockingIssues.join(' ')}`);
+      }
     }
-    log('warn', 'Son metinde kalan ikincil dil/biçim notları yayını engellemeyecek', {
+    if (mechanicalIssues.length) {
+      log('warn', 'Son metinde kalan ikincil dil/biçim notları yayını engellemeyecek', {
+        source: article.source.id,
+        issues: mechanicalIssues
+      });
+    }
+  }
+
+  try {
+    const headline = await refineHeadline(article, factSheet, final.draft, { signal, completeJson });
+    if (headline.changed) {
+      final = { ...final, draft: headline.draft };
+      log('info', 'Başlık mikro-editör turunda güçlendirildi', {
+        source: article.source.id,
+        title: final.draft.title,
+        reason: headline.reason
+      });
+    }
+  } catch (headlineError) {
+    log('warn', 'Başlık mikro-editörü tamamlanamadı; doğrulanmış mevcut başlık korunacak', {
       source: article.source.id,
-      issues: mechanicalIssues
+      error: String(headlineError?.message ?? headlineError).slice(0, 350)
     });
   }
+
   assertUsableEditorialOutput(final.draft);
   log('info', 'Türkçe haber yayıma hazır', {
     source: article.source.id,
@@ -440,5 +556,5 @@ export async function translateArticle(article, { signal, completeJson = request
     elapsedSeconds: elapsedSeconds(startedAt)
   });
   // v12: yazı modeli kaynak sözdizimi yerine zengin olgu fişinden üretir; son okuma A/B akıcılık kapısından geçer.
-  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v12-native-fluency-gate' };
+  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v13-repair-headline-gate' };
 }

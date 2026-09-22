@@ -4,14 +4,16 @@ import { dateFromUrl, discoverFromFeedXml, discoverFromHtml, extractBestArticleT
 import { SOURCES, SOURCE_SET_VERSION } from '../src/sources.js';
 
 test('Excel kaynak havuzu eksiksiz ve eski havuzdan bağımsızdır', () => {
-  assert.equal(SOURCE_SET_VERSION, '2026-09-18-en-03');
-  assert.equal(SOURCES.length, 17);
-  assert.equal(SOURCES.filter((source) => source.enabled).length, 14);
+  assert.equal(SOURCE_SET_VERSION, '2026-09-22-en-04');
+  assert.equal(SOURCES.length, 18);
+  assert.equal(SOURCES.filter((source) => source.enabled).length, 15);
   assert.equal(SOURCES.filter((source) => source.mode === 'rss').length, 5);
   assert.equal(SOURCES.find((source) => source.id === 'ocula-magazine')?.enabled, false);
   assert.equal(SOURCES.find((source) => source.id === 'smartshanghai-exhibitions')?.enabled, false);
   assert.equal(SOURCES.find((source) => source.id === 'smartshanghai-stage')?.enabled, false);
   assert.equal(SOURCES.find((source) => source.id === 'china-org-movies')?.defaultCategory, 'sinema');
+  assert.equal(SOURCES.find((source) => source.id === 'china-daily-film-tv')?.defaultCategory, 'sinema');
+  assert.equal(SOURCES.find((source) => source.id === 'china-daily-film-tv')?.publisherGroup, 'china-daily-network');
   assert.equal(SOURCES.find((source) => source.id === 'china-org-style')?.defaultCategory, 'moda-tasarim');
   assert.equal(SOURCES.some((source) => source.id === 'dao-fashion-retail'), false);
   assert.equal(SOURCES.some((source) => source.id === 'cns-exhibitions'), false);

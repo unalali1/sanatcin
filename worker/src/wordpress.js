@@ -152,6 +152,66 @@ export async function knownHashes(hashes) {
   return known;
 }
 
+const FAILED_CANDIDATE_STATE_SLUG = 'sanatcin-failed-candidates-state';
+
+function normalizeFailedCandidateEntries(entries = []) {
+  const cutoff = Date.now() - config.failedCandidateCacheHours * 3_600_000;
+  const byUrl = new Map();
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const url = String(entry?.url ?? '').trim();
+    const failedAt = new Date(entry?.failedAt ?? 0).getTime();
+    if (!url || !Number.isFinite(failedAt) || failedAt < cutoff) continue;
+    const previous = byUrl.get(url);
+    if (!previous || failedAt > new Date(previous.failedAt).getTime()) {
+      byUrl.set(url, {
+        url,
+        failedAt: new Date(failedAt).toISOString(),
+        code: String(entry?.code ?? 'SOURCE_EXTRACTION').slice(0, 80)
+      });
+    }
+  }
+  return [...byUrl.values()].sort((a, b) => new Date(b.failedAt) - new Date(a.failedAt)).slice(0, 300);
+}
+
+export async function loadFailedCandidateState({ signal } = {}) {
+  try {
+    const posts = await wp(`/wp/v2/posts?slug=${encodeURIComponent(FAILED_CANDIDATE_STATE_SLUG)}&status=draft&context=edit&per_page=1&_fields=id,content`, { signal });
+    if (!posts.length) return [];
+    const raw = posts[0]?.content?.raw ?? '';
+    const parsed = JSON.parse(String(raw || '{}'));
+    return normalizeFailedCandidateEntries(parsed.entries);
+  } catch (error) {
+    log('warn', 'Başarısız aday önbelleği okunamadı; önbelleksiz devam edilecek', {
+      error: String(error?.message ?? error).slice(0, 350)
+    });
+    return [];
+  }
+}
+
+export async function saveFailedCandidateState(entries, { signal } = {}) {
+  const normalized = normalizeFailedCandidateEntries(entries);
+  try {
+    const posts = await wp(`/wp/v2/posts?slug=${encodeURIComponent(FAILED_CANDIDATE_STATE_SLUG)}&status=draft&context=edit&per_page=1&_fields=id`, { signal });
+    const payload = {
+      title: 'SanatÇin Failed Candidate State',
+      slug: FAILED_CANDIDATE_STATE_SLUG,
+      status: 'draft',
+      content: JSON.stringify({ updatedAt: new Date().toISOString(), entries: normalized })
+    };
+    if (posts.length) {
+      await wp(`/wp/v2/posts/${posts[0].id}`, { method: 'POST', body: JSON.stringify(payload), signal });
+    } else {
+      await wp('/wp/v2/posts', { method: 'POST', body: JSON.stringify(payload), signal });
+    }
+    return normalized;
+  } catch (error) {
+    log('warn', 'Başarısız aday önbelleği kaydedilemedi; yayın akışı etkilenmeyecek', {
+      error: String(error?.message ?? error).slice(0, 350)
+    });
+    return normalized;
+  }
+}
+
 async function categoryId(slug, signal) {
   if (categoryIds.has(slug)) return categoryIds.get(slug);
   const categories = await wp(`/wp/v2/categories?slug=${encodeURIComponent(slug)}`, { signal });
