@@ -14,9 +14,11 @@ import {
   assertNoSimilarPublishedCandidate,
   assertNoSimilarPublishedTitle,
   knownHashes,
+  loadFailedCandidateState,
   preflightFeaturedImage,
   prepareFeaturedImage,
   publishArticle,
+  saveFailedCandidateState,
   syncSiteContent
 } from './wordpress.js';
 
@@ -165,7 +167,8 @@ async function run() {
     preferredDeferred: 0,
     topicPenalized: 0,
     sourcePenalized: 0,
-    adaptiveFallbackAttempts: 0
+    adaptiveFallbackAttempts: 0,
+    cachedFailedSkipped: 0
   };
   const discovered = await mapLimit(SOURCES.filter((source) => source.enabled), config.discoveryConcurrency, async (source) => {
     try {
@@ -186,7 +189,22 @@ async function run() {
     .filter((item) => !item.publishedAt || (new Date(item.publishedAt).getTime() >= cutoff && new Date(item.publishedAt).getTime() <= futureLimit))
     .map((item) => scoreCandidate(item));
   const known = new Set(await knownHashes(candidates.map((item) => sourceHash(item.url))));
-  const newCandidates = candidates.filter((item) => !known.has(sourceHash(item.url)));
+  const failedCandidateState = await loadFailedCandidateState({ signal: runController.signal });
+  const failedCandidateMap = new Map(failedCandidateState.map((entry) => [entry.url, entry]));
+  const newCandidates = candidates.filter((item) => {
+    if (known.has(sourceHash(item.url))) return false;
+    if (failedCandidateMap.has(item.url)) {
+      selectionStats.cachedFailedSkipped += 1;
+      return false;
+    }
+    return true;
+  });
+  if (selectionStats.cachedFailedSkipped > 0) {
+    log('info', 'Yakın zamanda gövde çıkarımı başarısız olan adaylar geçici önbellekten atlandı', {
+      skipped: selectionStats.cachedFailedSkipped,
+      cacheHours: config.failedCandidateCacheHours
+    });
+  }
   let ranked;
   try {
     ranked = await rerankCandidates(newCandidates, { signal: runController.signal });
@@ -405,6 +423,13 @@ async function run() {
         }
         sourceStats[candidate.source.id].rejected += 1;
         increment(rejectedReasons, classified.group);
+        if (classified.code === 'SOURCE_EXTRACTION') {
+          failedCandidateMap.set(candidate.url, {
+            url: candidate.url,
+            failedAt: new Date().toISOString(),
+            code: classified.code
+          });
+        }
         log('error', 'Haber işlenemedi; sıradaki aday denenecek', {
           category: slug,
           source: candidate.source.id,
@@ -453,6 +478,8 @@ async function run() {
   if (results.length < config.minDailyTarget) {
     log('warn', 'Günlük asgari yayın hedefinin altında kalındı', { target: config.minDailyTarget, processed: results.length });
   }
+
+  await saveFailedCandidateState([...failedCandidateMap.values()]);
 
   const targetReached = results.length >= config.minDailyTarget;
   const hadRejections = Object.keys(rejectedReasons).length > 0;
