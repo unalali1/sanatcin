@@ -12,7 +12,7 @@ const client = new OpenAI({
   maxRetries: 0
 });
 const allowedCategories = new Set(['kultur-sanat', 'sinema', 'moda-tasarim', 'sehir-yasam']);
-const CINEMA_HINTS = /\b(?:film|cinema|movie|box office|director|actor|actress|series|television|tv|drama|documentary|animation|premiere|screening|screenwriter)\b|(?:电影|影院|票房|导演|演员|电视剧|纪录片|动画|首映)/iu;
+const CINEMA_HINTS = /(?:^|[^\p{L}])(?:film|sinema|movie|box office|director|actor|actress|series|television|tv|drama|documentary|animation|premiere|screening|screenwriter|dizi|belgesel|yönetmen|oyuncu|prömiyer|gösterim)\p{L}*|(?:电影|影院|票房|导演|演员|电视剧|纪录片|动画|首映)/iu;
 
 export function looksLikeCinemaCandidate(candidate = {}) {
   if (candidate.category === 'sinema' || candidate.source?.defaultCategory === 'sinema') return true;
