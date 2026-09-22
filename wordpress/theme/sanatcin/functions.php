@@ -341,6 +341,13 @@ function sanatcin_buffer_x_build_args($args, $post, $profile_id, $service, $stat
         $text = implode($separator, $parts);
     }
 
+    // Link posts already carry the primary URL in the plugin's Link field.
+    // The publisher appends that URL for X and uses it for the preview card.
+    // Keep it out of the text, but retain the existing link/media arguments.
+    if (is_array($status) && ($status['post_type'] ?? '') === 'link' && !empty($status['url'])) {
+        $text = trim(preg_replace('~\\s*https?://[^\\s<>]+~iu', '', $text));
+    }
+
     $args['text'] = $text;
     return $args;
 }
