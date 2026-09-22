@@ -1,4 +1,4 @@
-export const SOURCE_SET_VERSION = '2026-09-18-en-03';
+export const SOURCE_SET_VERSION = '2026-09-22-en-04';
 
 export const CATEGORIES = [
   { slug: 'kultur-sanat', name: 'Kültür & Sanat' },
@@ -76,6 +76,7 @@ export const SOURCES = [
     adapter: 'html_chinadaily',
     priority: 'P1',
     intervalMinutes: 60,
+    publisherGroup: 'china-daily-network',
     linkSelector: "a[href*='/a/20']",
     itemSelector: 'article, li, .item, .news-item, .card, .mb10, .tw3_01_2_t'
   }),
@@ -83,9 +84,20 @@ export const SOURCES = [
     adapter: 'html_chinadaily',
     priority: 'P1',
     intervalMinutes: 120,
+    publisherGroup: 'china-daily-network',
     defaultCategory: 'moda-tasarim',
     linkSelector: "a[href*='/a/20']",
     itemSelector: 'article, li, .item, .news-item, .card'
+  }),
+  html('china-daily-film-tv', 'China Daily – Film & TV', 'https://global.chinadaily.com.cn/culture/5c2366a5a310d91214051155', 10, {
+    adapter: 'html_chinadaily',
+    priority: 'P1',
+    intervalMinutes: 60,
+    publisherGroup: 'china-daily-network',
+    defaultCategory: 'sinema',
+    linkSelector: "a[href*='/a/20']",
+    itemSelector: 'article, li, .item, .news-item, .card, .mb10, .tw3_01_2_t',
+    includeTerms: ['film', 'cinema', 'movie', 'box office', 'director', 'actor', 'actress', 'animation', 'television', 'drama', 'documentary', 'premiere', 'screening', 'series']
   }),
   html('xinhua-culture', 'Xinhua – Culture & Lifestyle', 'https://english.news.cn/culture/index.htm', 10, {
     adapter: 'html_xinhua',
@@ -147,6 +159,7 @@ export const SOURCES = [
   {
     ...html('chinaculture', 'Chinaculture.org – News, Trends & Events', 'https://en.chinaculture.org/', 10, {
       adapter: 'html_chinaculture',
+      publisherGroup: 'china-daily-network',
       defaultCategory: 'kultur-sanat',
       linkSelector: "a[href*='/a/20']",
       pathPattern: /\/a\/20\d{4}\/\d{2}\//,
