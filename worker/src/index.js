@@ -56,6 +56,7 @@ function distribution(items, key) {
 }
 
 function candidateForRound(queue, sourceUseCounts, {
+  publisherUseCounts = {},
   fallbackActive,
   hardMinimum,
   preferredMinimum,
@@ -63,7 +64,8 @@ function candidateForRound(queue, sourceUseCounts, {
   topicPortfolio = [],
   enforceTopicDiversity = false,
   rescueBelowScore = null,
-  rescueMinimumFit = 7
+  rescueMinimumFit = 7,
+  allowPublisherOverflow = false
 }) {
   let bestIndex = -1;
   let bestEffectiveScore = -Infinity;
@@ -77,6 +79,9 @@ function candidateForRound(queue, sourceUseCounts, {
       if ((candidate.source?.quality ?? 0) < 8 || (candidate.editorialFit ?? 0) < rescueMinimumFit) continue;
     }
     if (excludedSourceIds.has(candidate.source?.id)) continue;
+    const publisherGroup = candidate.source?.publisherGroup ?? candidate.source?.id ?? 'unknown';
+    const publisherCount = publisherUseCounts[publisherGroup] ?? 0;
+    if (!allowPublisherOverflow && publisherCount >= config.maxPublisherGroupDaily) continue;
     if (enforceTopicDiversity && isNearTopicRepeat(candidate, topicPortfolio)) continue;
     hasFallbackCandidate = true;
     const previousCount = sourceUseCounts[candidate.source?.id] ?? 0;
@@ -97,7 +102,8 @@ function candidateForRound(queue, sourceUseCounts, {
     candidate: {
       ...candidate,
       effectiveScore: bestEffectiveScore,
-      sourcePenalty: bestPenalty
+      sourcePenalty: bestPenalty,
+      publisherGroup: candidate.source?.publisherGroup ?? candidate.source?.id ?? 'unknown'
     },
     hasFallbackCandidate
   };
@@ -144,6 +150,9 @@ async function run() {
     aiBatchSize: config.aiBatchSize,
     aiRerankConcurrency: config.aiRerankConcurrency,
     articleConcurrency: config.articleConcurrency,
+    maxPublisherGroupDaily: config.maxPublisherGroupDaily,
+    cinemaAiReserve: config.cinemaAiReserve,
+    editorialJudgeTimeoutMs: config.editorialJudgeTimeoutMs,
     selectionModel: config.openaiSelectionModel,
     factModel: config.openaiFactModel,
     editorModel: config.openaiEditorModel
@@ -221,6 +230,7 @@ async function run() {
     const remainingSlots = config.maxDailyTotal - results.length;
     const attempts = [];
     const plannedSourceCounts = distribution(results, 'source');
+    const plannedPublisherCounts = distribution(results, 'publisherGroup');
     const plannedCandidates = [...publishedCandidates];
     const batchSources = new Set();
     const unfilled = CATEGORIES.filter(({ slug }) => categoryPublished[slug] === 0 && budget.canAttempt(slug));
@@ -247,6 +257,7 @@ async function run() {
         ? Math.max(hardMinimum, config.preferredPublishScore)
         : Math.max(hardMinimum, config.preferredSecondSlotScore);
       const selected = candidateForRound(queues[slug], plannedSourceCounts, {
+        publisherUseCounts: plannedPublisherCounts,
         fallbackActive,
         hardMinimum,
         preferredMinimum,
@@ -254,7 +265,8 @@ async function run() {
         topicPortfolio: plannedCandidates,
         enforceTopicDiversity: results.length + attempts.length < 4,
         rescueBelowScore: rescueSlot ? config.minPublishScore : null,
-        rescueMinimumFit: config.minEditorialFit
+        rescueMinimumFit: config.minEditorialFit,
+        allowPublisherOverflow: fallbackActive && firstSlot
       });
 
       if (!selected.candidate) {
@@ -274,6 +286,7 @@ async function run() {
       if (candidate.sourcePenalty > 0) selectionStats.sourcePenalized += 1;
       if (fallbackActive) selectionStats.adaptiveFallbackAttempts += 1;
       increment(plannedSourceCounts, candidate.source.id);
+      increment(plannedPublisherCounts, candidate.publisherGroup ?? candidate.source?.publisherGroup ?? candidate.source.id);
       batchSources.add(candidate.source.id);
       plannedCandidates.push(candidate);
       attempts.push({ slug, candidate, attempt: budget.noteAttempt(slug), fallbackActive });
@@ -292,6 +305,7 @@ async function run() {
       candidates: attempts.map(({ slug, candidate }) => ({
         category: slug,
         source: candidate.source.id,
+        publisherGroup: candidate.publisherGroup ?? candidate.source?.publisherGroup ?? candidate.source.id,
         score: candidate.score,
         effectiveScore: candidate.effectiveScore,
         editorialFit: candidate.editorialFit,
@@ -351,6 +365,7 @@ async function run() {
         }
         const result = {
           source: candidate.source.id,
+          publisherGroup: candidate.publisherGroup ?? candidate.source?.publisherGroup ?? candidate.source.id,
           category: candidate.category,
           score: candidate.score,
           effectiveScore: candidate.effectiveScore,
@@ -457,6 +472,7 @@ async function run() {
     elapsedMinutes: Math.round((Date.now() - budget.startedAt) / 6000) / 10,
     categoryPublished,
     sourcePublished: distribution(results, 'source'),
+    publisherPublished: distribution(results, 'publisherGroup'),
     scoreStats: publishedScoreStats(results),
     selectionStats,
     rejectedReasons,
