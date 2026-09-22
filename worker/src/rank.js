@@ -12,6 +12,12 @@ const client = new OpenAI({
   maxRetries: 0
 });
 const allowedCategories = new Set(['kultur-sanat', 'sinema', 'moda-tasarim', 'sehir-yasam']);
+const CINEMA_HINTS = /\b(?:film|cinema|movie|box office|director|actor|actress|series|television|tv|drama|documentary|animation|premiere|screening|screenwriter)\b|(?:电影|影院|票房|导演|演员|电视剧|纪录片|动画|首映)/iu;
+
+export function looksLikeCinemaCandidate(candidate = {}) {
+  if (candidate.category === 'sinema' || candidate.source?.defaultCategory === 'sinema') return true;
+  return CINEMA_HINTS.test(`${candidate.title ?? ''} ${candidate.summary ?? ''}`);
+}
 const wpAuth = `Basic ${Buffer.from(`${config.wpUsername}:${config.wpAppPassword}`).toString('base64')}`;
 
 // Moda havuzunda uzman kaynakları öne çıkarır; China Daily gibi genel kaynakları
@@ -239,11 +245,25 @@ export function buildBalancedShortlist(candidates, maxCandidates = config.maxAiC
   const eligible = candidates.filter((candidate) => candidate.eligible !== false);
   const selected = [];
   const used = new Set();
-  const perCategory = Math.max(1, Math.floor(maxCandidates / allowedCategories.size));
 
+  // Sinema adayları genel kültür akışında kolayca kaybolabildiği için AI değerlendirme
+  // havuzunda ayrı bir taban kota korunur. Bu bir yayın kotası değildir; yalnızca
+  // editör modelinin yeterli sayıda sinema adayını görmesini sağlar.
+  const cinemaReserve = Math.min(config.cinemaAiReserve, maxCandidates);
+  const cinemaCandidates = eligible
+    .filter(looksLikeCinemaCandidate)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, cinemaReserve);
+  for (const candidate of cinemaCandidates) {
+    selected.push(candidate);
+    used.add(candidate.id);
+  }
+
+  const remainingCapacity = Math.max(0, maxCandidates - selected.length);
+  const perCategory = Math.max(1, Math.floor(remainingCapacity / allowedCategories.size));
   for (const category of allowedCategories) {
     const group = eligible
-      .filter((candidate) => candidate.category === category)
+      .filter((candidate) => !used.has(candidate.id) && candidate.category === category)
       .sort((a, b) => b.score - a.score)
       .slice(0, perCategory);
     for (const candidate of group) {
@@ -265,7 +285,7 @@ export function buildBalancedShortlist(candidates, maxCandidates = config.maxAiC
 export function diversifyBySource(candidates) {
   const groups = new Map();
   for (const candidate of candidates) {
-    const sourceId = candidate.source?.id ?? 'unknown';
+    const sourceId = candidate.source?.publisherGroup ?? candidate.source?.id ?? 'unknown';
     if (!groups.has(sourceId)) groups.set(sourceId, []);
     groups.get(sourceId).push(candidate);
   }
