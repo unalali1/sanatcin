@@ -190,3 +190,49 @@ test('kelime kelime idarî terim çevirilerini akıcılık puanında cezalandır
   assert.ok(profile.translationeseHits >= 2);
   assert.ok(profile.score < 100);
 });
+
+
+test('kişi adlarındaki Shi ve Zhou tek başına ham Pinyin zinciri sayılmaz', () => {
+  const paragraphs = [
+    'Yönetmen Shi Heng, oyuncu Zhou Xun ile yeni filmin yaratıcı sürecini Pekin’de düzenlenen gösterimde anlattı.',
+    'Film, aile ilişkilerini kent yaşamı üzerinden ele alıyor ve yönetmenin önceki çalışmalarından farklı bir anlatı kuruyor.',
+    'Yapım ekibi gösterimin ardından izleyicilerin sorularını yanıtladı ve çekim sürecine ilişkin ayrıntıları paylaştı.'
+  ];
+  const issues = translationIssues({
+    title: 'Pekin’de yeni filmin yaratıcı ekibi izleyiciyle buluştu',
+    excerpt: 'Yeni filmin yönetmeni ve oyuncuları, Pekin’deki gösterimin ardından yapım sürecini ve hikâyenin çıkış noktasını anlattı.',
+    paragraphs,
+    text: paragraphs.join('\n\n') + ' ' + 'Film ekibi gösterim sonrası izleyici sorularını da yanıtladı. '.repeat(8)
+  });
+  assert.equal(issues.some((item) => item.includes('Pinyin')), false);
+});
+
+test('gerçek romanize idarî zincir ham Pinyin olarak yakalanır', () => {
+  const paragraphs = [
+    'Etkinlik Beijing Shi Wenhua Ju tarafından düzenlenen kültür programının bir parçası olarak duyuruldu.',
+    'Programda farklı disiplinlerden sanatçıların çalışmaları ve atölyeler yer aldı.',
+    'Sergi hafta boyunca ziyaretçilere açık kalacak ve çeşitli söyleşiler düzenlenecek.'
+  ];
+  const issues = translationIssues({
+    title: 'Pekin’de kültür programı yeni sergiyle devam ediyor',
+    excerpt: 'Kentte düzenlenen program, farklı disiplinlerden sanatçıların çalışmalarını sergi ve atölyeler aracılığıyla izleyiciyle buluşturuyor.',
+    paragraphs,
+    text: paragraphs.join('\n\n') + ' ' + 'Program farklı sanat disiplinlerine yer veriyor. '.repeat(8)
+  });
+  assert.ok(issues.some((item) => item.includes('Pinyin')));
+});
+
+test('jenerik başlık kalıpları akıcılık puanını düşürür', () => {
+  const strong = editorialFluencyProfile({
+    title: 'Nanjing’de tarihi fener pazarı yeniden canlandı',
+    excerpt: 'Güz Ortası Bayramı öncesinde kurulan tarihi pazar, geleneksel fener ustalarını ve yerel el sanatlarını yeniden aynı sokakta buluşturdu.',
+    text: 'Tarihi pazar bu yıl yeniden kuruldu. Ustalar el yapımı fenerlerini ziyaretçilere tanıttı.'
+  });
+  const weak = editorialFluencyProfile({
+    title: 'Nanjing’deki fener pazarında 60’tan fazla satıcı yer alıyor',
+    excerpt: 'Güz Ortası Bayramı öncesinde kurulan tarihi pazar, geleneksel fener ustalarını ve yerel el sanatlarını yeniden aynı sokakta buluşturdu.',
+    text: 'Tarihi pazar bu yıl yeniden kuruldu. Ustalar el yapımı fenerlerini ziyaretçilere tanıttı.'
+  });
+  assert.ok(weak.headlineWeaknessHits >= 1);
+  assert.ok(weak.score < strong.score);
+});
