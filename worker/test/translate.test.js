@@ -61,9 +61,14 @@ test('olgu çıkarımı, haber yazımı ve Türkçe son okuma ardışık çalı�
   assert.equal(calls[2].model, config.openaiEditorModel);
   assert.equal(calls[3].model, config.openaiEditorModel);
   assert.match(calls[2].input[0].content, /son okuma.*editörüsün/);
+  assert.match(calls[1].input[0].content, /yalnız haber hammaddesidir/);
+  assert.match(calls[1].input[0].content, /Bir Türk gazeteci bu cümleyi gerçekten böyle kurar mı/);
+  assert.match(calls[2].input[0].content, /Taslağın bilgi sırasına da bağlı değilsin/);
+  assert.match(calls[2].input[0].content, /Cümlenin yabancı dilden çevrildiği hissediliyor mu/);
+  assert.match(calls[3].input[0].content, /en az üç farklı başlık açısı üret/);
   assert.doesNotMatch(calls[1].input[1].content, /Kaynak metin:/);
   assert.match(calls[1].input[1].content, /leadFacts/);
-  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v13-repair-headline-gate');
+  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v14-native-story-angle');
   assert.equal(result.factSheet.facts.length, 4);
   assert.match(result.title, /Şanghay/);
 });
