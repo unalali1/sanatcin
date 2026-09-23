@@ -557,5 +557,6 @@ export async function translateArticle(article, { signal, completeJson = request
     elapsedSeconds: elapsedSeconds(startedAt)
   });
   // v14: kaynak yalnız haber hammaddesidir; yazım ve son okuma Türk okur için hikâye açısını, doğal sözdizimini ve başlığı yeniden kurar.
+  // Bu prompt korumaları translate ve quality-efficiency regresyon testleriyle sabitlenir.
   return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v14-native-story-angle' };
 }
