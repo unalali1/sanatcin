@@ -140,7 +140,7 @@ test('düşük Türkçe doğallık puanı yayını kesmeden hedefli düzeltme ba
 test('başlık mikro-editörü ancak bağımsız hakem açıkça daha iyi bulursa kabul edilir', async () => {
   const calls = [];
   const original = editorialResult();
-  const proposedTitle = 'Şanghay’daki sergide 42 eser yer alıyor';
+  const proposedTitle = 'Şanghay’da 42 eser çağdaş zanaatın dönüşümünü anlatıyor';
   const completeJson = async (request) => {
     calls.push(request);
     if (calls.length === 1) return { factSheet };
