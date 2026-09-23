@@ -92,10 +92,9 @@ test('başlık üretimi katalog kalıbı ve klişe heyecan dilinden kaçınır',
 test('Pinyin kalite notu onarım ister ama tek başına yayını engellemez', () => {
   const translate = readFileSync(new URL('../src/translate.js', import.meta.url), 'utf8');
   assert.match(translate, /açıklanmamış ham Pinyin/);
-  const blockingFilters = [...translate.matchAll(/blockingIssues = mechanicalIssues\.filter\(\(issue\) => \/([^\n]+)\/giu\)/g)]
-    .map((match) => match[1]);
-  assert.ok(blockingFilters.length >= 2);
-  assert.ok(blockingFilters.every((pattern) => !pattern.includes('Pinyin')));
+  const blockingLines = translate.split('\n').filter((line) => line.includes('blockingIssues = mechanicalIssues.filter'));
+  assert.ok(blockingLines.length >= 2);
+  assert.ok(blockingLines.every((line) => !line.includes('Pinyin')));
 });
 
 test('source health taslak kaydı, dinamik sürüm ve hero meta bağlantıları kodda bulunur', () => {
