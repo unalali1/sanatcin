@@ -85,8 +85,8 @@ test('başlık üretimi katalog kalıbı ve klişe heyecan dilinden kaçınır',
   const translate = readFileSync(new URL('../src/translate.js', import.meta.url), 'utf8');
   assert.match(translate, /yer adı \+ iki isimden oluşan katalog kalıbına bırakma/);
   assert.match(translate, /“heyecanı yaşandı”/);
-  assert.match(translate, /daha doğal bir fiille yeniden kur/);
-  assert.match(translate, /fact-ledger-turkish-newsroom-v13-repair-headline-gate/);
+  assert.match(translate, /daha güçlü bir haber açısıyla yeniden kur/);
+  assert.match(translate, /fact-ledger-turkish-newsroom-v14-native-story-angle/);
 });
 
 test('source health taslak kaydı, dinamik sürüm ve hero meta bağlantıları kodda bulunur', () => {
