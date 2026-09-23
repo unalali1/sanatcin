@@ -24,8 +24,21 @@ const OUTPUT_BOILERPLATE_PATTERNS = [
   /\bkaynak,\s/iu
 ];
 
-const RAW_PINYIN_MARKERS = /\b(?:sheng|shi|xian|qu|zhen|zhou|zizhiqu|renmin|zhengfu|wenhua|bowuguan|meishuguan|daxue|ribao|dianshitai)\b/giu;
-const NEWSROOM_CLICHES = /\b(?:dikkat çekiyor|öne çıkıyor|gözler önüne seriyor|önemli bir adım|büyük ilgi gördü|sahnede|görücüye çıktı)\b/giu;
+const RAW_PINYIN_MARKERS = new Set([
+  'sheng', 'shi', 'xian', 'qu', 'zhen', 'zhou', 'zizhiqu', 'renmin',
+  'zhengfu', 'wenhua', 'bowuguan', 'meishuguan', 'daxue', 'ribao', 'dianshitai'
+]);
+const STRONG_PINYIN_MARKERS = new Set([
+  'zizhiqu', 'renmin', 'zhengfu', 'wenhua', 'bowuguan', 'meishuguan', 'daxue', 'ribao', 'dianshitai'
+]);
+const NEWSROOM_CLICHES = /\b(?:dikkat çekiyor|öne çıkıyor|gözler önüne seriyor|önemli bir adım|büyük ilgi gördü|sahnede|görücüye çıktı|yer alıyor|aynı sahneyi paylaştı)\b/giu;
+const WEAK_HEADLINE_PATTERNS = [
+  /\byer alıyor\b/iu,
+  /\baynı sahneyi paylaştı\b/iu,
+  /\bdikkat çekiyor\b/iu,
+  /\böne çıkıyor\b/iu,
+  /\b\d[\d.,]*\s*(?:metre|milyon|milyar)\b.{0,24}\bulaşıyor\b/iu
+];
 const NOMINALIZATION_PATTERN = /\b\p{L}{4,}(?:ılması|ilmesi|ulması|ülmesi|lanması|lenmesi)\b/giu;
 const TRANSLATIONESE_PATTERNS = [
   /\bartık yalnızca\b.{0,90}\bdeğil\b/giu,
@@ -81,6 +94,30 @@ function countUnexpectedCjk(value = '', nativeNames = []) {
   return countCjk(stripAllowedNativeNames(value, nativeNames));
 }
 
+function rawPinyinAdministrativeChainCount(value = '') {
+  const sentences = String(value)
+    .split(/(?<=[.!?;:])\s+|\n+/u)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+  let chains = 0;
+  for (const sentence of sentences) {
+    const tokens = sentence
+      .toLocaleLowerCase('tr-TR')
+      .match(/[\p{L}-]+/gu) ?? [];
+    let matched = false;
+    for (let start = 0; start < tokens.length && !matched; start += 1) {
+      const window = tokens.slice(start, start + 6);
+      const markers = window.filter((token) => RAW_PINYIN_MARKERS.has(token));
+      const strongMarkers = markers.filter((token) => STRONG_PINYIN_MARKERS.has(token));
+      if ((markers.length >= 2 && strongMarkers.length >= 1) || markers.length >= 3) {
+        chains += 1;
+        matched = true;
+      }
+    }
+  }
+  return chains;
+}
+
 export function nativeNameRegression(before = {}, after = {}, nativeNames = []) {
   const beforeCombined = `${before.title || ''}\n${before.excerpt || ''}\n${before.text || ''}`;
   const afterCombined = `${after.title || ''}\n${after.excerpt || ''}\n${after.text || ''}`;
@@ -109,8 +146,8 @@ export function translationIssues({ title = '', excerpt = '', text = '', paragra
   if (OUTPUT_BOILERPLATE_PATTERNS.some((pattern) => pattern.test(combined))) {
     issues.push('Türkçe metinde navigasyon, editoryal not veya kaynak-site artığı bulunuyor.');
   }
-  const pinyinMarkers = stripAllowedNativeNames(combined, factSheet.nativeNames).match(RAW_PINYIN_MARKERS)?.length ?? 0;
-  if (pinyinMarkers >= 2) issues.push('Kurum veya yer adlarında açıklanmamış ham Pinyin zinciri bulunuyor.');
+  const pinyinChains = rawPinyinAdministrativeChainCount(stripAllowedNativeNames(combined, factSheet.nativeNames));
+  if (pinyinChains > 0) issues.push('Kurum veya yer adlarında açıklanmamış ham Pinyin zinciri bulunuyor.');
 
   const rawSentences = text.split(/(?<=[.!?])\s+/u).map((item) => item.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const sentences = rawSentences.map((item) => item.toLocaleLowerCase('tr-TR')).filter((item) => item.length > 45);
@@ -147,6 +184,7 @@ export function editorialFluencyProfile({ title = '', excerpt = '', text = '' } 
   }, 0);
   const nominalizations = combined.match(NOMINALIZATION_PATTERN)?.length ?? 0;
   const clichéCount = combined.match(NEWSROOM_CLICHES)?.length ?? 0;
+  const headlineWeaknessHits = WEAK_HEADLINE_PATTERNS.reduce((total, pattern) => total + (pattern.test(title) ? 1 : 0), 0);
   const abstractCounts = words.reduce((counts, word) => {
     if (ABSTRACT_REPEAT_WORDS.has(word)) counts[word] = (counts[word] ?? 0) + 1;
     return counts;
@@ -157,6 +195,7 @@ export function editorialFluencyProfile({ title = '', excerpt = '', text = '' } 
   const densityFactor = Math.max(1, words.length / 180);
   const penalty = Math.round(
     (translationeseHits * 7 + Math.max(0, nominalizations - 3) * 2 + clichéCount * 3
+      + headlineWeaknessHits * 5
       + repeatedAbstractWords.reduce((sum, item) => sum + (item.count - 3) * 2, 0)) / densityFactor
   );
   return {
@@ -164,6 +203,7 @@ export function editorialFluencyProfile({ title = '', excerpt = '', text = '' } 
     translationeseHits,
     nominalizations,
     clichéCount,
+    headlineWeaknessHits,
     repeatedAbstractWords
   };
 }
