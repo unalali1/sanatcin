@@ -241,45 +241,107 @@ export function applyAiScores(candidates, items, now = new Date(), sourceHealth 
   });
 }
 
+function publisherGroupId(candidate = {}) {
+  return candidate.source?.publisherGroup ?? candidate.source?.id ?? 'unknown';
+}
+
+function appendWithPublisherCap(selected, used, publisherCounts, candidate, publisherCap) {
+  if (!candidate || used.has(candidate.id)) return false;
+  const group = publisherGroupId(candidate);
+  if ((publisherCounts.get(group) ?? 0) >= publisherCap) return false;
+  selected.push(candidate);
+  used.add(candidate.id);
+  publisherCounts.set(group, (publisherCounts.get(group) ?? 0) + 1);
+  return true;
+}
+
 export function buildBalancedShortlist(candidates, maxCandidates = config.maxAiCandidates) {
   const eligible = candidates.filter((candidate) => candidate.eligible !== false);
   const selected = [];
   const used = new Set();
+  const publisherCounts = new Map();
+  // AI öncesinde tek bir yayıncı ailesinin değerlendirme havuzunu kaplamasını engeller.
+  // 60 adaylık normal havuzda üst sınır 14'tür; yeterli alternatif yoksa son doldurma
+  // turunda kota gevşetilir ve sistem kapasite kaybetmez.
+  const publisherCap = Math.max(6, Math.ceil(maxCandidates * 0.22));
 
   // Sinema adayları genel kültür akışında kolayca kaybolabildiği için AI değerlendirme
-  // havuzunda ayrı bir taban kota korunur. Bu bir yayın kotası değildir; yalnızca
-  // editör modelinin yeterli sayıda sinema adayını görmesini sağlar.
+  // havuzunda ayrı bir taban kota korunur. Kaynaklar yayıncı ailesine göre dönüşümlü
+  // sıralanır; bu bir yayın kotası değil, editör modelinin daha çeşitli sinema adayları
+  // görmesini sağlayan değerlendirme kotasıdır.
   const cinemaReserve = Math.min(config.cinemaAiReserve, maxCandidates);
-  const cinemaCandidates = eligible
-    .filter(looksLikeCinemaCandidate)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, cinemaReserve);
+  const cinemaCandidates = diversifyBySource(
+    eligible
+      .filter(looksLikeCinemaCandidate)
+      .sort((a, b) => b.score - a.score)
+  );
   for (const candidate of cinemaCandidates) {
-    selected.push(candidate);
-    used.add(candidate.id);
+    if (selected.length >= cinemaReserve) break;
+    appendWithPublisherCap(selected, used, publisherCounts, candidate, publisherCap);
   }
 
   const remainingCapacity = Math.max(0, maxCandidates - selected.length);
   const perCategory = Math.max(1, Math.floor(remainingCapacity / allowedCategories.size));
   for (const category of allowedCategories) {
-    const group = eligible
-      .filter((candidate) => !used.has(candidate.id) && candidate.category === category)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, perCategory);
+    let added = 0;
+    const group = diversifyBySource(
+      eligible
+        .filter((candidate) => !used.has(candidate.id) && candidate.category === category)
+        .sort((a, b) => b.score - a.score)
+    );
     for (const candidate of group) {
-      selected.push(candidate);
-      used.add(candidate.id);
+      if (added >= perCategory || selected.length >= maxCandidates) break;
+      if (appendWithPublisherCap(selected, used, publisherCounts, candidate, publisherCap)) added += 1;
     }
   }
 
   if (selected.length < maxCandidates) {
+    const remainder = diversifyBySource(
+      eligible
+        .filter((candidate) => !used.has(candidate.id))
+        .sort((a, b) => b.score - a.score)
+    );
+    for (const candidate of remainder) {
+      if (selected.length >= maxCandidates) break;
+      appendWithPublisherCap(selected, used, publisherCounts, candidate, publisherCap);
+    }
+  }
+
+  // Çeşitlilik kotası nedeniyle boş kapasite kaldıysa güvenli şekilde gevşet.
+  if (selected.length < maxCandidates) {
     const remainder = eligible
       .filter((candidate) => !used.has(candidate.id))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, maxCandidates - selected.length);
-    selected.push(...remainder);
+      .sort((a, b) => b.score - a.score);
+    for (const candidate of remainder) {
+      if (selected.length >= maxCandidates) break;
+      selected.push(candidate);
+      used.add(candidate.id);
+    }
   }
   return selected.slice(0, maxCandidates);
+}
+
+export function selectCinemaRescueCandidates(shortlist, ranked, limit = 8) {
+  const rankedById = new Map(ranked.map((candidate) => [String(candidate.id), candidate]));
+  return diversifyBySource(
+    shortlist
+      .filter(looksLikeCinemaCandidate)
+      .filter((candidate) => {
+        const current = rankedById.get(String(candidate.id));
+        return !current?.eligible || current.category !== 'sinema';
+      })
+      .sort((a, b) => b.score - a.score)
+  ).slice(0, Math.max(0, limit));
+}
+
+function mergeRankedCandidates(primary, replacements) {
+  const replacementById = new Map(replacements.map((candidate) => [String(candidate.id), candidate]));
+  const merged = primary.map((candidate) => replacementById.get(String(candidate.id)) ?? candidate);
+  const known = new Set(merged.map((candidate) => String(candidate.id)));
+  for (const candidate of replacements) {
+    if (!known.has(String(candidate.id))) merged.push(candidate);
+  }
+  return merged;
 }
 
 export function diversifyBySource(candidates) {
@@ -371,7 +433,7 @@ export function diversifyByTopic(candidates) {
   return selected;
 }
 
-async function rerankBatch(batch, signal, recentContext = []) {
+async function rerankBatch(batch, signal, recentContext = [], { cinemaRescue = false } = {}) {
   const history = recentContext.length
     ? `\n\nSon ${config.recentTopicLookbackDays} günde SanatÇin'de yayımlanan otomatik haberler. Bunları yalnız konu tekrarı denetimi için kullan:\n${JSON.stringify(recentContext)}`
     : '';
@@ -386,8 +448,11 @@ async function rerankBatch(batch, signal, recentContext = []) {
           'Finans, makroekonomi, ihracat, üretim kapasitesi, otomotiv, sıradan teknoloji, diplomasi, askerî gündem, spor, protokol, reklam ve zayıf PR metinleri kültürel/yaratıcı bağ açık ve asli değilse kapsam dışıdır.',
           'Türkiye’deki okur için güncellik, somut gelişme, özgünlük, kültürel değer, geniş okuyucu ilgisi, güçlü hikâye değeri ve görsel potansiyel arıyoruz.',
           'Kategori ölçütlerini ayrı uygula: kultur-sanat için eser, sergi, miras, edebiyat ve yaratıcı üretim; sinema için film, festival, gösterim, ödül ve yaratıcı ekipte somut gelişme; moda-tasarim için tasarım, zanaat, koleksiyon, mimari ve yaratıcı eğilim; sehir-yasam için kent kültürü, kamusal mekân, yerel yaşam, gastronomi ve anlamlı etkinlik. Magazin, marka PR’ı, turizm tanıtımı veya sıradan açılış haberi kategori kotası uğruna yükseltilmemeli.',
-          'Kategori kotasını doldurmak uğruna zayıf bir adayı uygun sayma; ancak orta düzey ama gerçek kültür-sanat haberlerini yalnız çok çarpıcı olmadıkları için reddetme.'
-        ].join(' ')
+          'Kategori kotasını doldurmak uğruna zayıf bir adayı uygun sayma; ancak orta düzey ama gerçek kültür-sanat haberlerini yalnız çok çarpıcı olmadıkları için reddetme.',
+          cinemaRescue
+            ? 'Bu ikinci değerlendirme yalnız sinema/film-TV kapsamı için yapılıyor. Film, dizi, belgesel, animasyon, yönetmen/oyuncu yaratıcı çalışması, festival, gösterim, ödül, gişe veya izleyici verisi somut bir yapım/hikâye gelişmesine bağlıysa sinema kategorisini gereksiz yere reddetme. Salt ünlü magazini, marka PR’ı veya yalnız ticari sektör verisi yine uygun değildir.'
+            : ''
+        ].filter(Boolean).join(' ')
       },
       {
         role: 'user',
@@ -532,7 +597,42 @@ export async function rerankCandidates(candidates, { signal } = {}) {
   const shortlist = buildBalancedShortlist(eligibleCandidates);
   const contextualRerank = (batch, batchSignal) => rerankBatch(batch, batchSignal, recentContext);
   const items = await rerankInputsResilient(shortlist.map(rerankInput), { signal, rerank: contextualRerank });
-  const ranked = applyAiScores(shortlist, items, new Date(), sourceHealth, recentContext);
+  let ranked = applyAiScores(shortlist, items, new Date(), sourceHealth, recentContext);
+
+  // Genel editör turunda sinema adayları gereğinden fazla elenmişse, zaten kısa listeye
+  // girmiş güçlü sinema adaylarını ikinci kez yalnız sinema ölçütleriyle değerlendir.
+  // Bu tur uygunluk eşiğini düşürmez; yalnız kategori yorumunu daha isabetli hale getirir.
+  const cinemaCount = ranked.filter((candidate) => candidate.eligible && candidate.category === 'sinema').length;
+  if (cinemaCount < 2) {
+    const cinemaRescuePool = selectCinemaRescueCandidates(shortlist, ranked, Math.min(8, config.cinemaAiReserve));
+    if (cinemaRescuePool.length) {
+      log('info', 'Sinema post-AI kurtarma turu başladı', {
+        existingCinema: cinemaCount,
+        candidates: cinemaRescuePool.length
+      });
+      try {
+        const cinemaRerank = (batch, batchSignal) => rerankBatch(batch, batchSignal, recentContext, { cinemaRescue: true });
+        const cinemaItems = await rerankInputsResilient(cinemaRescuePool.map(rerankInput), {
+          signal,
+          rerank: cinemaRerank
+        });
+        const cinemaRescued = applyAiScores(cinemaRescuePool, cinemaItems, new Date(), sourceHealth, recentContext)
+          .filter((candidate) => candidate.eligible && candidate.category === 'sinema');
+        ranked = mergeRankedCandidates(ranked, cinemaRescued);
+        log('info', 'Sinema post-AI kurtarma turu tamamlandı', {
+          evaluated: cinemaRescuePool.length,
+          rescued: cinemaRescued.length,
+          totalCinema: ranked.filter((candidate) => candidate.eligible && candidate.category === 'sinema').length
+        });
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        log('warn', 'Sinema post-AI kurtarma turu başarısız; ilk AI sıralaması korunacak', {
+          candidates: cinemaRescuePool.length,
+          error: errorMessage(error)
+        });
+      }
+    }
+  }
 
   if (config.rescueAiCandidates <= 0 || shortlist.length >= eligibleCandidates.length) return ranked;
   const counts = Object.fromEntries([...allowedCategories].map((category) => [
