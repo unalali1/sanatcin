@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildBalancedShortlist, diversifyBySource, diversifyByTopic, isNearTopicRepeat, looksLikeCinemaCandidate, rerankInputsResilient, sourceCrowdingPenalty } from '../src/rank.js';
+import { buildBalancedShortlist, diversifyBySource, diversifyByTopic, isNearTopicRepeat, looksLikeCinemaCandidate, rerankInputsResilient, selectCinemaRescueCandidates, sourceCrowdingPenalty } from '../src/rank.js';
 
 const silentLogger = () => {};
 
@@ -139,4 +139,43 @@ test('aynı yayıncı ailesindeki farklı kaynakları çeşitlilikte tek grup sa
     diversifyBySource(input).map((item) => item.id),
     ['cd-culture-1', 'cgtn-1', 'xinhua-1', 'cd-fashion-1']
   );
+});
+
+
+test('AI kısa listesi tek yayıncı ailesinin havuzu kaplamasını önler', () => {
+  const make = (group, count, base) => Array.from({ length: count }, (_, index) => ({
+    id: `${group}-${index}`,
+    title: `Kültür haberi ${group} ${index}`,
+    summary: 'Sanat ve kültür alanında yeni bir gelişme.',
+    category: 'kultur-sanat',
+    eligible: true,
+    score: base - index,
+    source: { id: `${group}-source`, publisherGroup: group, name: group, quality: 9 }
+  }));
+  const shortlist = buildBalancedShortlist([
+    ...make('dominant', 40, 100),
+    ...make('publisher-b', 8, 90),
+    ...make('publisher-c', 8, 89),
+    ...make('publisher-d', 8, 88)
+  ], 20);
+  const dominantCount = shortlist.filter((item) => item.source.publisherGroup === 'dominant').length;
+  assert.equal(shortlist.length, 20);
+  assert.ok(dominantCount <= 6);
+  assert.ok(new Set(shortlist.map((item) => item.source.publisherGroup)).size >= 4);
+});
+
+test('post-AI sinema kurtarma yalnız elenen veya yanlış kategorilenen sinema adaylarını seçer', () => {
+  const shortlist = [
+    { id: 'film-a', title: 'Yeni film festivalde gösterildi', category: 'sinema', score: 90, source: { id: 'a', publisherGroup: 'a' } },
+    { id: 'film-b', title: 'Yeni drama dizisi yayına başladı', category: 'sinema', score: 85, source: { id: 'b', publisherGroup: 'b' } },
+    { id: 'film-c', title: 'Belgesel yönetmeni yeni yapımını anlattı', category: 'sinema', score: 80, source: { id: 'c', publisherGroup: 'c' } },
+    { id: 'art-a', title: 'Yeni sergi açıldı', category: 'kultur-sanat', score: 95, source: { id: 'd', publisherGroup: 'd' } }
+  ];
+  const ranked = [
+    { ...shortlist[0], eligible: true, category: 'sinema' },
+    { ...shortlist[1], eligible: false, category: 'uygunsuz' },
+    { ...shortlist[2], eligible: true, category: 'kultur-sanat' },
+    { ...shortlist[3], eligible: true, category: 'kultur-sanat' }
+  ];
+  assert.deepEqual(selectCinemaRescueCandidates(shortlist, ranked).map((item) => item.id), ['film-b', 'film-c']);
 });
