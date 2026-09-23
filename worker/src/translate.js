@@ -160,12 +160,13 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
           repairing
             ? 'Verilen Türkçe metindeki denetim notlarını gider; metni kaynak ve olgu fişine bağlı kalarak yeniden düzenle.'
             : 'Zenginleştirilmiş olgu fişindeki doğrulanmış bilgilerden hareketle Türkçe haberi sıfırdan yaz; kaynak dildeki cümle sırasını yeniden kurmaya çalışma.',
-          'Olgu fişi doğruluk sınırıdır, paragraf planı değildir. Haber örgüsünü Türkçe gazetecilikteki önem sırasına göre kur.',
-          'İlk paragraf kim-ne-nerede-ne zaman sorularından kaynakta yanıtı bulunanları doğal biçimde vermeli. Sonraki paragraflar önem, ayrıntı ve bağlam sırasıyla ilerlemeli.',
-          'Kısa, açık ve çoğunlukla etkin cümleler kullan. Kaynak dilin sözdizimini, zincirleme tamlamalarını, tanıtım tonunu ve kelime kelime çeviri kokusunu taşıma.',
+          'Olgu fişi doğruluk sınırıdır, paragraf planı değildir. Kaynak haber ve kaynak başlığı yalnız haber hammaddesidir; cümle sırasını, paragraf sırasını veya vurgu hiyerarşisini kopyalama. Haber örgüsünü Türkçe gazetecilikteki önem sırasına göre kur.',
+          'Yazmaya başlamadan önce sessizce üç şeyi belirle: haberin asıl hikâyesi nedir; Türk okuyucu açısından en ilginç ve ayırt edici somut unsur nedir; hangi bilgi girişte, hangisi arka planda kalmalıdır. Bu analizi çıktıda gösterme.',
+          'İlk paragraf kaynak metnin ilk paragrafının çevirisi olmak zorunda değildir. Kim-ne-nerede-ne zaman sorularından kaynakta yanıtı bulunanları doğal biçimde ver; mümkünse haberin en güçlü somut unsurunu ilk 1-2 cümlede görünür kıl. Sonraki paragraflar önem, ayrıntı ve bağlam sırasıyla ilerlemeli.',
+          'Kısa, açık ve çoğunlukla etkin cümleler kullan. Kaynak dilin sözdizimini, zincirleme tamlamalarını, tanıtım tonunu ve kelime kelime çeviri kokusunu taşıma. Bir cümle anlamca doğru olsa bile Türkiye Türkçesinde bir gazetecinin doğal biçimde kurmayacağı hissini veriyorsa cümleyi tamamen yeniden kur.',
           'İngilizcedeki isimleştirmeleri Türkçeye aynen aktarma. “karakterlerin gelişimi”, “mesleklerinin ilk yılları”, “iş birliğinin ilerletilmesi” gibi yapıları gerektiğinde fiilli ve doğal Türkçe cümlelere dönüştür.',
           'Kaynak metnin cümle ve paragraf sırasını körü körüne izleme. Türkçe bir editör aynı olguları hangi sırayla ve hangi fiillerle yazardıysa o şekilde yeniden kur.',
-          'Paragrafları birbirinden kopuk özet maddeleri gibi kurma. Her paragraf bir öncekinin bıraktığı bilgiye doğal biçimde bağlansın; yapay geçiş kalıpları ve aynı ritimde yinelenen cümlelerden kaçın.',
+          'Paragrafları birbirinden kopuk özet maddeleri gibi kurma. Her paragraf bir öncekinin bıraktığı bilgiye doğal biçimde bağlansın; yapay geçiş kalıpları ve aynı ritimde yinelenen cümlelerden kaçın. Kültür-sanat haberinde kaynakta doğrulanmışsa mekân, eser, malzeme, gelenek veya performansın somut/görsel niteliğini kullanarak metne atmosfer kazandır; kaynakta olmayan betimleme veya duygu ekleme.',
           '“Artık yalnızca ... değil”, “bu dönüşümün dikkat çeken örneklerinden biri”, “farklı deneyimsel”, “söz alanı açıyor”, “yeni bir alan yaratıyor” ve art arda kullanılan “bir araya getiriyor” kalıplarını doğal Türkçe fiillerle yeniden kur.',
           'Aynı soyut sözcüğü — özellikle deneyim, yaklaşım, dönüşüm, süreç, alan veya model — metin boyunca tekrarlama. Somut özne ve eylemi doğrudan söyle.',
           'Bir kişi veya kurumun biyografisindeki her ayrıntıyı taşımak zorunda değilsin. Haberin ana gelişmesi için gerekli olmayan eğitim, görev ve kurum listelerini kısalt; metni özgeçmiş dökümüne dönüştürme.',
@@ -179,7 +180,7 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
           'Ay ve gün içeren geçmiş/gelecek olaylarda yıl belirsizliği doğuracaksa kaynakta bulunan yılı Türkçe metne ekle. Haberin yayımlandığı tarihe göre “kasım ayında” gibi ifadelerin yanlış zaman algısı yaratmasına izin verme.',
           'Kaynakta geçen her ayrıntıyı kullanmak zorunda değilsin; anlamı bozmayan özetleme, sadeleştirme ve seçme olgu hatası değildir.',
           'Çin’deki Mid-Autumn Festival için Türkçede “Güz Ortası Bayramı” karşılığını kullan; “Orta Sonbahar Bayramı” veya “Orta Sonbahar Festivali” yazma.',
-          'Başlığı somutlaştır; spot, başlık ve giriş tekrarlarını gider. Zorunlu olmayan İngilizce sözcükleri, uzun yabancı etkinlik/sergi adlarını, yapay tamlamaları, açıklanmamış ham Pinyin zincirlerini ve propaganda dilini temizle. Doğrulanmış özgün Çince adın ardından parantez içinde verilen pinyin bu yasağın dışındadır. Okur İngilizce bilmeden metni anlayabilmeli.',
+          'Başlığı somutlaştır; spot, başlık ve giriş tekrarlarını gider. Kaynak başlığını tercüme etme: haberi yalnız tarif eden başlık yerine, doğrulanmış olgular içinden hikâyenin ayırt edici yönünü görünür kılan doğal bir Türkçe başlık kur. Sayı, satıcı/katılımcı adedi veya kurum adı ancak gerçekten ana haber değeriyse başlığın merkezinde olsun. Zorunlu olmayan İngilizce sözcükleri, uzun yabancı etkinlik/sergi adlarını, yapay tamlamaları, açıklanmamış ham Pinyin zincirlerini ve propaganda dilini temizle. Doğrulanmış özgün Çince adın ardından parantez içinde verilen pinyin bu yasağın dışındadır. Okur İngilizce bilmeden metni anlayabilmeli.',
           'Başlık Türkiye’deki okuyucunun dış bağlam bilmeden tek okumada anlayacağı kadar açıklayıcı olmalı. Türkiye’de geniş ölçüde bilinmeyen bir etkinlik, program, kurum veya marka adını tek başına başlığın merkezine koyma; önce bunun ne olduğunu Türkçe olarak anlat.',
           'Başlıkta mümkünse haberin en ayırt edici somut unsurunu öne çıkar: önemli ödül, sıra dışı mekân, güçlü sayı, ilk olma, tanınmış isim veya özgün kültürel gelişme. Clickbait yapma ve kaynakta olmayan üstünlük ekleme. Başlığı yalnız yer adı + iki isimden oluşan katalog kalıbına bırakma; kaynak izin veriyorsa somut bir eylem, gelişme veya etkinlik türüyle tamamla.',
           '“Çin bağlantılı”, “sahnede”, “buluştu”, “görücüye çıktı”, “heyecanı yaşandı” gibi muğlak veya klişe ifadeler yerine kaynak izin veriyorsa daha kesin özne ve fiil kullan. “X’te Y ve Z” gibi eksik isim dizilerini yalnız güçlü bir dergi başlığı etkisi yaratıyorsa kullan; sıradan haberlerde cümleyi doğal bir fiille tamamla.',
@@ -189,7 +190,7 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
           'Kaynakta olmayan bilgi, alıntı, yorum veya kesinlik ekleme. Doğrulanamayan bir boşluğu tahminle doldurma.',
           'Düzeltilebilir dil, uzunluk veya biçim sorunu gördüğünde reddetme; metni düzelt ve accepted=true ver.',
           'Yalnız kaynak haber yazmaya gerçekten yetmiyorsa, önemli bir olgu çelişkisi giderilemiyorsa veya güvenilir metin kaynak dışı bilgi eklemeden kurulamıyorsa accepted=false ver.',
-          'Yanıtlamadan önce başlığı sessizce şu beş soruyla kontrol et: Türk okur başlığı tek okumada anlıyor mu; haberin ayırt edici unsurunu görüyor mu; başlık kaynak dilden çevrilmiş gibi mi duruyor; yalnız isimleri yan yana diziyor mu; daha doğal ve canlı ama aynı ölçüde doğru bir Türkçe fiille kurulabilir mi? Sorun varsa başlığı yeniden yaz.',
+          'Yanıtlamadan önce sessiz iki aşamalı editör kontrolü yap. Önce başlığı şu beş soruyla denetle: Türk okur başlığı tek okumada anlıyor mu; haberin ayırt edici unsurunu görüyor mu; başlık kaynak dilden çevrilmiş gibi mi duruyor; yalnız isimleri yan yana diziyor mu; daha doğal ve canlı ama aynı ölçüde doğru bir Türkçe fiille kurulabilir mi? Ardından tüm metne şu testi uygula: “Bir Türk gazeteci bu cümleyi gerçekten böyle kurar mı?” ve “Okur bunun çeviri olduğunu cümle yapısından sezebilir mi?” Sorun varsa teslim etmeden önce yeniden yaz.',
           'Yalnız geçerli JSON ver.'
         ].join(' ')
       },
@@ -277,10 +278,10 @@ async function refineHeadline(article, factSheet, draft, { signal, completeJson 
         role: 'system',
         content: [
           'Türkçe kültür-sanat haberleri için başlık editörüsün.',
-          'Verilen haber için zihninde üç farklı başlık seçeneği üret ve doğruluk, somutluk, merak, Türkçe doğallık ve haber ritmi bakımından en iyisini seç; yalnız seçtiğin başlığı JSON içinde döndür.',
+          'Verilen haber için zihninde en az üç farklı başlık açısı üret: somut haber gelişmesi, kültürel/hikâyesel ayırt edici unsur ve varsa güçlü görsel/mekânsal unsur. Doğruluk, somutluk, merak, Türkçe doğallık ve haber ritmi bakımından en iyisini seç; yalnız seçtiğin başlığı JSON içinde döndür.',
           'Başlık kaynakta olmayan bilgi, sıfat, önem atfı veya neden-sonuç eklememeli.',
           'Türkiye’de bilinmeyen kurum, etkinlik veya teknik terimi açıklamasız biçimde başlığın merkezine koyma.',
-          'Daha somut bir fiil mümkünse “sunuyor”, “genişliyor”, “öne çıkıyor”, “buluşuyor”, “yer alıyor” gibi jenerik fiillere yaslanma.',
+          'Daha somut bir fiil veya daha güçlü bir haber açısı mümkünse “sunuyor”, “genişliyor”, “öne çıkıyor”, “buluşuyor”, “yer alıyor”, “aynı sahneyi paylaştı” gibi jenerik kalıplara yaslanma. Kaynaktaki sayı veya katılımcı adedi hikâyenin özü değilse sırf kolay olduğu için başlığı rakam üzerine kurma.',
           'Sayı veya sıra dışı ayrıntı ana haber değeriyse kullan; yalnız rakam var diye başlığı mekanikleştirme.',
           'Başlık yaklaşık 35-95 karakter arasında, tek okumada anlaşılır ve doğal Türkiye Türkçesiyle olmalı.',
           'Yalnız geçerli JSON ver.'
@@ -323,9 +324,9 @@ async function polishTurkishNews(article, factSheet, draft, { signal, completeJs
         content: [
           'Sen kaynak dilden çeviri yapan biri değil, Türkçe bir haber merkezinin son okuma ve başlık editörüsün.',
           "Metnin üretim sürecini anlatan meta-dil kullanma; 'Kaynak metne göre', 'Kaynak, ...' ve 'metinde belirtildi' gibi ifadeler yazma. Bilgi atfedilecekse gerçek kaynak, kişi veya kurum adını kullan.",
-          'Görevin verilen taslağı yeniden çevirmek değil; metindeki çeviri kokusunu, yabancı sözdizimini, gereksiz isimleştirmeleri, mekanik cümle ritmini ve muğlak başlığı temizlemektir.',
-          'Metin, ilk kez Türkçe yazılmış bir kültür-sanat haberi gibi okunmalı. Fiilleri doğal kullan; uzun tamlamaları böl; özne-yüklem ilişkisini Türkçe haber diline göre yeniden kur.',
-          'Başlık, spot ve giriş aynı bilgiyi tekrar etmesin. Paragraflar arasında doğal akış kur. Gereksiz açıklama, yorum, sıfat ve tanıtım dili ekleme.',
+          'Görevin verilen taslağı yeniden çevirmek değil; metindeki çeviri kokusunu, yabancı sözdizimini, gereksiz isimleştirmeleri, mekanik cümle ritmini ve muğlak başlığı temizlemektir. Taslağın bilgi sırasına da bağlı değilsin: olguları değiştirmeden, Türk okur için daha güçlü bir haber akışı gerekiyorsa paragraf ve vurgu sırasını yeniden kur.',
+          'Metin, ilk kez Türkçe yazılmış bir kültür-sanat haberi gibi okunmalı. Fiilleri doğal kullan; uzun tamlamaları böl; özne-yüklem ilişkisini Türkçe haber diline göre yeniden kur. Anlamı doğru fakat Türkçesi mekanik bir cümleyi yüzeysel sözcük değişiklikleriyle bırakma; gerekirse baştan yaz.',
+          'Başlık, spot ve giriş aynı bilgiyi tekrar etmesin. Paragraflar arasında doğal akış kur. Kültür-sanat haberinde kaynakta bulunan somut mekân, eser, gelenek, malzeme veya performans ayrıntısını uygun olduğunda öne çıkar; fakat kaynakta olmayan atmosfer, yorum, sıfat veya duygu ekleme.',
           'Başlığı ayrıca bağımsız bir editör gibi yeniden değerlendir. Türkiye’de bilinmeyen etkinlik veya kurum adını açıklamasız biçimde başlığın merkezinde bırakma. Gerekirse özel adı gövdeye indir ve başlıkta etkinliğin ne olduğunu açık Türkçeyle söyle.',
           'Başlıkta somut haber değerini mümkün olduğunca görünür kıl; sayı, ödül, sıra dışı mekân, ilk olma veya tanınmış isim varsa ve gerçekten ana gelişmeyse kullan. Clickbait ve abartı yapma.',
           'Muğlak “Çin bağlantılı”, “öne çıkıyor”, “sahnede” gibi ifadeleri ancak gerçekten en doğru ifade buysa koru; aksi halde daha kesin özne-fiil ilişkisi kur.',
@@ -337,7 +338,7 @@ async function polishTurkishNews(article, factSheet, draft, { signal, completeJs
           'Bir ifade zaten doğal Türkçeyse sırf değişiklik yapmak için değiştirme. Ama İngilizce veya Çince cümle iskeletini taşıyan ifadeleri yeniden kur. Metinde gereksiz biçimde İngilizce bırakılmış açıklayıcı sergi, etkinlik, belgesel veya program adı varsa Türkçeleştir.',
           '“demonstrasyon bölgesi” gibi kelime kelime kurum/idarî terim çevirilerini doğal Türkçeyle yeniden kur. Açıklanmamış Pinyin veya yabancı teknik terimi ya Türkçeleştir ya da aynı cümlede kısa biçimde açıkla.',
           'Haber değerine göre 3-7 kısa paragraf, doğal bir başlık ve tek cümlelik spot üret. Küçük haberi sırf uzunluk hedefi için şişirme.',
-          'Yanıtlamadan önce başlığı sessizce tek okumada anlaşılırlık, somutluk, Türkçe doğallık ve haber ritmi açısından kontrol et. Yer adı + isim listesi, çeviri kokusu veya takvim başlığı hissi veriyorsa daha doğal bir fiille yeniden kur.',
+          'Yanıtlamadan önce sessiz editör kontrolü yap: başlığı tek okumada anlaşılırlık, somutluk, Türkçe doğallık ve haber ritmi açısından denetle. Yer adı + isim listesi, çeviri kokusu veya takvim başlığı hissi veriyorsa daha güçlü bir haber açısıyla yeniden kur. Ardından her paragraf için “Bir Türk gazeteci bunu gerçekten böyle yazar mı?” ve “Cümlenin yabancı dilden çevrildiği hissediliyor mu?” testlerini uygula; evetse o cümleyi teslim etmeden önce yeniden kur.',
           'Yalnız geçerli JSON ver.'
         ].join(' ')
       },
@@ -555,6 +556,6 @@ export async function translateArticle(article, { signal, completeJson = request
     fluency: editorialFluencyProfile(final.draft),
     elapsedSeconds: elapsedSeconds(startedAt)
   });
-  // v12: yazı modeli kaynak sözdizimi yerine zengin olgu fişinden üretir; son okuma A/B akıcılık kapısından geçer.
-  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v13-repair-headline-gate' };
+  // v14: kaynak yalnız haber hammaddesidir; yazım ve son okuma Türk okur için hikâye açısını, doğal sözdizimini ve başlığı yeniden kurar.
+  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v14-native-story-angle' };
 }
