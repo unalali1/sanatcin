@@ -488,7 +488,7 @@ export async function translateArticle(article, { signal, completeJson = request
   }
 
   if (mechanicalIssues.length) {
-    let blockingIssues = mechanicalIssues.filter((issue) => /Çince karakterler|Pinyin|doğrulanmış yerel ad|kaynak-site artığı|yinelenen cümle/iu.test(issue));
+    let blockingIssues = mechanicalIssues.filter((issue) => /Çince karakterler|doğrulanmış yerel ad|kaynak-site artığı|yinelenen cümle/iu.test(issue));
     if (blockingIssues.length) {
       log('warn', 'Yayın engelleyici dil/adlandırma sorunu için özel onarım turu başlatıldı', {
         source: article.source.id,
@@ -508,7 +508,7 @@ export async function translateArticle(article, { signal, completeJson = request
           assertUsableEditorialOutput(repaired.draft);
           final = repaired;
           mechanicalIssues = editorialIssues(final.draft, factSheet);
-          blockingIssues = mechanicalIssues.filter((issue) => /Çince karakterler|Pinyin|doğrulanmış yerel ad|kaynak-site artığı|yinelenen cümle/iu.test(issue));
+          blockingIssues = mechanicalIssues.filter((issue) => /Çince karakterler|doğrulanmış yerel ad|kaynak-site artığı|yinelenen cümle/iu.test(issue));
           log(blockingIssues.length ? 'warn' : 'info', 'Özel dil/adlandırma onarım turu tamamlandı', {
             source: article.source.id,
             remainingBlockingIssues: blockingIssues
@@ -535,12 +535,31 @@ export async function translateArticle(article, { signal, completeJson = request
   try {
     const headline = await refineHeadline(article, factSheet, final.draft, { signal, completeJson });
     if (headline.changed) {
-      final = { ...final, draft: headline.draft };
-      log('info', 'Başlık mikro-editör turunda güçlendirildi', {
-        source: article.source.id,
-        title: final.draft.title,
-        reason: headline.reason
-      });
+      let decision = { preferred: 'A', reason: 'Bağımsız başlık hakemi çalıştırılamadı; mevcut başlık korundu.' };
+      try {
+        decision = await chooseMoreNaturalDraft(article, factSheet, final.draft, headline.draft, { signal, completeJson });
+      } catch (headlineJudgeError) {
+        log('warn', 'Başlık önerisi bağımsız hakem tarafından değerlendirilemedi; mevcut başlık korunacak', {
+          source: article.source.id,
+          error: String(headlineJudgeError?.message ?? headlineJudgeError).slice(0, 300)
+        });
+      }
+      if (decision.preferred === 'B') {
+        final = { ...final, draft: headline.draft };
+        log('info', 'Başlık mikro-editör turunda güçlendirildi', {
+          source: article.source.id,
+          title: final.draft.title,
+          reason: headline.reason,
+          judgeReason: decision.reason
+        });
+      } else {
+        log('info', 'Başlık mikro-editör önerisi hakem tarafından reddedildi; mevcut başlık korundu', {
+          source: article.source.id,
+          currentTitle: final.draft.title,
+          proposedTitle: headline.draft.title,
+          reason: decision.reason
+        });
+      }
     }
   } catch (headlineError) {
     log('warn', 'Başlık mikro-editörü tamamlanamadı; doğrulanmış mevcut başlık korunacak', {
@@ -556,7 +575,7 @@ export async function translateArticle(article, { signal, completeJson = request
     fluency: editorialFluencyProfile(final.draft),
     elapsedSeconds: elapsedSeconds(startedAt)
   });
-  // v14: kaynak yalnız haber hammaddesidir; yazım ve son okuma Türk okur için hikâye açısını, doğal sözdizimini ve başlığı yeniden kurar.
-  // Bu prompt korumaları translate ve quality-efficiency regresyon testleriyle sabitlenir.
-  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v14-native-story-angle' };
+  // v15: v14 doğal Türkçe yazımına ek olarak Pinyin yanlış pozitifleri yayını durdurmaz
+  // ve mikro başlık yalnız bağımsız hakem açıkça daha iyi bulursa kabul edilir.
+  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v15-safe-headline-gate' };
 }

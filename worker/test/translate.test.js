@@ -68,7 +68,7 @@ test('olgu çıkarımı, haber yazımı ve Türkçe son okuma ardışık çalı�
   assert.match(calls[3].input[0].content, /en az üç farklı başlık açısı üret/);
   assert.doesNotMatch(calls[1].input[1].content, /Kaynak metin:/);
   assert.match(calls[1].input[1].content, /leadFacts/);
-  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v14-native-story-angle');
+  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v15-safe-headline-gate');
   assert.equal(result.factSheet.facts.length, 4);
   assert.match(result.title, /Şanghay/);
 });
@@ -134,4 +134,25 @@ test('düşük Türkçe doğallık puanı yayını kesmeden hedefli düzeltme ba
 
   assert.equal(calls.length, 5);
   assert.match(calls[2].input[1].content, /Türkçe doğallık puanı düşük/);
+});
+
+
+test('başlık mikro-editörü ancak bağımsız hakem açıkça daha iyi bulursa kabul edilir', async () => {
+  const calls = [];
+  const original = editorialResult();
+  const proposedTitle = 'Şanghay’da 42 eser çağdaş zanaatın dönüşümünü anlatıyor';
+  const completeJson = async (request) => {
+    calls.push(request);
+    if (calls.length === 1) return { factSheet };
+    if (calls.length === 2) return original;
+    if (calls.length === 3) return original;
+    if (calls.length === 4) return { title: proposedTitle, reason: 'Sayıyı öne çıkarıyor.' };
+    return { preferred: 'A', reason: 'Mevcut başlık hikâyeyi daha doğal ve güçlü anlatıyor.', aScore: 9, bScore: 7 };
+  };
+
+  const result = await translateArticle(article, { completeJson });
+
+  assert.equal(calls.length, 5);
+  assert.equal(calls[4].model, config.openaiSelectionModel);
+  assert.equal(result.title, original.title);
 });

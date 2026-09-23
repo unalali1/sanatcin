@@ -86,7 +86,15 @@ test('başlık üretimi katalog kalıbı ve klişe heyecan dilinden kaçınır',
   assert.match(translate, /yer adı \+ iki isimden oluşan katalog kalıbına bırakma/);
   assert.match(translate, /“heyecanı yaşandı”/);
   assert.match(translate, /daha güçlü bir haber açısıyla yeniden kur/);
-  assert.match(translate, /fact-ledger-turkish-newsroom-v14-native-story-angle/);
+  assert.match(translate, /fact-ledger-turkish-newsroom-v15-safe-headline-gate/);
+});
+
+test('Pinyin kalite notu onarım ister ama tek başına yayını engellemez', () => {
+  const translate = readFileSync(new URL('../src/translate.js', import.meta.url), 'utf8');
+  assert.match(translate, /açıklanmamış ham Pinyin/);
+  const blockingLines = translate.split('\n').filter((line) => line.includes('blockingIssues = mechanicalIssues.filter'));
+  assert.ok(blockingLines.length >= 2);
+  assert.ok(blockingLines.every((line) => !line.includes('Pinyin')));
 });
 
 test('source health taslak kaydı, dinamik sürüm ve hero meta bağlantıları kodda bulunur', () => {
