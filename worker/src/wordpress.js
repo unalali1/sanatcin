@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { config } from './config.js';
 import { sourceHash } from './fetch.js';
 import { log } from './logger.js';
-import { assertImageDimensions, isUsableImageUrl, likelyDuplicateTitles, titleSimilarity } from './quality.js';
+import { assertImageDimensions, isUsableImageUrl, likelyDuplicateTitles, titleSimilarity, heroImageEligible } from './quality.js';
 import { SITE_PAGES } from './site-content.js';
 
 const auth = `Basic ${Buffer.from(`${config.wpUsername}:${config.wpAppPassword}`).toString('base64')}`;
@@ -39,15 +39,6 @@ function resolutionPreference(dimensions = {}) {
   return 0;
 }
 
-function heroImageEligible(dimensions = {}, cropSafe = false, scene = 'other', kind = '') {
-  const width = Number(dimensions.width) || 0;
-  const height = Number(dimensions.height) || 0;
-  if (!cropSafe || width < 1200 || height <= 0) return false;
-  const ratio = width / height;
-  if (ratio < 1.35 || ratio > 2.1) return false;
-  if (kind === 'event-poster' || scene === 'poster' || scene === 'portrait') return false;
-  return true;
-}
 
 function sceneDiversityPenalty(scene) {
   const count = runVisualScenes.get(scene) ?? 0;
@@ -593,7 +584,34 @@ export async function publishArticle(article, preparedImage = undefined, { signa
   if (config.publishStatus === 'publish') {
     post = await wp(`/wp/v2/posts/${post.id}`, { method: 'POST', body: JSON.stringify({ status: 'publish' }), signal });
   }
+  if (config.publishStatus === 'publish') {
+    runPublishedPosts.set(post.id, post);
+    if (duplicatePostsCache) duplicatePostsCache = mergePublishedPosts(duplicatePostsCache);
+  }
   return post;
+}
+
+const runPublishedPosts = new Map();
+function mergePublishedPosts(posts) {
+  return [...runPublishedPosts.values(), ...posts.filter((post) => !runPublishedPosts.has(post.id))].slice(0, 100);
+}
+let duplicatePostsCache = null;
+let duplicatePostsLoadedAt = 0;
+let duplicatePostsPending = null;
+
+// Shared by both checks and concurrent workers. Refresh to see external edits.
+async function recentDuplicatePosts(signal) {
+  if (duplicatePostsCache && Date.now() - duplicatePostsLoadedAt < 60_000) return duplicatePostsCache;
+  if (!duplicatePostsPending) {
+    duplicatePostsPending = wp('/wp/v2/posts?status=publish&per_page=100&orderby=date&order=desc&_fields=id,link,title,meta', { signal })
+      .then((posts) => {
+        duplicatePostsCache = mergePublishedPosts(posts);
+        duplicatePostsLoadedAt = Date.now();
+        return duplicatePostsCache;
+      })
+      .finally(() => { duplicatePostsPending = null; });
+  }
+  return duplicatePostsPending;
 }
 
 function decodeTitle(value = '') {
@@ -609,7 +627,7 @@ function decodeTitle(value = '') {
 }
 
 export async function assertNoSimilarPublishedTitle(title, { signal } = {}) {
-  const posts = await wp('/wp/v2/posts?status=publish&per_page=100&orderby=date&order=desc&_fields=id,link,title', { signal });
+  const posts = await recentDuplicatePosts(signal);
   for (const post of posts) {
     const existingTitle = decodeTitle(post.title?.rendered);
     const similarity = titleSimilarity(title, existingTitle);
@@ -620,7 +638,7 @@ export async function assertNoSimilarPublishedTitle(title, { signal } = {}) {
 }
 
 export async function assertNoSimilarPublishedCandidate(sourceTitle, { signal } = {}) {
-  const posts = await wp('/wp/v2/posts?status=publish&per_page=100&orderby=date&order=desc&_fields=id,link,title,meta', { signal });
+  const posts = await recentDuplicatePosts(signal);
   for (const post of posts) {
     const existingOriginalTitle = decodeTitle(post.meta?.sanatcin_original_title);
     if (!existingOriginalTitle || !likelyDuplicateTitles(sourceTitle, existingOriginalTitle)) continue;

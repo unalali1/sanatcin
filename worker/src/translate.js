@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { log } from './logger.js';
 import {
   editorialDraftChanged,
+  normalizeNewsroomTerms,
   editorialFluencyProfile,
   headlineQualityRegression,
   nativeNameRegression,
@@ -31,7 +32,7 @@ function escapeHtml(value) {
 }
 
 function cleanString(value) {
-  return String(value ?? '')
+  return normalizeNewsroomTerms(value ?? '')
     .replace(/\bOrta Sonbahar Bayramı\b/giu, 'Güz Ortası Bayramı')
     .replace(/\bOrta Sonbahar Festivali\b/giu, 'Güz Ortası Bayramı')
     .replace(/\s+/g, ' ')
@@ -174,7 +175,7 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
           '“Dikkat çekiyor”, “öne çıkıyor”, “gözler önüne seriyor”, “önemli bir adım” ve “büyük ilgi gördü” gibi hazır ifadeleri ancak kaynakta somut dayanağı varsa kullan.',
           'Kurum açıklamalarındaki övgü ve iddiaları haberin kendi hükmü gibi yazma; söyleyeni açıkça belirt. Kaynaktaki neden-sonuç ilişkisini güçlendirme veya yeni bir önem atfetme.',
           'Türkiye Türkçesinde yerleşik karşılığı olan şehir ve kavramları Türkçeleştir; Pekin ve Şanghay yazımlarını kullan. Sergi, etkinlik, belgesel, program ve benzeri kültür-sanat adlarının resmî veya yerleşik Türkçe karşılığı varsa onu kullan. Çince olmayan yabancı adlarda böyle bir karşılık yoksa, ad açıklayıcı nitelikteyse anlamını koruyan doğal bir Türkçe karşılık üret; özgün yabancı adı ancak marka niteliği, uluslararası tanınırlık veya anlam belirsizliği nedeniyle gerçekten gerekliyse ilk kullanımda parantez içinde ver. Çince adlandırmalarda ise bir sonraki özel kuralı uygula.',
-          'Türkçede yerleşik karşılığı bulunmayan Çince eser, dizi, film, program, sergi, sanat akımı veya kültürel kavram adlarında doğal Türkçe karşılığı metnin ana adı yap. Özgün Çince ad ve pinyin olgu fişindeki nativeNames alanında verified=true olarak bulunuyorsa ilk kullanımda kısa editoryal biçimi uygula: Doğal Türkçe Karşılık (“中文名称”, Pinyin). Türkçe karşılık kelime kelime olmak zorunda değildir; anlamı, çağrışımı ve varsa kelime oyununu mümkün olduğunca korumalıdır. İlk kullanımdan sonra yalnız doğal Türkçe karşılığı kullan. Kaynakta verilen İngilizce ad, ancak uluslararası yerleşik ad veya eseri bulmayı kolaylaştıran ayırt edici bilgi ise ilk kullanımda ayrıca tırnak içinde ver; İngilizce adı Türkçe metnin ana adı yapma. Özgün Çince ad kaynakta yoksa tahmin etme veya uydurma; bu durumda doğal Türkçe karşılığı esas al ve gerekirse kaynakta verilen İngilizce adı ilk kullanımda parantez içinde belirt.',
+          'Türkçede yerleşik karşılığı bulunmayan Çince eser, dizi, film, program, sergi, sanat akımı veya kültürel kavram adlarında doğal Türkçe karşılığı metnin ana adı yap. Özgün Çince ad ve pinyin olgu fişindeki nativeNames alanında verified=true olarak bulunuyorsa ilk kullanımda kısa editoryal biçimi uygula: Doğal Türkçe Karşılık (“中文名称”, Pinyin). Türkçe karşılık kelime kelime olmak zorunda değildir; anlamı, çağrışımı ve varsa kelime oyununu mümkün olduğunca korumalıdır. İlk kullanımdan sonra yalnız doğal Türkçe karşılığı kullan. Çin eserleri ve sergilerinde İngilizce ara çeviriyi ekleme; özgün Çince ad varsa doğrulanmış biçimini kullan. Özgün Çince ad kaynakta yoksa tahmin etme veya uydurma; bu durumda yalnız doğal Türkçe karşılığı kullan.',
           'Kişi, kurum ve marka adlarını eksiksiz koru; Lu ya da Liu gibi kısaltmalar yapma. Sayıları, tarihleri ve alıntı anlamlarını değiştirme. Eser ve etkinlik adlarında anlamı, sayıları ve ayırt edici unsurları koru; açıklayıcı yabancı adları Türkçede doğal okunacak biçimde aktar.',
           '“Ambassador”, “envoy”, “representative” gibi unvanları bağlamına göre çevir; marka elçisini veya moda haftası temsilcisini diplomatik büyükelçi gibi gösterme.',
           'Ay ve gün içeren geçmiş/gelecek olaylarda yıl belirsizliği doğuracaksa kaynakta bulunan yılı Türkçe metne ekle. Haberin yayımlandığı tarihe göre “kasım ayında” gibi ifadelerin yanlış zaman algısı yaratmasına izin verme.',
@@ -191,6 +192,7 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
           'Düzeltilebilir dil, uzunluk veya biçim sorunu gördüğünde reddetme; metni düzelt ve accepted=true ver.',
           'Yalnız kaynak haber yazmaya gerçekten yetmiyorsa, önemli bir olgu çelişkisi giderilemiyorsa veya güvenilir metin kaynak dışı bilgi eklemeden kurulamıyorsa accepted=false ver.',
           'Yanıtlamadan önce sessiz iki aşamalı editör kontrolü yap. Önce başlığı şu beş soruyla denetle: Türk okur başlığı tek okumada anlıyor mu; haberin ayırt edici unsurunu görüyor mu; başlık kaynak dilden çevrilmiş gibi mi duruyor; yalnız isimleri yan yana diziyor mu; daha doğal ve canlı ama aynı ölçüde doğru bir Türkçe fiille kurulabilir mi? Ardından tüm metne şu testi uygula: “Bir Türk gazeteci bu cümleyi gerçekten böyle kurar mı?” ve “Okur bunun çeviri olduğunu cümle yapısından sezebilir mi?” Sorun varsa teslim etmeden önce yeniden yaz.',
+          'Kurum adlarını doğal Türkçeyle ver: National Art Museum of China = Çin Ulusal Sanat Müzesi. Çin eser/sergi adlarının İngilizce ara çevirisini parantezde tekrar etme; doğrulanmış Çince ad ve pinyin yoksa yalnız doğal Türkçe karşılığı kullan. Yeşim gibi malzemelerde kelime kelime teknik tamlama kurma; terimi kaynak anlamıyla kısa ve anlaşılır açıkla. Türkçe ifadeyi “Çincede ... olarak adlandırılıyor” diye tekrarlama. Nesneye “iz sürmek” gibi araştırmacı eylemi yükleme. Girişte idari yer adlarını yığma; ana gelişmeyi öne al. Sanat haberini protokol konuşmalarına boğma; kaynakta bulunan eser ve üretim ayrıntılarını öncele.',
           'Yalnız geçerli JSON ver.'
         ].join(' ')
       },
@@ -232,6 +234,7 @@ async function chooseMoreNaturalDraft(article, factSheet, before, after, { signa
               'İki metin aynı doğrulanmış olgulara dayanıyor. Yalnız dil doğallığı, açıklık, haber ritmi, somut fiil kullanımı ve çeviri kokusunun yokluğu bakımından karşılaştır.',
               'Bilgi ekleyen, sayı/ad değiştiren, daha muğlaklaşan veya sırf farklı görünmek için cümleleri bozan sürümü seçme.',
               'B sürümünü yalnız açıkça daha iyi ise seç; eşitlikte veya kuşkuda A sürümünü koru.',
+              'İngilizce kurum adını, mekanik malzeme tamlamasını, bilgi vermeyen terim açıklamasını ve nesneye araştırmacı eylemi yükleyen başlığı kalite kusuru say. Yeni olgu eklemeyen doğal Türkçe anlatımı tercih et.',
               'Yalnız geçerli JSON ver.'
             ].join(' ')
           },
@@ -284,6 +287,7 @@ async function refineHeadline(article, factSheet, draft, { signal, completeJson 
           'Daha somut bir fiil veya daha güçlü bir haber açısı mümkünse “sunuyor”, “genişliyor”, “öne çıkıyor”, “buluşuyor”, “yer alıyor”, “aynı sahneyi paylaştı” gibi jenerik kalıplara yaslanma. Kaynaktaki sayı veya katılımcı adedi hikâyenin özü değilse sırf kolay olduğu için başlığı rakam üzerine kurma.',
           'Sayı veya sıra dışı ayrıntı ana haber değeriyse kullan; yalnız rakam var diye başlığı mekanikleştirme.',
           'Başlık yaklaşık 35-95 karakter arasında, tek okumada anlaşılır ve doğal Türkiye Türkçesiyle olmalı.',
+          'İngilizce kurum adını, mekanik malzeme tamlamasını, bilgi vermeyen terim açıklamasını ve nesneye araştırmacı eylemi yükleyen başlığı kalite kusuru say. Yeni olgu eklemeyen doğal Türkçe anlatımı tercih et.',
           'Yalnız geçerli JSON ver.'
         ].join(' ')
       },
@@ -333,12 +337,13 @@ async function polishTurkishNews(article, factSheet, draft, { signal, completeJs
           'Çeviri yanlış anlaşılmasına açık meslek/unvanları bağlama göre düzelt. Marka elçisi ile diplomatik büyükelçiyi, küratör ile yönetici/temsilciyi birbirine karıştırma.',
           'Tarih ve zaman bağlamını denetle. Kaynakta yıl varsa ve “kasım ayında” gibi ifade okuyucuyu yanlış yıla götürebilecekse yılı açıkça yaz.',
           'Olgu fişindeki gerçekleri, kişi/kurum/marka adlarını, tarihleri, sayıları ve alıntı anlamlarını kesinlikle değiştirme. Eser, sergi, etkinlik, belgesel ve program adlarının anlamını koru; açıklayıcı yabancı adları doğal Türkçeye aktar. Kaynakta olmayan hiçbir bilgi ekleme.',
-          'Çince eser, dizi, film, program, sergi, sanat akımı veya kültürel kavram adı için ilk taslakta doğal Türkçe karşılık + doğrulanmış özgün Çince ad + pinyin biçimi kullanılmışsa bunu koru. Tercih edilen ilk kullanım kalıbı: Doğal Türkçe Karşılık (“中文名称”, Pinyin). Sonraki kullanımlarda yalnız Türkçe karşılığı bırak. İngilizce adı ancak uluslararası tanınırlık veya bulunabilirlik için gerçekten yararlıysa ilk kullanımda tırnak içinde koru; metni yeniden İngilizce ad merkezli hale getirme. Kaynakta olmayan Çince adı asla uydurma.',
+          'Çince eser, dizi, film, program, sergi, sanat akımı veya kültürel kavram adı için ilk taslakta doğal Türkçe karşılık + doğrulanmış özgün Çince ad + pinyin biçimi kullanılmışsa bunu koru. Tercih edilen ilk kullanım kalıbı: Doğal Türkçe Karşılık (“中文名称”, Pinyin). Sonraki kullanımlarda yalnız Türkçe karşılığı bırak. Çin eserleri ve sergilerinde İngilizce ara çeviriyi koruma; Türkçe karşılığı ve varsa doğrulanmış özgün Çince adı esas al. Kaynakta olmayan Çince adı asla uydurma.',
           'Mid-Autumn Festival terminolojisini denetle: Türkçe metinde yalnız “Güz Ortası Bayramı” kullan.',
           'Bir ifade zaten doğal Türkçeyse sırf değişiklik yapmak için değiştirme. Ama İngilizce veya Çince cümle iskeletini taşıyan ifadeleri yeniden kur. Metinde gereksiz biçimde İngilizce bırakılmış açıklayıcı sergi, etkinlik, belgesel veya program adı varsa Türkçeleştir.',
           '“demonstrasyon bölgesi” gibi kelime kelime kurum/idarî terim çevirilerini doğal Türkçeyle yeniden kur. Açıklanmamış Pinyin veya yabancı teknik terimi ya Türkçeleştir ya da aynı cümlede kısa biçimde açıkla.',
           'Haber değerine göre 3-7 kısa paragraf, doğal bir başlık ve tek cümlelik spot üret. Küçük haberi sırf uzunluk hedefi için şişirme.',
           'Yanıtlamadan önce sessiz editör kontrolü yap: başlığı tek okumada anlaşılırlık, somutluk, Türkçe doğallık ve haber ritmi açısından denetle. Yer adı + isim listesi, çeviri kokusu veya takvim başlığı hissi veriyorsa daha güçlü bir haber açısıyla yeniden kur. Ardından her paragraf için “Bir Türk gazeteci bunu gerçekten böyle yazar mı?” ve “Cümlenin yabancı dilden çevrildiği hissediliyor mu?” testlerini uygula; evetse o cümleyi teslim etmeden önce yeniden kur.',
+          'Kurum adlarını doğal Türkçeyle ver: National Art Museum of China = Çin Ulusal Sanat Müzesi. Çin eser/sergi adlarının İngilizce ara çevirisini parantezde tekrar etme; doğrulanmış Çince ad ve pinyin yoksa yalnız doğal Türkçe karşılığı kullan. Yeşim gibi malzemelerde kelime kelime teknik tamlama kurma; terimi kaynak anlamıyla kısa ve anlaşılır açıkla. Türkçe ifadeyi “Çincede ... olarak adlandırılıyor” diye tekrarlama. Nesneye “iz sürmek” gibi araştırmacı eylemi yükleme. Girişte idari yer adlarını yığma; ana gelişmeyi öne al. Sanat haberini protokol konuşmalarına boğma; kaynakta bulunan eser ve üretim ayrıntılarını öncele.',
           'Yalnız geçerli JSON ver.'
         ].join(' ')
       },
@@ -384,7 +389,7 @@ function editorialIssues(draft, factSheet) {
   return issues;
 }
 
-export async function translateArticle(article, { signal, completeJson = requestJson } = {}) {
+export async function translateArticle(article, { signal, completeJson = requestJson, validateDraft } = {}) {
   const startedAt = Date.now();
   log('info', 'Türkçe haber hazırlığı başladı', { source: article.source.id, url: article.url });
 
@@ -408,6 +413,9 @@ export async function translateArticle(article, { signal, completeJson = request
     title: final.draft.title,
     elapsedSeconds: elapsedSeconds(startedAt)
   });
+
+  // Reject before repair/polish/headline calls; keep the final guard too.
+  if (validateDraft) await validateDraft(final.draft);
 
   let mechanicalIssues = editorialIssues(final.draft, factSheet);
   if (mechanicalIssues.length) {

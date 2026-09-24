@@ -156,3 +156,23 @@ test('başlık mikro-editörü ancak bağımsız hakem açıkça daha iyi bulurs
   assert.equal(calls[4].model, config.openaiSelectionModel);
   assert.equal(result.title, original.title);
 });
+
+test('duplicate first draft stops before polish, repair and headline requests', async () => {
+  let calls = 0;
+  await assert.rejects(translateArticle(article, {
+    completeJson: async () => ++calls === 1 ? { factSheet } : editorialResult(),
+    validateDraft: async () => { throw new Error('Benzer haber daha önce yayımlanmış'); }
+  }), /Benzer haber/);
+  assert.equal(calls, 2);
+});
+
+test('nonduplicate early guard adds no AI call to the normal pipeline', async () => {
+  let calls = 0;
+  let checks = 0;
+  await translateArticle(article, {
+    completeJson: async () => ++calls === 1 ? { factSheet } : editorialResult(),
+    validateDraft: async () => { checks += 1; }
+  });
+  assert.equal(calls, 4);
+  assert.equal(checks, 1);
+});

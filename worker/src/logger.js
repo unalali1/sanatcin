@@ -60,6 +60,11 @@ function buildEditorialReport(details = {}) {
 
   return {
     runStatus: details.runStatus,
+    missingCategories: details.missingCategories ?? [],
+    categoryCoveragePercent: details.categoryCoveragePercent ?? null,
+    heroEligibleCount: details.heroEligibleCount ?? null,
+    heroCoverageWarning: details.heroCoverageWarning ?? false,
+    categorySourceFailures: details.categorySourceFailures ?? {},
     published: results.length,
     discovered: sources.reduce((sum, item) => sum + item.discovered, 0),
     attempted: sources.reduce((sum, item) => sum + item.attempted, 0),

@@ -131,7 +131,7 @@ export function nativeNameRegression(before = {}, after = {}, nativeNames = []) 
 }
 
 export function translationIssues({ title = '', excerpt = '', text = '', paragraphs = [] }, factSheet = {}) {
-  const issues = [];
+  const issues = newsroomLanguageIssues({ title, text, paragraphs });
   const combined = `${title}\n${excerpt}\n${text}`.trim();
   const paragraphCount = paragraphs.length || text.split(/\n{2,}/).filter((item) => item.trim()).length;
   if (text.trim().length < 600) issues.push('Türkçe haber gövdesi 600 karakterden kısa.');
@@ -192,6 +192,7 @@ export function editorialFluencyProfile({ title = '', excerpt = '', text = '' } 
   const repeatedAbstractWords = Object.entries(abstractCounts)
     .filter(([, count]) => count >= 4)
     .map(([word, count]) => ({ word, count }));
+  const newsroomIssueCount = newsroomLanguageIssues({ title, text }).length;
   const densityFactor = Math.max(1, words.length / 180);
   const penalty = Math.round(
     (translationeseHits * 7 + Math.max(0, nominalizations - 3) * 2 + clichéCount * 3
@@ -199,7 +200,8 @@ export function editorialFluencyProfile({ title = '', excerpt = '', text = '' } 
       + repeatedAbstractWords.reduce((sum, item) => sum + (item.count - 3) * 2, 0)) / densityFactor
   );
   return {
-    score: Math.max(0, Math.min(100, 100 - penalty)),
+    score: Math.max(0, Math.min(100, 100 - penalty - newsroomIssueCount * 12)),
+    newsroomIssueCount,
     translationeseHits,
     nominalizations,
     clichéCount,
@@ -374,4 +376,40 @@ export function likelyDuplicateTitles(left, right) {
   const rightDistinctive = new Set(normalizedTitleTokenList(right).filter((token) => !GENERIC_EVENT_TOKENS.has(token)));
   const distinctiveShared = [...leftDistinctive].filter((token) => rightDistinctive.has(token)).length;
   return distinctiveShared >= 2;
+}
+
+// Article/card usability is separate: a non-hero image need not stop publication.
+export function heroImageEligible(dimensions = {}, cropSafe = false, scene = 'other', kind = '') {
+  const width = Number(dimensions.width) || 0;
+  const height = Number(dimensions.height) || 0;
+  if (!cropSafe || width < 1400 || height <= 0) return false;
+  const ratio = width / height;
+  if (ratio < 1.35 || ratio > 1.9 || kind === 'event-poster') return false;
+  return ['runway', 'architecture', 'performance', 'exhibition', 'street', 'food'].includes(scene);
+}
+
+export function normalizeNewsroomTerms(value = '') {
+  return String(value).replace(/\bNational Art Museum of China\b/gu, 'Çin Ulusal Sanat Müzesi');
+}
+
+export function newsroomLanguageIssues({ title = '', text = '', paragraphs = [] } = {}) {
+  const issues = [];
+  const combined = `${title}\n${text}`;
+  if (/\bNational Art Museum of China\b/u.test(combined)) {
+    issues.push('İngilizce kurum adı Türkçeleştirilmeli: Çin Ulusal Sanat Müzesi.');
+  }
+  if (/yeşim çakıl malzemesi/iu.test(combined)) {
+    issues.push('“Yeşim çakıl malzemesi” mekanik bir çeviri; kaynak anlamını koruyarak anlaşılır Türkçe kullan.');
+  }
+  if (/(?:mühür|mührü|heykel|heykeli)\s+[^.!?]{0,65}izini sürüyor/iu.test(title)) {
+    issues.push('Başlıkta nesneye araştırmacı eylemi yükleniyor; bulgunun neyi gösterdiğini açıkla.');
+  }
+  const match = text.match(/Çincede\s+([^.!?]{5,70})\s+olarak adlandırılıyor/iu);
+  if (match && /[çğıöşü]/iu.test(match[1])) {
+    issues.push('Çince terim açıklaması Türkçe ifadeyi tekrarlıyor; bilgi vermeyen cümleyi çıkar veya doğrulanmış terimi açıkla.');
+  }
+  const lead = paragraphs[0] ?? text.split(/\n\n/u)[0] ?? '';
+  const levels = lead.match(/(?:eyalet|kent|şehir|bölge|ilçe|köy)(?:ine|inin|indeki|üne|ünün|ündeki|inde|unda|ına|ının|sine|sinin|sindeki|ü|i|si)/giu) ?? [];
+  if (levels.length >= 4) issues.push('Giriş idari yer adlarıyla ağırlaşıyor; ana gelişmeyi öne al, alt yer bilgilerini sonraki paragrafa taşı.');
+  return issues;
 }
