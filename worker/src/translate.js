@@ -4,6 +4,7 @@ import { log } from './logger.js';
 import {
   editorialDraftChanged,
   normalizeNewsroomTerms,
+  numericFactRegression,
   editorialFluencyProfile,
   headlineQualityRegression,
   nativeNameRegression,
@@ -128,6 +129,7 @@ async function extractFactSheet(article, signal, completeJson = requestJson) {
           'Kaynak tam bir haber, röportaj, eleştiri, etkinlik haberi ya da açıklayıcı fotoğraf haberiyse; somut bir gelişme ve en az dört doğrulanabilir olgu varsa publishable=true ver.',
           'Kısa ama yeterli bir kültür-sanat haberi yalnız uzun olmadığı için reddedilmemeli. Navigasyon, reklam, salt takvim kaydı veya olgusuz tanıtım metni publishable=false olmalı.',
           'Tarih bağlamını eksiksiz çıkar. Kaynakta geçmiş bir kasım, gelecek bir eylül veya belirli bir yıl yazıyorsa bunu context/numbers alanında kaybetme; Türkçe haberde zamanın yanlış anlaşılmasına yol açacak belirsizliği önle.',
+          'Çin National Day tatili için Milli Bayram, Mid-Autumn Festival için Güz Ortası Bayramı kullan. Girişte kaynakla doğrulanmış gelişmeyi, yeri ve haber değerini somut bir fiille anlat; protokol listesini ve uzun kurum adlarını sonraya bırak. Soyut önem cümlesi yerine kaynaktaki eser, üretim veya olay ayrıntısını ver.',
           'Yalnız geçerli JSON ver.'
         ].join(' ')
       },
@@ -193,6 +195,7 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
           'Yalnız kaynak haber yazmaya gerçekten yetmiyorsa, önemli bir olgu çelişkisi giderilemiyorsa veya güvenilir metin kaynak dışı bilgi eklemeden kurulamıyorsa accepted=false ver.',
           'Yanıtlamadan önce sessiz iki aşamalı editör kontrolü yap. Önce başlığı şu beş soruyla denetle: Türk okur başlığı tek okumada anlıyor mu; haberin ayırt edici unsurunu görüyor mu; başlık kaynak dilden çevrilmiş gibi mi duruyor; yalnız isimleri yan yana diziyor mu; daha doğal ve canlı ama aynı ölçüde doğru bir Türkçe fiille kurulabilir mi? Ardından tüm metne şu testi uygula: “Bir Türk gazeteci bu cümleyi gerçekten böyle kurar mı?” ve “Okur bunun çeviri olduğunu cümle yapısından sezebilir mi?” Sorun varsa teslim etmeden önce yeniden yaz.',
           'Kurum adlarını doğal Türkçeyle ver: National Art Museum of China = Çin Ulusal Sanat Müzesi. Çin eser/sergi adlarının İngilizce ara çevirisini parantezde tekrar etme; doğrulanmış Çince ad ve pinyin yoksa yalnız doğal Türkçe karşılığı kullan. Yeşim gibi malzemelerde kelime kelime teknik tamlama kurma; terimi kaynak anlamıyla kısa ve anlaşılır açıkla. Türkçe ifadeyi “Çincede ... olarak adlandırılıyor” diye tekrarlama. Nesneye “iz sürmek” gibi araştırmacı eylemi yükleme. Girişte idari yer adlarını yığma; ana gelişmeyi öne al. Sanat haberini protokol konuşmalarına boğma; kaynakta bulunan eser ve üretim ayrıntılarını öncele.',
+          'Çin National Day tatili için Milli Bayram, Mid-Autumn Festival için Güz Ortası Bayramı kullan. Girişte kaynakla doğrulanmış gelişmeyi, yeri ve haber değerini somut bir fiille anlat; protokol listesini ve uzun kurum adlarını sonraya bırak. Soyut önem cümlesi yerine kaynaktaki eser, üretim veya olay ayrıntısını ver.',
           'Yalnız geçerli JSON ver.'
         ].join(' ')
       },
@@ -232,9 +235,10 @@ async function chooseMoreNaturalDraft(article, factSheet, before, after, { signa
             content: [
               'Türkiye Türkçesiyle çalışan tarafsız bir haber dili hakemisin.',
               'İki metin aynı doğrulanmış olgulara dayanıyor. Yalnız dil doğallığı, açıklık, haber ritmi, somut fiil kullanımı ve çeviri kokusunun yokluğu bakımından karşılaştır.',
-              'Bilgi ekleyen, sayı/ad değiştiren, daha muğlaklaşan veya sırf farklı görünmek için cümleleri bozan sürümü seçme.',
+              'Bilgi ekleyen, sayı/ad değiştiren, daha muğlaklaşan veya sırf farklı görünmek için cümleleri bozan sürümü seçme. A sürümündeki önemli tarih, sayı, kişi ve ayırt edici olgu B sürümünde kayboluyorsa A sürümünü koru.',
               'B sürümünü yalnız açıkça daha iyi ise seç; eşitlikte veya kuşkuda A sürümünü koru.',
               'İngilizce kurum adını, mekanik malzeme tamlamasını, bilgi vermeyen terim açıklamasını ve nesneye araştırmacı eylemi yükleyen başlığı kalite kusuru say. Yeni olgu eklemeyen doğal Türkçe anlatımı tercih et.',
+              'Çin National Day tatili için Milli Bayram, Mid-Autumn Festival için Güz Ortası Bayramı kullan. Girişte kaynakla doğrulanmış gelişmeyi, yeri ve haber değerini somut bir fiille anlat; protokol listesini ve uzun kurum adlarını sonraya bırak. Soyut önem cümlesi yerine kaynaktaki eser, üretim veya olay ayrıntısını ver.',
               'Yalnız geçerli JSON ver.'
             ].join(' ')
           },
@@ -288,6 +292,7 @@ async function refineHeadline(article, factSheet, draft, { signal, completeJson 
           'Sayı veya sıra dışı ayrıntı ana haber değeriyse kullan; yalnız rakam var diye başlığı mekanikleştirme.',
           'Başlık yaklaşık 35-95 karakter arasında, tek okumada anlaşılır ve doğal Türkiye Türkçesiyle olmalı.',
           'İngilizce kurum adını, mekanik malzeme tamlamasını, bilgi vermeyen terim açıklamasını ve nesneye araştırmacı eylemi yükleyen başlığı kalite kusuru say. Yeni olgu eklemeyen doğal Türkçe anlatımı tercih et.',
+          'Çin National Day tatili için Milli Bayram, Mid-Autumn Festival için Güz Ortası Bayramı kullan. Girişte kaynakla doğrulanmış gelişmeyi, yeri ve haber değerini somut bir fiille anlat; protokol listesini ve uzun kurum adlarını sonraya bırak. Soyut önem cümlesi yerine kaynaktaki eser, üretim veya olay ayrıntısını ver.',
           'Yalnız geçerli JSON ver.'
         ].join(' ')
       },
@@ -344,6 +349,7 @@ async function polishTurkishNews(article, factSheet, draft, { signal, completeJs
           'Haber değerine göre 3-7 kısa paragraf, doğal bir başlık ve tek cümlelik spot üret. Küçük haberi sırf uzunluk hedefi için şişirme.',
           'Yanıtlamadan önce sessiz editör kontrolü yap: başlığı tek okumada anlaşılırlık, somutluk, Türkçe doğallık ve haber ritmi açısından denetle. Yer adı + isim listesi, çeviri kokusu veya takvim başlığı hissi veriyorsa daha güçlü bir haber açısıyla yeniden kur. Ardından her paragraf için “Bir Türk gazeteci bunu gerçekten böyle yazar mı?” ve “Cümlenin yabancı dilden çevrildiği hissediliyor mu?” testlerini uygula; evetse o cümleyi teslim etmeden önce yeniden kur.',
           'Kurum adlarını doğal Türkçeyle ver: National Art Museum of China = Çin Ulusal Sanat Müzesi. Çin eser/sergi adlarının İngilizce ara çevirisini parantezde tekrar etme; doğrulanmış Çince ad ve pinyin yoksa yalnız doğal Türkçe karşılığı kullan. Yeşim gibi malzemelerde kelime kelime teknik tamlama kurma; terimi kaynak anlamıyla kısa ve anlaşılır açıkla. Türkçe ifadeyi “Çincede ... olarak adlandırılıyor” diye tekrarlama. Nesneye “iz sürmek” gibi araştırmacı eylemi yükleme. Girişte idari yer adlarını yığma; ana gelişmeyi öne al. Sanat haberini protokol konuşmalarına boğma; kaynakta bulunan eser ve üretim ayrıntılarını öncele.',
+          'Çin National Day tatili için Milli Bayram, Mid-Autumn Festival için Güz Ortası Bayramı kullan. Girişte kaynakla doğrulanmış gelişmeyi, yeri ve haber değerini somut bir fiille anlat; protokol listesini ve uzun kurum adlarını sonraya bırak. Soyut önem cümlesi yerine kaynaktaki eser, üretim veya olay ayrıntısını ver.',
           'Yalnız geçerli JSON ver.'
         ].join(' ')
       },
@@ -447,10 +453,11 @@ export async function translateArticle(article, { signal, completeJson = request
       assertUsableEditorialOutput(polished.draft);
       const polishedIssues = editorialIssues(polished.draft, factSheet);
       const headlineRegression = headlineQualityRegression(prePolish.draft.title, polished.draft.title);
+      const factRegression = numericFactRegression(prePolish.draft, polished.draft);
       const namingRegression = nativeNameRegression(prePolish.draft, polished.draft, factSheet.nativeNames);
       const polishedFluency = editorialFluencyProfile(polished.draft);
       const changed = editorialDraftChanged(prePolish.draft, polished.draft);
-      const mechanicallySafe = polishedIssues.length <= prePolishIssues.length && !headlineRegression && !namingRegression;
+      const mechanicallySafe = polishedIssues.length <= prePolishIssues.length && !headlineRegression && !namingRegression && !factRegression;
       let naturalnessDecision = { preferred: changed ? 'A' : 'B', reason: changed ? 'hakem çalıştırılmadı' : 'metin değişmedi' };
       if (mechanicallySafe && changed && polishedFluency.score >= prePolishFluency.score - 3) {
         try {
@@ -482,6 +489,7 @@ export async function translateArticle(article, { signal, completeJson = request
           afterTitle: polished.draft.title,
           headlineRegression,
           namingRegression,
+          factRegression,
           beforeFluency: prePolishFluency,
           afterFluency: polishedFluency,
           naturalnessDecision

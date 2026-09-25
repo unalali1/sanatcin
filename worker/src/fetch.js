@@ -40,7 +40,7 @@ function challengePage(html = '') {
   return /cf-chl-|cloudflare.*(?:challenge|verification)|verify you are human|captcha/i.test(html.slice(0, 80_000));
 }
 
-export async function fetchText(url, { browser = false, waitSelector = null } = {}) {
+export async function fetchText(url, { browser = false, waitSelector = null, signal } = {}) {
   if (browser) {
     let instance;
     try {
@@ -62,7 +62,7 @@ export async function fetchText(url, { browser = false, waitSelector = null } = 
   const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
   try {
     const response = await fetch(url, {
-      signal: controller.signal,
+      signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
       redirect: 'follow',
       headers: {
         'user-agent': config.userAgent,
@@ -340,12 +340,13 @@ function jsonLdImageUrls($) {
   return urls;
 }
 
-export async function extractArticle(candidate) {
+export async function extractArticle(candidate, { signal, allowBrowser = true } = {}) {
+  signal?.throwIfAborted();
   let html;
   try {
-    html = await fetchText(candidate.url);
+    html = await fetchText(candidate.url, { signal });
   } catch (error) {
-    if (!candidate.source.browser) throw error;
+    if (!allowBrowser || signal?.aborted || !candidate.source.browser) throw error;
     html = await fetchText(candidate.url, { browser: true, waitSelector: 'article, main' });
   }
 

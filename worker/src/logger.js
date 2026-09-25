@@ -38,6 +38,8 @@ function buildEditorialReport(details = {}) {
     attempted: numeric(stats.attempted),
     published: numeric(stats.published),
     rejected: numeric(stats.rejected),
+    preflightRejected: numeric(stats.preflightRejected),
+    categories: stats.categories ?? {},
     error: stats.error ? String(stats.error).slice(0, 180) : null
   }));
   const results = Array.isArray(details.results) ? details.results : [];
@@ -68,6 +70,8 @@ function buildEditorialReport(details = {}) {
     published: results.length,
     discovered: sources.reduce((sum, item) => sum + item.discovered, 0),
     attempted: sources.reduce((sum, item) => sum + item.attempted, 0),
+    preflightRejected: sources.reduce((sum, item) => sum + item.preflightRejected, 0),
+    sourceCategoryOutcomes: Object.fromEntries(sources.map((item) => [item.source, item.categories])),
     rejected: sources.reduce((sum, item) => sum + item.rejected, 0),
     categoryPublished: details.categoryPublished ?? {},
     scoreStats: details.scoreStats ?? {},

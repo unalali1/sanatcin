@@ -369,13 +369,24 @@ export function titleSimilarity(left, right) {
 }
 
 export function likelyDuplicateTitles(left, right) {
-  const similarity = titleSimilarity(left, right);
-  if (similarity.shared < 4 || similarity.score < 0.62) return false;
-  if (similarity.score >= 0.82) return true;
-  const leftDistinctive = new Set(normalizedTitleTokenList(left).filter((token) => !GENERIC_EVENT_TOKENS.has(token)));
-  const rightDistinctive = new Set(normalizedTitleTokenList(right).filter((token) => !GENERIC_EVENT_TOKENS.has(token)));
-  const distinctiveShared = [...leftDistinctive].filter((token) => rightDistinctive.has(token)).length;
-  return distinctiveShared >= 2;
+  const a = normalizedTitleTokens(left);
+  const b = normalizedTitleTokens(right);
+  if (!a.size || !b.size) return false;
+  // A shared festival name or three-word phrase is not evidence of the same story.
+  const shared = [...a].filter((token) => b.has(token));
+  const union = new Set([...a, ...b]).size;
+  const overlap = shared.length / Math.min(a.size, b.size);
+  const jaccard = shared.length / union;
+  const years = (value) => new Set(String(value).match(/\b20\d{2}\b/g) ?? []);
+  const leftYears = years(left), rightYears = years(right);
+  if (leftYears.size && rightYears.size && ![...leftYears].some(year => rightYears.has(year))) return false;
+  if (jaccard === 1) return true;
+  const generic = new Set([...GENERIC_EVENT_TOKENS, ...normalizedTitleTokenList(
+    'Mid Autumn Festival Güz Ortası Bayramı National Day Milli Bayram 2026 2025'
+  )]);
+  const distinctive = shared.filter((token) => !generic.has(token));
+  return shared.length >= 4 && distinctive.length >= 3
+    && (jaccard >= 0.62 || (overlap >= 0.9 && jaccard >= 0.45));
 }
 
 // Article/card usability is separate: a non-hero image need not stop publication.
@@ -389,7 +400,10 @@ export function heroImageEligible(dimensions = {}, cropSafe = false, scene = 'ot
 }
 
 export function normalizeNewsroomTerms(value = '') {
-  return String(value).replace(/\bNational Art Museum of China\b/gu, 'Çin Ulusal Sanat Müzesi');
+  return String(value)
+    .replace(/\bNational Art Museum of China\b/gu, 'Çin Ulusal Sanat Müzesi')
+    .replace(/Çin(?:’in|'in)? Ulusal Günü/giu, 'Çin Milli Bayramı')
+    .replace(/Orta Sonbahar (?:Bayramı|Festivali)/giu, 'Güz Ortası Bayramı');
 }
 
 export function newsroomLanguageIssues({ title = '', text = '', paragraphs = [] } = {}) {
@@ -412,4 +426,11 @@ export function newsroomLanguageIssues({ title = '', text = '', paragraphs = [] 
   const levels = lead.match(/(?:eyalet|kent|şehir|bölge|ilçe|köy)(?:ine|inin|indeki|üne|ünün|ündeki|inde|unda|ına|ının|sine|sinin|sindeki|ü|i|si)/giu) ?? [];
   if (levels.length >= 4) issues.push('Giriş idari yer adlarıyla ağırlaşıyor; ana gelişmeyi öne al, alt yer bilgilerini sonraki paragrafa taşı.');
   return issues;
+}
+
+export function numericFactRegression(before = {}, after = {}) {
+  const body = (draft) => `${draft.title ?? ''} ${draft.excerpt ?? ''} ${draft.text ?? (draft.paragraphs ?? []).join(' ')}`;
+  const numbers = (draft) => new Set(body(draft).match(/(?<![\p{L}\p{N}])\d+(?:[.,]\d+)*(?![\p{L}\p{N}])/gu) ?? []);
+  const kept = numbers(after);
+  return [...numbers(before)].some((number) => !kept.has(number));
 }

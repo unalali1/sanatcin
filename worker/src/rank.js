@@ -126,7 +126,13 @@ async function loadSourceHealth(signal) {
         failureRate,
         rejectionRate,
         conversionRate: attempted ? published / attempted : 0,
-        penalty
+        penalty,
+        categoryPerformance: Object.fromEntries([...allowedCategories].map((category) => {
+          const rows = stats.map((item) => item.categories?.[category]).filter(Boolean);
+          const attempts = rows.reduce((sum, item) => sum + (Number(item.attempted) || 0), 0);
+          const publications = rows.reduce((sum, item) => sum + (Number(item.published) || 0), 0);
+          return [category, attempts >= 3 ? Math.min(2, 2 * publications / attempts) : 0];
+        }))
       });
     }
   } catch (error) {
@@ -188,7 +194,7 @@ export function applyAiScores(candidates, items, now = new Date(), sourceHealth 
       && !(commercialDominant && editorialFit <= 6)
       && !health.blocked;
     const category = eligible ? ai.category : 'uygunsuz';
-    const sourceBoost = eligible ? categorySourceBoost(candidate, category) : 0;
+    const sourceBoost = eligible ? categorySourceBoost(candidate, category) + (health.categoryPerformance?.[category] ?? 0) : 0;
     const fitAdjustment = (editorialFit - 7) * 4;
     const institutionalPenalty = institutionalEvent ? (editorialFit <= 6 ? 8 : 4) : 0;
     const commercialPenalty = commercialDominant ? 10 : 0;
@@ -265,33 +271,21 @@ export function buildBalancedShortlist(candidates, maxCandidates = config.maxAiC
   // turunda kota gevşetilir ve sistem kapasite kaybetmez.
   const publisherCap = Math.max(6, Math.ceil(maxCandidates * 0.22));
 
-  // Sinema adayları genel kültür akışında kolayca kaybolabildiği için AI değerlendirme
-  // havuzunda ayrı bir taban kota korunur. Kaynaklar yayıncı ailesine göre dönüşümlü
-  // sıralanır; bu bir yayın kotası değil, editör modelinin daha çeşitli sinema adayları
-  // görmesini sağlayan değerlendirme kotasıdır.
-  const cinemaReserve = Math.min(config.cinemaAiReserve, maxCandidates);
-  const cinemaCandidates = diversifyBySource(
-    eligible
-      .filter(looksLikeCinemaCandidate)
+  // Round-robin category reservations prevent an early category/publisher from
+  // spending the entire budget. Hidden cinema stories retain their own pool.
+  const pools = [...allowedCategories].map((category) => diversifyBySource(
+    eligible.filter((candidate) => category === 'sinema'
+      ? looksLikeCinemaCandidate(candidate)
+      : candidate.category === category && !looksLikeCinemaCandidate(candidate))
       .sort((a, b) => b.score - a.score)
-  );
-  for (const candidate of cinemaCandidates) {
-    if (selected.length >= cinemaReserve) break;
-    appendWithPublisherCap(selected, used, publisherCounts, candidate, publisherCap);
-  }
-
-  const remainingCapacity = Math.max(0, maxCandidates - selected.length);
-  const perCategory = Math.max(1, Math.floor(remainingCapacity / allowedCategories.size));
-  for (const category of allowedCategories) {
-    let added = 0;
-    const group = diversifyBySource(
-      eligible
-        .filter((candidate) => !used.has(candidate.id) && candidate.category === category)
-        .sort((a, b) => b.score - a.score)
-    );
-    for (const candidate of group) {
-      if (added >= perCategory || selected.length >= maxCandidates) break;
-      if (appendWithPublisherCap(selected, used, publisherCounts, candidate, publisherCap)) added += 1;
+  ));
+  const perCategory = Math.max(1, Math.floor(maxCandidates / allowedCategories.size));
+  for (let slot = 0; slot < perCategory; slot += 1) {
+    for (const pool of pools) {
+      if (selected.length >= maxCandidates) break;
+      const next = pool.find((candidate) => !used.has(candidate.id)
+        && (publisherCounts.get(publisherGroupId(candidate)) ?? 0) < publisherCap);
+      if (next) appendWithPublisherCap(selected, used, publisherCounts, next, publisherCap);
     }
   }
 
@@ -372,7 +366,8 @@ export function diversifyBySource(candidates) {
 const TOPIC_STOP_WORDS = new Set([
   'the', 'and', 'with', 'from', 'into', 'over', 'after', 'before', 'amid', 'for', 'its',
   'china', 'chinese', 'culture', 'cultural', 'art', 'artist', 'artists', 'museum', 'gallery',
-  'exhibition', 'festival', 'film', 'films', 'cinema', 'fashion', 'design', 'new', 'opens', 'opened'
+  'exhibition', 'festival', 'film', 'films', 'cinema', 'fashion', 'design', 'new', 'opens', 'opened',
+  'autumn', 'bayramı', 'ortası', 'beijing', 'shanghai', '2026', '2025'
 ]);
 
 function topicTokens(candidate) {
@@ -457,7 +452,7 @@ async function rerankBatch(batch, signal, recentContext = [], { cinemaRescue = f
       },
       {
         role: 'user',
-        content: `Her adayı bağımsız değerlendir; hiçbir adayı atlama. Yalnız gerçek kültür-sanat, sinema, moda-tasarım ve şehir yaşamı haberleri eligible=true olabilir. Uygun adayları kultur-sanat, sinema, moda-tasarim veya sehir-yasam kategorisine koy; kaynağın varsayılan kategorisini gerektiğinde değiştir.\n\nfit alanı SanatÇin editoryal uyumunu 0-10 puanlasın: 0-4 konu dışı/zayıf uyum, 5-6 ancak daha güçlü aday yoksa kullanılabilecek gerçek ama ikincil kültür/lifestyle haberi, 7-8 güçlü uyum, 9-10 markanın merkezinde olması gereken içerik.\n\ninterest ve relevance alanlarını 0-100 puanla. storyStrength alanı da 0-100 olsun ve şu soruyu ölçsün: “Bu haber Türkiye'deki bir okura Çin'i gerçekten yeni, özgün veya insani bir açıdan anlatıyor mu?” Rutin açılış, toplantı ve kurumsal duyurular düşük; özgün insan hikâyesi, sıra dışı eser, güçlü kültürel dönüşüm, dikkat çekici yaratıcı başarı veya geniş okur merakı taşıyan haber yüksek storyStrength almalı.\n\nTürkiye’de tanınmayan küçük bir kurumun rutin toplantısı, açılış töreni, konferansı veya kurumsal buluşması daha geniş bir kültürel sonuç, önemli isim, sıra dışı eser ya da özgün insan hikâyesi taşımıyorsa institutionalEvent=true ver ve fit'i 6'nın üstüne çıkarma. İhracat, satış, pazar payı, üretim, fabrika, şirket satın alması veya sektör büyüklüğü haberin ana gövdesiyse ve yaratıcı/kültürel unsur tali kalıyorsa commercialDominant=true ver; bu tür içerik çoğu durumda eligible=false olmalı. Moda/tasarım sektöründeki gerçek yaratıcı trendleri yalnız ticari veri içeriyor diye commercialDominant sayma.\n\nrecentTopicRepeat=true yalnız aday son dönemde yayımlanmış bir haberle aynı olayın devamı ya da semantik olarak çok dar biçimde aynı hikâyeyi tekrar ediyorsa olsun. Genel olarak aynı sanat dalında olmak tekrar değildir. Aynı olay zaten yayımlandıysa eligible=false; benzer ama yeni gelişme ise interest ve storyStrength'i düşür. realPersonCentered=true başlık/spot belirli ve gerçek bir kişiyi haberin ana öznesi yapıyorsa ver; bu alan görsel güvenliği için kullanılacak. topicCluster aynı olay veya çok dar hikâye için kısa ve kanonik bir etiket olsun (ör. "beijing-fashion-week-2026"); contentType ise exhibition, festival, film-release, award, heritage, design, city-life, profile veya other değerlerinden biri olsun.\n\nJSON biçimi: {"items":[{"id":"...","eligible":true,"category":"...","fit":0,"interest":0,"relevance":0,"storyStrength":0,"institutionalEvent":false,"commercialDominant":false,"recentTopicRepeat":false,"realPersonCentered":false,"topicCluster":"kısa-kanonik-etiket","contentType":"exhibition|festival|film-release|award|heritage|design|city-life|profile|other","reason":"kısa gerekçe"}]}. Adaylar:\n${JSON.stringify(batch)}${history}`
+        content: `Her adayı bağımsız değerlendir; hiçbir adayı atlama. Yalnız gerçek kültür-sanat, sinema, moda-tasarım ve şehir yaşamı haberleri eligible=true olabilir. Uygun adayları kultur-sanat, sinema, moda-tasarim veya sehir-yasam kategorisine koy; kaynağın varsayılan kategorisini gerektiğinde değiştir.\n\nfit alanı SanatÇin editoryal uyumunu 0-10 puanlasın: 0-4 konu dışı/zayıf uyum, 5-6 ancak daha güçlü aday yoksa kullanılabilecek gerçek ama ikincil kültür/lifestyle haberi, 7-8 güçlü uyum, 9-10 markanın merkezinde olması gereken içerik.\n\ninterest ve relevance alanlarını 0-100 puanla. storyStrength alanı da 0-100 olsun ve şu soruyu ölçsün: “Bu haber Türkiye'deki bir okura Çin'i gerçekten yeni, özgün veya insani bir açıdan anlatıyor mu?” Rutin açılış, toplantı ve kurumsal duyurular düşük; özgün insan hikâyesi, sıra dışı eser, güçlü kültürel dönüşüm, dikkat çekici yaratıcı başarı veya geniş okur merakı taşıyan haber yüksek storyStrength almalı.\n\nTürkiye’de tanınmayan küçük bir kurumun rutin toplantısı, açılış töreni, konferansı veya kurumsal buluşması daha geniş bir kültürel sonuç, önemli isim, sıra dışı eser ya da özgün insan hikâyesi taşımıyorsa institutionalEvent=true ver ve fit'i 6'nın üstüne çıkarma. İhracat, satış, pazar payı, üretim, fabrika, şirket satın alması veya sektör büyüklüğü haberin ana gövdesiyse ve yaratıcı/kültürel unsur tali kalıyorsa commercialDominant=true ver; bu tür içerik çoğu durumda eligible=false olmalı. Moda/tasarım sektöründeki gerçek yaratıcı trendleri yalnız ticari veri içeriyor diye commercialDominant sayma.\n\nrecentTopicRepeat=true yalnız aday son dönemde yayımlanmış bir haberle aynı olayın devamı ya da semantik olarak çok dar biçimde aynı hikâyeyi tekrar ediyorsa olsun. Genel olarak aynı sanat dalında, şehirde veya bayramda olmak tekrar değildir. Gala sahne arkası, bayram efsaneleri ve el işi atölyesi ayrı haber açılarıdır; yalnız ortak bayram adı nedeniyle eleme veya puan cezası uygulama. Aynı olay zaten yayımlandıysa eligible=false; benzer ama yeni gelişme ise interest ve storyStrength'i düşür. realPersonCentered=true başlık/spot belirli ve gerçek bir kişiyi haberin ana öznesi yapıyorsa ver; bu alan görsel güvenliği için kullanılacak. topicCluster aynı olay veya çok dar hikâye için kısa ve kanonik bir etiket olsun (ör. "designer-collection-beijing-fashion-week-2026"); contentType ise exhibition, festival, film-release, award, heritage, design, city-life, profile veya other değerlerinden biri olsun.\n\nJSON biçimi: {"items":[{"id":"...","eligible":true,"category":"...","fit":0,"interest":0,"relevance":0,"storyStrength":0,"institutionalEvent":false,"commercialDominant":false,"recentTopicRepeat":false,"realPersonCentered":false,"topicCluster":"kısa-kanonik-etiket","contentType":"exhibition|festival|film-release|award|heritage|design|city-life|profile|other","reason":"kısa gerekçe"}]}. Adaylar:\n${JSON.stringify(batch)}${history}`
       }
     ]
   }, { signal });
@@ -582,20 +577,26 @@ function rerankInput(candidate) {
   };
 }
 
-export async function rerankCandidates(candidates, { signal } = {}) {
+export async function rerankCandidates(candidates, { signal, prepareCandidates } = {}) {
   if (!candidates.length) return [];
   const [recentContext, sourceHealth] = await Promise.all([
     loadRecentEditorialContext(signal),
     loadSourceHealth(signal)
   ]);
   const blockedSources = [...sourceHealth.entries()].filter(([, health]) => health.blocked).map(([sourceId]) => sourceId);
-  const eligibleCandidates = candidates.filter((candidate) => !sourceHealth.get(candidate.source?.id)?.blocked);
+  let eligibleCandidates = candidates.filter((candidate) => !sourceHealth.get(candidate.source?.id)?.blocked);
   log('info', 'Editoryal seçim bağlamı hazırlandı', {
     recentTopics: recentContext.length,
     sourceHealthEntries: sourceHealth.size,
     blockedSources
   });
+  if (prepareCandidates) eligibleCandidates = await prepareCandidates(eligibleCandidates);
   const shortlist = buildBalancedShortlist(eligibleCandidates);
+  log('info', 'AI öncesi kategori havuzu', {
+    categories: Object.fromEntries([...allowedCategories].map((category) => [category,
+      shortlist.filter((item) => item.category === category).length])),
+    candidates: shortlist.length
+  });
   const contextualRerank = (batch, batchSignal) => rerankBatch(batch, batchSignal, recentContext);
   const items = await rerankInputsResilient(shortlist.map(rerankInput), { signal, rerank: contextualRerank });
   let ranked = applyAiScores(shortlist, items, new Date(), sourceHealth, recentContext);

@@ -1,3 +1,4 @@
+import { preflightCandidates } from './preflight.js';
 import { candidateForRound } from './selection.js';
 import { editorialCoverage } from './run-report.js';
 import { readFileSync } from 'node:fs';
@@ -7,7 +8,7 @@ import { discover, extractArticle, sourceHash } from './fetch.js';
 import { classifyError } from './errors.js';
 import { flushLogs, log, setLogContext } from './logger.js';
 import { isFreshForCategory, scoreCandidate } from './score.js';
-import { diversifyBySource, diversifyByTopic, rerankCandidates } from './rank.js';
+import { buildBalancedShortlist, diversifyBySource, diversifyByTopic, rerankCandidates } from './rank.js';
 import { createRunBudget } from './run-budget.js';
 import { attachSecondaryImage } from './secondary-image.js';
 import { CATEGORIES, SOURCES, SOURCE_SET_VERSION } from './sources.js';
@@ -153,11 +154,31 @@ async function run() {
       cacheHours: config.failedCandidateCacheHours
     });
   }
+  const articleCache = new Map();
+  let preparedCandidates = newCandidates;
+  const prepareCandidates = async (pool) => {
+    const preflight = await preflightCandidates(pool, buildBalancedShortlist(pool, 12), {
+      extract: extractArticle, signal: runController.signal,
+      concurrency: config.articleConcurrency, maxMs: Math.min(20_000, budget.remainingMs())
+    });
+    for (const [url, article] of preflight.articles) articleCache.set(url, article);
+    for (const [url, { candidate }] of preflight.rejected) {
+      failedCandidateMap.set(url, { url, failedAt: new Date().toISOString(), code: 'SOURCE_EXTRACTION' });
+      const stats = sourceStats[candidate.source.id];
+      stats.preflightRejected = (stats.preflightRejected ?? 0) + 1;
+    }
+    preparedCandidates = preflight.candidates;
+    log('info', 'AI öncesi kaynak gövdesi kontrolü tamamlandı', {
+      checked: preflight.checked, reusableBodies: articleCache.size,
+      rejected: preflight.rejected.size, maxMs: 20_000
+    });
+    return preparedCandidates;
+  };
   let ranked;
   try {
-    ranked = await rerankCandidates(newCandidates, { signal: runController.signal });
+    ranked = await rerankCandidates(newCandidates, { signal: runController.signal, prepareCandidates });
   } catch (error) {
-    ranked = [...newCandidates].sort((left, right) => right.score - left.score);
+    ranked = [...preparedCandidates].sort((left, right) => right.score - left.score);
     log('warn', 'Yapay zekâ puanlaması başarısız; deterministik puanlarla devam edilecek', {
       errorCode: 'AI_RANKING_FALLBACK',
       error: error.message,
@@ -285,6 +306,9 @@ async function run() {
     });
     const outcomes = await mapLimit(attempts, config.articleConcurrency, async ({ slug, candidate, attempt, fallbackActive: usedFallback }) => {
       sourceStats[candidate.source.id].attempted += 1;
+      const sourceCategories = sourceStats[candidate.source.id].categories ??= {};
+      const categoryStats = sourceCategories[slug] ??= { attempted: 0, published: 0, rejected: 0 };
+      categoryStats.attempted += 1;
       log('info', 'Haber adayı işleniyor', {
         round,
         category: slug,
@@ -303,7 +327,7 @@ async function run() {
       });
       try {
         await assertNoSimilarPublishedCandidate(candidate.title, { signal: runController.signal });
-        const article = await extractArticle(candidate);
+        const article = { ...(articleCache.get(candidate.url) ?? await extractArticle(candidate, { signal: runController.signal })), category: slug };
         if (budget.isExpired()) throw new Error('Toplam çalışma süresi sınırına ulaşıldı.');
         if (!isFreshForCategory({ ...article, category: slug })) {
           log('info', 'Eski makale atlandı', { source: candidate.source.id, url: candidate.url, publishedAt: article.publishedAt });
@@ -366,6 +390,7 @@ async function run() {
           mode: config.dryRun ? 'dry-run' : config.publishStatus
         };
         sourceStats[candidate.source.id].published += 1;
+        categoryStats.published += 1;
         log('info', config.dryRun ? 'Haber simülasyonu tamamlandı' : config.publishStatus === 'draft' ? 'Haber taslak olarak kaydedildi' : 'Haber yayımlandı', result);
         return { slug, result, candidate };
       } catch (error) {
@@ -382,6 +407,7 @@ async function run() {
           return { slug, timedOut: true };
         }
         sourceStats[candidate.source.id].rejected += 1;
+        categoryStats.rejected += 1;
         increment(rejectedReasons, classified.group);
         if (classified.code === 'SOURCE_EXTRACTION') {
           increment(categorySourceFailures[slug], candidate.source.id);
