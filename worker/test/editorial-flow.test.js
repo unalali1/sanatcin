@@ -4,7 +4,7 @@ import { candidateForRound } from '../src/selection.js';
 import { createRunBudget } from '../src/run-budget.js';
 import { editorialCoverage } from '../src/run-report.js';
 import { classifyError } from '../src/errors.js';
-import { heroImageEligible, normalizeNewsroomTerms, newsroomLanguageIssues, editorialFluencyProfile } from '../src/quality.js';
+import { heroImageEligible, normalizeNewsroomTerms, newsroomLanguageIssues, editorialFluencyProfile, selectRelatedPosts } from '../src/quality.js';
 
 const candidate = (id, source, score = 80, group = source) => ({
   id, title: `Film ${id}`, score, editorialFit: 8, source: { id: source, publisherGroup: group, quality: 9 }
@@ -58,13 +58,26 @@ test('four publications with an empty cinema category report 75 percent coverage
   assert.equal(editorialCoverage({ 'kultur-sanat': 1, sinema: 1, 'moda-tasarim': 1, 'sehir-yasam': 1 }, [{ heroEligible: true }]).heroCoverageWarning, false);
 });
 
-test('hero enforces resolution, ratio, crop and scene without changing card thresholds', () => {
-  assert.equal(heroImageEligible({ width: 1256, height: 706 }, true, 'exhibition', 'editorial-photo'), false);
-  assert.equal(heroImageEligible({ width: 1400, height: 1000 }, true, 'exhibition', 'editorial-photo'), true);
-  assert.equal(heroImageEligible({ width: 1600, height: 800 }, true, 'exhibition', 'editorial-photo'), false);
-  assert.equal(heroImageEligible({ width: 1600, height: 1000 }, true, 'artifact', 'editorial-photo'), false);
-  assert.equal(heroImageEligible({ width: 1600, height: 1000 }, true, 'conference', 'editorial-photo'), false);
-  assert.equal(heroImageEligible({ width: 1600, height: 1000 }, false, 'performance', 'editorial-photo'), false);
+test('hero enforces resolution, ratio, crop and quality while allowing strong editorial illustrations and artifacts', () => {
+  assert.equal(heroImageEligible({ width: 1256, height: 706 }, true, 'exhibition', 'editorial-photo', 90), false);
+  assert.equal(heroImageEligible({ width: 1400, height: 1000 }, true, 'exhibition', 'editorial-photo', 90), true);
+  assert.equal(heroImageEligible({ width: 1600, height: 800 }, true, 'exhibition', 'editorial-photo', 90), false);
+  assert.equal(heroImageEligible({ width: 1600, height: 1000 }, true, 'artifact', 'editorial-photo', 82), true);
+  assert.equal(heroImageEligible({ width: 1536, height: 1024 }, true, 'illustration', 'illustration', 84), true);
+  assert.equal(heroImageEligible({ width: 1600, height: 1000 }, true, 'illustration', 'illustration', 68), false);
+  assert.equal(heroImageEligible({ width: 1600, height: 1000 }, true, 'conference', 'editorial-photo', 95), false);
+  assert.equal(heroImageEligible({ width: 1600, height: 1000 }, false, 'performance', 'editorial-photo', 95), false);
+});
+
+test('related links prefer topical posts in the same category and exclude duplicates', () => {
+  const posts = [
+    { id: 10, link: 'https://sanatcin.com/eski-pekin-sergisi/', categories: [4], title: { rendered: 'Pekin’de tarihi bir sergi yeniden açıldı' } },
+    { id: 11, link: 'https://sanatcin.com/ipek-tasarimi/', categories: [4], title: { rendered: 'İpek tasarımı çağdaş zanaatla buluştu' } },
+    { id: 12, link: 'https://sanatcin.com/baska-kategori/', categories: [8], title: { rendered: 'Pekin’de yeni sergi kapılarını açtı' } },
+    { id: 13, link: 'https://sanatcin.com/ayni-haber/', categories: [4], title: { rendered: 'Pekin’de gençler mirası 180 bin fotoğrafla izledi' } }
+  ];
+  const related = selectRelatedPosts('Pekin’de gençler mirası 180 bin fotoğrafla izledi', 4, posts, 2);
+  assert.deepEqual(related.map((item) => item.id), [10, 11]);
 });
 
 test('observed jade translation defects no longer get a perfect fluency score', () => {

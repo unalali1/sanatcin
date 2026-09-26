@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { config } from './config.js';
 import { sourceHash } from './fetch.js';
 import { log } from './logger.js';
-import { assertImageDimensions, isUsableImageUrl, likelyDuplicateTitles, titleSimilarity, heroImageEligible } from './quality.js';
+import { assertImageDimensions, isUsableImageUrl, likelyDuplicateTitles, titleSimilarity, heroImageEligible, selectRelatedPosts } from './quality.js';
 import { SITE_PAGES } from './site-content.js';
 
 const auth = `Basic ${Buffer.from(`${config.wpUsername}:${config.wpAppPassword}`).toString('base64')}`;
@@ -287,7 +287,7 @@ async function generateEditorialImage(article, signal) {
   image.altText = validation.altText;
   image.hasHuman = validation.hasHuman;
   image.cropSafe = validation.cropSafe;
-  image.heroEligible = heroImageEligible(image.dimensions, image.cropSafe, image.scene, image.kind);
+  image.heroEligible = heroImageEligible(image.dimensions, image.cropSafe, image.scene, image.kind, image.visualScore);
   return image;
 }
 
@@ -378,7 +378,7 @@ export async function prepareFeaturedImage(article, { signal, preflight } = {}) 
         adjustedVisualScore,
         hasHuman: validation.hasHuman,
         cropSafe: validation.cropSafe,
-        heroEligible: heroImageEligible(image.dimensions, validation.cropSafe, validation.scene, validation.kind),
+        heroEligible: heroImageEligible(image.dimensions, validation.cropSafe, validation.scene, validation.kind, validation.visualScore),
         altText: validation.altText,
         visualReason: validation.reason
       };
@@ -528,6 +528,30 @@ export async function syncSiteContent({ signal } = {}) {
   return { pages, aiCaptionsUpdated };
 }
 
+async function buildInlineRelatedLinks(article, category, signal) {
+  try {
+    const posts = (await recentDuplicatePosts(signal)).filter((post) => !runPublishedPosts.has(post.id));
+    const related = selectRelatedPosts(article.title, category, posts, 2);
+    if (!related.length) return '';
+    log('info', 'Haber içi bağlantılar hazırlandı', {
+      source: article.source?.id ?? null,
+      category: article.category,
+      count: related.length,
+      postIds: related.map((item) => item.id)
+    });
+    return `<aside class="sanatcin-inline-related"><strong>İlgili haberler:</strong> ${related
+      .map((item) => `<a href="${escapeHtml(item.link)}">${escapeHtml(item.title)}</a>`)
+      .join(' · ')}</aside>`;
+  } catch (error) {
+    log('warn', 'İç bağlantılar hazırlanamadı; haber bağlantısız yayımlanacak', {
+      source: article.source?.id ?? null,
+      category: article.category,
+      error: String(error?.message ?? error).slice(0, 300)
+    });
+    return '';
+  }
+}
+
 export async function publishArticle(article, preparedImage = undefined, { signal } = {}) {
   const sourceUrl = new URL(article.url).href;
   const sourceLine = `<aside class="sanatcin-source"><strong>Kaynak:</strong> <a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(article.source.name)}</a><span> · Kaynak haber temel alınarak Türkçe yeniden yazıldı</span></aside>`;
@@ -555,11 +579,12 @@ export async function publishArticle(article, preparedImage = undefined, { signa
     };
   }
 
+  const internalLinksHtml = await buildInlineRelatedLinks(article, category, signal);
   const featuredMedia = image ? await uploadFeaturedImage(article, image, signal) : null;
   const payload = {
     title: article.title,
     excerpt: article.excerpt,
-    content: `${article.bodyHtml}\n${sourceLine}`,
+    content: [article.bodyHtml, internalLinksHtml, sourceLine].filter(Boolean).join('\n'),
     status: 'draft',
     categories: [category],
     meta: {
@@ -603,7 +628,7 @@ let duplicatePostsPending = null;
 async function recentDuplicatePosts(signal) {
   if (duplicatePostsCache && Date.now() - duplicatePostsLoadedAt < 60_000) return duplicatePostsCache;
   if (!duplicatePostsPending) {
-    duplicatePostsPending = wp('/wp/v2/posts?status=publish&per_page=100&orderby=date&order=desc&_fields=id,link,title,meta', { signal })
+    duplicatePostsPending = wp('/wp/v2/posts?status=publish&per_page=100&orderby=date&order=desc&_fields=id,link,title,meta,categories', { signal })
       .then((posts) => {
         duplicatePostsCache = mergePublishedPosts(posts);
         duplicatePostsLoadedAt = Date.now();
