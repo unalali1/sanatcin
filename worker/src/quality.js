@@ -390,13 +390,68 @@ export function likelyDuplicateTitles(left, right) {
 }
 
 // Article/card usability is separate: a non-hero image need not stop publication.
-export function heroImageEligible(dimensions = {}, cropSafe = false, scene = 'other', kind = '') {
+export function heroImageEligible(dimensions = {}, cropSafe = false, scene = 'other', kind = '', visualScore = 100) {
   const width = Number(dimensions.width) || 0;
   const height = Number(dimensions.height) || 0;
+  const score = Number(visualScore);
   if (!cropSafe || width < 1400 || height <= 0) return false;
   const ratio = width / height;
   if (ratio < 1.35 || ratio > 1.9 || kind === 'event-poster') return false;
-  return ['runway', 'architecture', 'performance', 'exhibition', 'street', 'food'].includes(scene);
+  if (Number.isFinite(score) && score < 72) return false;
+  return ['runway', 'architecture', 'performance', 'exhibition', 'street', 'food', 'artifact', 'illustration'].includes(scene);
+}
+
+const RELATED_TITLE_STOPWORDS = new Set([
+  'çin', 'çinde', 'çinin', 'pekin', 'yeni', 'haber', 'sanat', 'kültür', 'şehir', 'yaşam',
+  'moda', 'tasarım', 'sinema', 'film', 'ile', 'için', 'bir', 'bu', 've', 'de', 'da',
+  'ile', 'olarak', 'olan', 'daha', 'sonra', 'önce', 'üzerine', 'arasında'
+]);
+
+function relatedTitleTokens(value = '') {
+  return new Set(String(value)
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFKC')
+    .replace(/&(?:amp|#038);/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&apos;/g, "'")
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .split(/\s+/u)
+    .filter((token) => token.length >= 4 && !RELATED_TITLE_STOPWORDS.has(token)));
+}
+
+export function selectRelatedPosts(articleTitle, categoryId, posts = [], limit = 2) {
+  const wantedTokens = relatedTitleTokens(articleTitle);
+  const scored = [];
+  for (let index = 0; index < posts.length; index += 1) {
+    const post = posts[index];
+    if (!Array.isArray(post?.categories) || !post.categories.includes(categoryId)) continue;
+    const title = String(post?.title?.rendered ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const link = String(post?.link ?? '').trim();
+    if (!title || !link || likelyDuplicateTitles(articleTitle, title)) continue;
+    const postTokens = relatedTitleTokens(title);
+    const overlap = [...wantedTokens].filter((token) => postTokens.has(token)).length;
+    const similarity = titleSimilarity(articleTitle, title).score;
+    scored.push({ post, title, link, overlap, similarity, index });
+  }
+
+  scored.sort((a, b) => (
+    b.overlap - a.overlap
+    || b.similarity - a.similarity
+    || a.index - b.index
+  ));
+
+  const topical = scored.filter((item) => item.overlap > 0 || item.similarity >= 0.16);
+  const selected = topical.slice(0, limit);
+  if (selected.length < limit) {
+    for (const item of scored) {
+      if (selected.includes(item)) continue;
+      selected.push(item);
+      if (selected.length >= limit) break;
+    }
+  }
+  return selected.slice(0, limit).map(({ post, title, link }) => ({ id: post.id, title, link }));
 }
 
 export function normalizeNewsroomTerms(value = '') {
