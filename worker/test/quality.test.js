@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertImageDimensions, countCjk, editorialFluencyProfile, imageDimensions, isUsableImageUrl, likelyDuplicateTitles, sourceContentIssues, nativeNameRegression, titleSimilarity, translationIssues } from '../src/quality.js';
+import { assertImageDimensions, countCjk, detectImageContentType, editorialFluencyProfile, imageDimensions, isUsableImageUrl, likelyDuplicateTitles, sourceContentIssues, nativeNameRegression, titleSimilarity, translationIssues } from '../src/quality.js';
 
 test('Çince karakterleri yakalar', () => {
   assert.equal(countCjk('Türkçe metin 龟兹'), 2);
@@ -169,6 +169,28 @@ test('geçersiz JPEG içindeki rastgele baytları boyut sanmaz', () => {
   buffer[1] = 0xd8;
   buffer[2] = 0xc0;
   assert.equal(imageDimensions(buffer, 'image/jpeg'), null);
+});
+
+test('yayıncı JPEGlerinde SOF işaretini toleranslı biçimde bulur', () => {
+  const buffer = Buffer.alloc(48);
+  buffer[0] = 0xff;
+  buffer[1] = 0xd8;
+  buffer[6] = 0xff;
+  buffer[7] = 0xc2;
+  buffer.writeUInt16BE(17, 8);
+  buffer[10] = 8;
+  buffer.writeUInt16BE(672, 11);
+  buffer.writeUInt16BE(1008, 13);
+  assert.deepEqual(imageDimensions(buffer, 'image/jpeg'), { width: 1008, height: 672 });
+});
+
+test('görsel türünü HTTP başlığından önce gerçek dosya baytlarından belirler', () => {
+  const buffer = Buffer.alloc(24);
+  Buffer.from('89504e470d0a1a0a', 'hex').copy(buffer, 0);
+  buffer.writeUInt32BE(1008, 16);
+  buffer.writeUInt32BE(672, 20);
+  assert.equal(detectImageContentType(buffer, 'image/jpeg'), 'image/png');
+  assert.deepEqual(imageDimensions(buffer, 'image/jpeg'), { width: 1008, height: 672 });
 });
 
 test('benzer başlıkları ortak anlamlı kelimelerle yakalar', () => {

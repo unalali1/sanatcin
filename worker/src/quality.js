@@ -245,29 +245,42 @@ export function assertSourceContentQuality(text) {
   if (issues.length) throw new Error(issues.join(' '));
 }
 
+export function detectImageContentType(buffer, contentType = '') {
+  if (buffer?.length >= 24 && buffer.toString('hex', 0, 8) === '89504e470d0a1a0a') return 'image/png';
+  if (buffer?.length >= 4 && buffer[0] === 0xff && buffer[1] === 0xd8) return 'image/jpeg';
+  if (buffer?.length >= 16 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
+
+  const declared = String(contentType).split(';')[0].trim().toLowerCase();
+  if (declared === 'image/jpg' || declared === 'image/pjpeg') return 'image/jpeg';
+  return declared;
+}
+
+function jpegDimensions(buffer) {
+  if (!buffer || buffer.length < 11 || buffer[0] !== 0xff || buffer[1] !== 0xd8) return null;
+  const sofMarkers = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
+
+  // Some publisher/CDN JPEGs contain metadata/padding layouts that do not line up
+  // with a strict segment walker. Scan for a structurally valid SOF marker instead.
+  for (let offset = 2; offset + 9 < buffer.length; offset += 1) {
+    if (buffer[offset] !== 0xff || !sofMarkers.has(buffer[offset + 1])) continue;
+    const segmentLength = buffer.readUInt16BE(offset + 2);
+    if (segmentLength < 7 || offset + 2 + segmentLength > buffer.length) continue;
+    const precision = buffer[offset + 4];
+    const height = buffer.readUInt16BE(offset + 5);
+    const width = buffer.readUInt16BE(offset + 7);
+    if (![8, 12, 16].includes(precision) || width <= 0 || height <= 0) continue;
+    return { width, height };
+  }
+  return null;
+}
+
 export function imageDimensions(buffer, contentType = '') {
-  const mime = contentType.split(';')[0].trim().toLowerCase();
-  if (mime === 'image/png' && buffer.length >= 24 && buffer.toString('hex', 0, 8) === '89504e470d0a1a0a') {
+  const mime = detectImageContentType(buffer, contentType);
+  if (mime === 'image/png' && buffer.length >= 24) {
     return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
   }
-  if (mime === 'image/jpeg' && buffer.length >= 4 && buffer[0] === 0xff && buffer[1] === 0xd8) {
-    let offset = 2;
-    while (offset + 4 < buffer.length) {
-      if (buffer[offset] !== 0xff) return null;
-      const marker = buffer[offset + 1];
-      if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker)) {
-        if (offset + 9 >= buffer.length) return null;
-        return { height: buffer.readUInt16BE(offset + 5), width: buffer.readUInt16BE(offset + 7) };
-      }
-      if (marker === 0xd9 || marker === 0xda) break;
-      if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { offset += 2; continue; }
-      if (offset + 4 > buffer.length) return null;
-      const length = buffer.readUInt16BE(offset + 2);
-      if (length < 2 || offset + 2 + length > buffer.length) return null;
-      offset += 2 + length;
-    }
-  }
-  if (mime === 'image/webp' && buffer.length >= 30 && buffer.toString('ascii', 0, 4) === 'RIFF') {
+  if (mime === 'image/jpeg') return jpegDimensions(buffer);
+  if (mime === 'image/webp' && buffer.length >= 30) {
     const format = buffer.toString('ascii', 12, 16);
     if (format === 'VP8X') {
       return { width: 1 + buffer.readUIntLE(24, 3), height: 1 + buffer.readUIntLE(27, 3) };

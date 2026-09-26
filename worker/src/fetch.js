@@ -340,6 +340,77 @@ function jsonLdImageUrls($) {
   return urls;
 }
 
+function cleanImageCaption(value = '') {
+  const text = String(value).replace(/\s+/g, ' ').trim();
+  if (text.length < 12 || text.length > 500) return '';
+  return text;
+}
+
+function captionLooksEditorial(value = '', className = '') {
+  return /caption|credit|photo|image|pic|desc|remark/i.test(String(className))
+    || /\((?:Xinhua|Reuters|AP|AFP|Getty|VCG|CFP|China Daily)\)\s*$/i.test(value)
+    || /^(?:Photo|Image|Credit|Courtesy)\s*:/i.test(value);
+}
+
+function captionNearImage($, element) {
+  const node = $(element);
+  const candidates = [];
+  const figureCaption = node.closest('figure').find('figcaption').first();
+  if (figureCaption.length) candidates.push({ text: figureCaption.text(), className: figureCaption.attr('class') || 'figcaption' });
+
+  const localSelectors = '.caption, .photo-caption, .image-caption, .img-caption, .pic-caption, .desc, .description, .photo-desc, .image-desc, .pic-desc, .remark, .credit';
+  const local = node.parent().find(localSelectors).first();
+  if (local.length) candidates.push({ text: local.text(), className: local.attr('class') || '' });
+
+  for (const sibling of [node.next(), node.parent().next(), node.closest('p, div').next()]) {
+    if (!sibling?.length) continue;
+    candidates.push({ text: sibling.text(), className: sibling.attr('class') || sibling.prop('tagName') || '' });
+  }
+
+  for (const candidate of candidates) {
+    const text = cleanImageCaption(candidate.text);
+    if (text && captionLooksEditorial(text, candidate.className)) return text;
+  }
+  return '';
+}
+
+function captionImageKey(value, base) {
+  const normalized = normalizeUrl(value, base);
+  if (!normalized) return null;
+  try {
+    const url = new URL(normalized);
+    url.hash = '';
+    url.search = '';
+    return url.href;
+  } catch {
+    return normalized;
+  }
+}
+
+function collectSourceImageCaptions($, baseUrl) {
+  const captions = {};
+  $('article img, main img, .article img, .content img').each((_, element) => {
+    const node = $(element);
+    const caption = captionNearImage($, element);
+    if (!caption) return;
+    const picture = node.closest('picture');
+    const urls = [
+      ...imagesFromSrcset(node.attr('srcset') || node.attr('data-srcset')),
+      node.attr('data-src'),
+      node.attr('data-lazy-src'),
+      node.attr('data-original'),
+      node.attr('data-original-src'),
+      node.attr('src'),
+      ...picture.find('source').map((__, source) => imagesFromSrcset($(source).attr('srcset') || $(source).attr('data-srcset'))).get().flat()
+    ].filter(Boolean);
+    for (const rawUrl of urls) {
+      const key = captionImageKey(rawUrl, baseUrl);
+      if (key && !captions[key]) captions[key] = caption;
+    }
+  });
+  return captions;
+}
+
 export async function extractArticle(candidate, { signal, allowBrowser = true } = {}) {
   signal?.throwIfAborted();
   let html;
@@ -386,6 +457,7 @@ export async function extractArticle(candidate, { signal, allowBrowser = true } 
       .filter(Boolean)
       .map((image) => normalizeUrl(image, candidate.url))
       .filter((image) => image && isUsableImageUrl(image)))];
+    const sourceImageCaptions = collectSourceImageCaptions($, candidate.url);
 
     return {
       ...candidate,
@@ -393,6 +465,7 @@ export async function extractArticle(candidate, { signal, allowBrowser = true } 
       publishedAt,
       sourceImageUrl: sourceImageUrls[0] ?? null,
       sourceImageUrls,
+      sourceImageCaptions,
       text
     };
   } finally {

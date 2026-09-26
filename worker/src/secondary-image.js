@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { config } from './config.js';
 import { sourceHash } from './fetch.js';
 import { log } from './logger.js';
-import { assertImageDimensions, isUsableImageUrl } from './quality.js';
+import { assertImageDimensions, detectImageContentType, isUsableImageUrl } from './quality.js';
 
 const auth = `Basic ${Buffer.from(`${config.wpUsername}:${config.wpAppPassword}`).toString('base64')}`;
 const ai = new OpenAI({
@@ -89,10 +89,11 @@ async function loadCandidate(article, imageUrl, signal) {
     }
   });
   if (!response.ok) throw new Error(`İkinci kaynak görsel indirilemedi: HTTP ${response.status}`);
-  const contentType = response.headers.get('content-type') ?? '';
-  const extension = extensionFor(contentType);
-  if (!extension) throw new Error(`İkinci görsel türü desteklenmiyor: ${contentType || 'bilinmiyor'}`);
+  const declaredContentType = response.headers.get('content-type') ?? '';
   const buffer = Buffer.from(await response.arrayBuffer());
+  const contentType = detectImageContentType(buffer, declaredContentType);
+  const extension = extensionFor(contentType);
+  if (!extension) throw new Error(`İkinci görsel türü desteklenmiyor: ${declaredContentType || 'bilinmiyor'}`);
   if (buffer.length < 12_000) throw new Error('İkinci görsel güvenilir kalite için çok küçük.');
   if (buffer.length > 10_000_000) throw new Error('İkinci görsel 10 MB sınırını aşıyor.');
 
@@ -108,13 +109,15 @@ async function loadCandidate(article, imageUrl, signal) {
     throw new Error('İkinci görsel daha önce kullanılmış.');
   }
 
+  const captionKey = canonicalImageUrl(imageUrl);
   return {
     buffer,
-    contentType: contentType.split(';')[0],
+    contentType,
     extension,
     imageHash,
     imageSourceHash,
     sourceUrl: imageUrl,
+    caption: article.sourceImageCaptions?.[captionKey] || article.sourceImageCaptions?.[imageUrl] || '',
     dimensions,
     origin: 'source-editorial'
   };
@@ -138,10 +141,12 @@ async function evaluatePair(article, primary, candidate, signal) {
             'complementaryScore 0-100: ikinci görselin farklı eser, kişi, mekân detayı, performans anı veya başka yeni görsel bilgi katma derecesi.',
             'useTogether yalnız ikinci görsel habere gerçek görsel çeşitlilik katıyorsa true olsun.',
             'description ikinci görsel için 8-18 kelimelik doğal Türkçe alternatif metin olsun.',
-            'Yalnız şu JSON biçiminde yanıt ver: {"usable":true,"useTogether":true,"relevanceScore":82,"qualityScore":76,"similarityScore":30,"complementaryScore":84,"scene":"artifact","description":"...","reason":"..."}',
+            'captionTr alanına yalnız kaynak fotoğraf altyazısı varsa tarih/yer/kişi ve kaynak bilgisini koruyarak doğal Türkçeye çevir; altyazı yoksa boş bırak.',
+            'Yalnız şu JSON biçiminde yanıt ver: {"usable":true,"useTogether":true,"relevanceScore":82,"qualityScore":76,"similarityScore":30,"complementaryScore":84,"scene":"artifact","description":"...","captionTr":"...","reason":"..."}',
             `Başlık: ${article.title}`,
             `Spot: ${article.excerpt}`,
             `Kategori: ${article.category}`,
+            `Kaynak fotoğraf altyazısı: ${candidate.caption || 'yok'}`,
             `İkinci görsel boyutu: ${candidate.dimensions.width}x${candidate.dimensions.height}`
           ].join('\n')
         },
@@ -162,6 +167,7 @@ async function evaluatePair(article, primary, candidate, signal) {
     complementaryScore: clampScore(result.complementaryScore),
     scene: String(result.scene ?? 'other').slice(0, 40),
     altText: String(result.description ?? '').replace(/\s+/g, ' ').trim().slice(0, 180),
+    captionTr: String(result.captionTr ?? '').replace(/\s+/g, ' ').trim().slice(0, 500),
     reason: String(result.reason ?? '').replace(/\s+/g, ' ').trim().slice(0, 240)
   };
 }
@@ -191,12 +197,12 @@ export function insertAfterParagraph(html, insertion, paragraphNumber = 2) {
   return `${source}\n${fragment}`;
 }
 
-function sourceCaption(article) {
-  return `Görsel: ${article.source?.imageCredit || article.source?.name || 'Kaynak'}`;
+function sourceCaption(article, image) {
+  return image?.captionTr || image?.caption || `Görsel: ${article.source?.imageCredit || article.source?.name || 'Kaynak'}`;
 }
 
 function inlineFigure(article, image, media) {
-  const caption = sourceCaption(article);
+  const caption = sourceCaption(article, image);
   return [
     '<figure class="wp-block-image size-large sanatcin-secondary-image">',
     `<img src="${escapeHtml(media.source_url)}" alt="${escapeHtml(image.altText || article.title)}" class="wp-image-${media.id}" loading="lazy" decoding="async" />`,
@@ -221,7 +227,7 @@ async function uploadSecondaryImage(article, postId, image, signal) {
     body: JSON.stringify({
       title: `${article.title} — ikinci görsel`,
       alt_text: image.altText || article.title,
-      caption: sourceCaption(article),
+      caption: sourceCaption(article, image),
       description: `Kaynak görsel: ${canonicalImageUrl(image.sourceUrl)}`,
       post: postId
     }),

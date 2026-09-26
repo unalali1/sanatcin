@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { config } from './config.js';
 import { sourceHash } from './fetch.js';
 import { log } from './logger.js';
-import { assertImageDimensions, isUsableImageUrl, likelyDuplicateTitles, titleSimilarity, heroImageEligible, selectRelatedPosts } from './quality.js';
+import { assertImageDimensions, detectImageContentType, isUsableImageUrl, likelyDuplicateTitles, titleSimilarity, heroImageEligible, selectRelatedPosts } from './quality.js';
 import { SITE_PAGES } from './site-content.js';
 
 const auth = `Basic ${Buffer.from(`${config.wpUsername}:${config.wpAppPassword}`).toString('base64')}`;
@@ -73,15 +73,17 @@ async function validateEditorialImage(article, image, signal) {
             'hasHuman görselde herhangi bir insan, yüz, beden ya da belirgin insan silueti varsa true olsun.',
             'cropSafe görselin 16:10 ve 3:2 haber kartlarında ana özne kesilmeden merkezden kırpılmaya uygun olup olmadığını göstersin.',
             'description alanına görselde gerçekten görülenleri 8-18 kelimelik doğal Türkçe alternatif metin olarak yaz.',
+            'captionTr alanına yalnız kaynak fotoğraf altyazısı varsa, tarih/yer/kişi ve kaynak bilgisini koruyan doğal Türkçe çevirisini yaz; altyazı yoksa boş bırak.',
             'kind alanı editorial-photo, illustration veya event-poster olmalı.',
             'scene alanı conference, runway, portrait, artifact, architecture, performance, exhibition, street, food, illustration, poster veya other değerlerinden biri olmalı.',
             'Haberi yeniden kategorize etme; yalnız görselin doğrudan ilişkisini ve editoryal gücünü değerlendir.',
-            'Yalnız şu JSON biçiminde yanıt ver: {"usable":true,"kind":"editorial-photo","scene":"exhibition","visualScore":82,"hasHuman":false,"cropSafe":true,"description":"kısa görsel açıklaması","reason":"kısa gerekçe"}',
+            'Yalnız şu JSON biçiminde yanıt ver: {"usable":true,"kind":"editorial-photo","scene":"exhibition","visualScore":82,"hasHuman":false,"cropSafe":true,"description":"kısa görsel açıklaması","captionTr":"kaynak altyazısının Türkçesi veya boş dize","reason":"kısa gerekçe"}',
             `Başlık: ${article.title}`,
             `Spot: ${article.excerpt}`,
             `Mevcut kategori: ${article.category}`,
             `Gerçek kişi merkezli haber: ${article.realPersonCentered === true ? 'evet' : 'hayır'}`,
             `Görsel kökeni: ${image.origin ?? 'bilinmiyor'}`,
+            `Kaynak fotoğraf altyazısı: ${image.caption || 'yok'}`,
             `Görsel boyutu: ${image.dimensions?.width ?? '?'}x${image.dimensions?.height ?? '?'}`
           ].join('\n')
         },
@@ -107,6 +109,7 @@ async function validateEditorialImage(article, image, signal) {
     hasHuman,
     cropSafe: result.cropSafe === true,
     altText: String(result.description ?? '').replace(/\s+/g, ' ').trim().slice(0, 180),
+    captionTr: String(result.captionTr ?? '').replace(/\s+/g, ' ').trim().slice(0, 500),
     reason: String(result.reason ?? '').replace(/\s+/g, ' ').trim().slice(0, 240)
   };
 }
@@ -300,10 +303,11 @@ async function loadSourceImage(article, imageUrl, signal) {
     headers: { 'user-agent': config.userAgent, accept: 'image/jpeg,image/png,image/webp,image/*;q=0.8', referer: article.url }
   });
   if (!response.ok) throw new Error(`Kaynak görsel indirilemedi: HTTP ${response.status}`);
-  const contentType = response.headers.get('content-type') ?? '';
-  const extension = extensionFor(contentType);
-  if (!extension) throw new Error(`Desteklenmeyen görsel türü: ${contentType || 'bilinmiyor'}`);
+  const declaredContentType = response.headers.get('content-type') ?? '';
   const buffer = Buffer.from(await response.arrayBuffer());
+  const contentType = detectImageContentType(buffer, declaredContentType);
+  const extension = extensionFor(contentType);
+  if (!extension) throw new Error(`Desteklenmeyen görsel türü: ${declaredContentType || 'bilinmiyor'}`);
   if (buffer.length < 12_000) throw new Error('Kaynak görsel güvenilir kalite için çok küçük.');
   if (buffer.length > 10_000_000) throw new Error('Kaynak görsel 10 MB sınırını aşıyor.');
   const dimensions = assertImageDimensions(buffer, contentType, {
@@ -317,13 +321,15 @@ async function loadSourceImage(article, imageUrl, signal) {
   if (runImageHashes.has(imageHash)) throw new Error('Aynı görsel bu çalışmada başka bir haber için zaten kullanıldı.');
   const existing = await wp(`/sanatcin/v1/image-known?hash=${encodeURIComponent(imageHash)}&source_hash=${encodeURIComponent(imageSourceHash)}`, { signal });
   if (existing.known) throw new Error('Aynı görsel daha önce başka bir haberde kullanılmış.');
+  const captionKey = canonicalImageUrl(imageUrl);
   return {
     buffer,
-    contentType: contentType.split(';')[0],
+    contentType,
     extension,
     imageHash,
     imageSourceHash,
     sourceUrl: imageUrl,
+    caption: article.sourceImageCaptions?.[captionKey] || article.sourceImageCaptions?.[imageUrl] || '',
     dimensions,
     origin: 'source-editorial'
   };
@@ -389,7 +395,7 @@ export async function prepareFeaturedImage(article, { signal, preflight } = {}) 
     }
   }
 
-  if (best && best.visualScore >= 45) {
+  if (best) {
     noteVisualScene(best.scene);
     log('info', 'En güçlü kaynak görseli seçildi', {
       source: article.source.id,
@@ -482,7 +488,7 @@ async function uploadFeaturedImage(article, image, signal) {
       alt_text: image.altText || article.title,
       caption: image.origin === 'openai-generated'
         ? 'AI ile üretilmiş temsili editoryal illüstrasyon.'
-        : `Görsel: ${article.source.imageCredit || article.source.name}`,
+        : (image.captionTr || image.caption || `Görsel: ${article.source.imageCredit || article.source.name}`),
       description: image.origin === 'openai-generated'
         ? 'Bu görsel haberin konusu için yapay zekâ ile üretilmiş temsili bir illüstrasyondur.'
         : `Kaynak görsel: ${image.sourceUrl}`
