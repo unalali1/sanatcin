@@ -180,6 +180,7 @@ export function applyAiScores(candidates, items, now = new Date(), sourceHealth 
     const editorialFit = clamp(ai.fit, 0, 10, 7);
     // categoryFit is deliberately separate from overall SanatÇin fit: a good story
     // should not be forced into a weak category merely to fill the daily grid.
+    const categoryFitProvided = Number.isFinite(Number(ai.categoryFit));
     const categoryFit = clamp(ai.categoryFit, 0, 10, editorialFit);
     const interest = clamp(ai.interest, 0, 100, 0);
     const relevance = clamp(ai.relevance, 0, 100, 0);
@@ -192,9 +193,12 @@ export function applyAiScores(candidates, items, now = new Date(), sourceHealth 
     const baseEligible = ai.eligible === true && allowedCategories.has(ai.category);
     const freshness = freshnessPoints(candidate.publishedAt, now);
     const fit6ExceptionApplied = allowFit6Exception(editorialFit, storyStrength, freshness, institutionalEvent, commercialDominant);
+    const categoryFitEligible = categoryFitProvided
+      ? categoryFit >= 7
+      : (editorialFit >= config.minEditorialFit || fit6ExceptionApplied);
     const eligible = baseEligible
       && (editorialFit >= config.minEditorialFit || fit6ExceptionApplied)
-      && categoryFit >= 7
+      && categoryFitEligible
       && !(commercialDominant && editorialFit <= 6)
       && !health.blocked;
     const category = eligible ? ai.category : 'uygunsuz';
