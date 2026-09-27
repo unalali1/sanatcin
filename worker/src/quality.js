@@ -53,7 +53,10 @@ const TRANSLATIONESE_PATTERNS = [
   /\b(?:dönüşüyor|dönüştü|dönüşümüne)\b/giu,
   /demonstrasyon bölgesi/giu,
   /özgün Çince olmayan/giu,
-  /\b(?:tecrübe|deneyim) alanı sun(?:uyor|du)\b/giu
+  /\b(?:tecrübe|deneyim) alanı sun(?:uyor|du)\b/giu,
+  /\bnon[-\s]?invaziv\b/giu,
+  /\bkan rutin testi\b/giu,
+  /\brutin kan testi robotu\b/giu
 ];
 const ABSTRACT_REPEAT_WORDS = new Set([
   'deneyim', 'yaklaşım', 'dönüşüm', 'etkinlik', 'süreç', 'alan', 'model', 'unsur', 'bağlam'
@@ -471,7 +474,10 @@ export function normalizeNewsroomTerms(value = '') {
   return String(value)
     .replace(/\bNational Art Museum of China\b/gu, 'Çin Ulusal Sanat Müzesi')
     .replace(/Çin(?:’in|'in)? Ulusal Günü/giu, 'Çin Milli Bayramı')
-    .replace(/Orta Sonbahar (?:Bayramı|Festivali)/giu, 'Güz Ortası Bayramı');
+    .replace(/Orta Sonbahar (?:Bayramı|Festivali)/giu, 'Güz Ortası Bayramı')
+    .replace(/\bmooncake(?:’|')?ler\b/giu, 'ay çörekleri')
+    .replace(/\bmooncakes\b/giu, 'ay çörekleri')
+    .replace(/\bmooncake\b/giu, 'ay çöreği');
 }
 
 export function newsroomLanguageIssues({ title = '', text = '', paragraphs = [] } = {}) {
@@ -482,6 +488,12 @@ export function newsroomLanguageIssues({ title = '', text = '', paragraphs = [] 
   }
   if (/yeşim çakıl malzemesi/iu.test(combined)) {
     issues.push('“Yeşim çakıl malzemesi” mekanik bir çeviri; kaynak anlamını koruyarak anlaşılır Türkçe kullan.');
+  }
+  if (/\bnon[-\s]?invaziv\b|\bkan rutin testi\b|\brutin kan testi robotu\b/iu.test(combined)) {
+    issues.push('Teknik sağlık ifadesi kelime kelime çevrilmiş görünüyor; yeni tıbbi iddia eklemeden, kaynak anlamını doğal ve anlaşılır Türkçeyle açıkla.');
+  }
+  if (/\bhotpot\b/iu.test(title)) {
+    issues.push('Başlıkta açıklamasız İngilizce “hotpot” terimi var; haberin ana fikrini Türkçe ve daha geniş bir ifadeyle ver, terim gerekliyse gövdede kısa açıklamayla kullan.');
   }
   if (/(?:mühür|mührü|heykel|heykeli)\s+[^.!?]{0,65}izini sürüyor/iu.test(title)) {
     issues.push('Başlıkta nesneye araştırmacı eylemi yükleniyor; bulgunun neyi gösterdiğini açıkla.');
