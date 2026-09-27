@@ -183,7 +183,7 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
           'Ay ve gün içeren geçmiş/gelecek olaylarda yıl belirsizliği doğuracaksa kaynakta bulunan yılı Türkçe metne ekle. Haberin yayımlandığı tarihe göre “kasım ayında” gibi ifadelerin yanlış zaman algısı yaratmasına izin verme.',
           'Kaynakta geçen her ayrıntıyı kullanmak zorunda değilsin; anlamı bozmayan özetleme, sadeleştirme ve seçme olgu hatası değildir.',
           'Çin’deki Mid-Autumn Festival için Türkçede “Güz Ortası Bayramı” karşılığını kullan; “Orta Sonbahar Bayramı” veya “Orta Sonbahar Festivali” yazma.',
-          'Başlığı somutlaştır; spot, başlık ve giriş tekrarlarını gider. Kaynak başlığını tercüme etme: haberi yalnız tarif eden başlık yerine, doğrulanmış olgular içinden hikâyenin ayırt edici yönünü görünür kılan doğal bir Türkçe başlık kur. Sayı, satıcı/katılımcı adedi veya kurum adı ancak gerçekten ana haber değeriyse başlığın merkezinde olsun. Zorunlu olmayan İngilizce sözcükleri, uzun yabancı etkinlik/sergi adlarını, yapay tamlamaları, açıklanmamış ham Pinyin zincirlerini ve propaganda dilini temizle. Doğrulanmış özgün Çince adın ardından parantez içinde verilen pinyin bu yasağın dışındadır. Okur İngilizce bilmeden metni anlayabilmeli.',
+          'Başlığı somutlaştır; spot, başlık ve giriş tekrarlarını gider. Kaynak başlığını editoryal referans olarak kullan: kaynak başlık haberin ana gelişmesini açık, doğru ve geniş biçimde özetliyorsa onun bilgi hiyerarşisini koru ve doğal Türkiye Türkçesine uyarla. Sırf daha yaratıcı görünmek için kaynak başlıktaki ana konuyu dar bir ayrıntıyla değiştirme. Kaynak başlık zayıf, tanıtım dili taşıyor veya Türkçede işlemezse doğrulanmış olgulardan daha iyi bir başlık kur. Sayı, satıcı/katılımcı adedi, tek bir sıra dışı tat ya da kurum duyurusu ancak gerçekten ana haber değeriyse başlığın merkezinde olsun. Zorunlu olmayan İngilizce sözcükleri, uzun yabancı etkinlik/sergi adlarını, yapay tamlamaları, açıklanmamış ham Pinyin zincirlerini ve propaganda dilini temizle. Doğrulanmış özgün Çince adın ardından parantez içinde verilen pinyin bu yasağın dışındadır. Okur İngilizce bilmeden metni anlayabilmeli.',
           'Başlık Türkiye’deki okuyucunun dış bağlam bilmeden tek okumada anlayacağı kadar açıklayıcı olmalı. Türkiye’de geniş ölçüde bilinmeyen bir etkinlik, program, kurum veya marka adını tek başına başlığın merkezine koyma; önce bunun ne olduğunu Türkçe olarak anlat.',
           'Başlıkta mümkünse haberin en ayırt edici somut unsurunu öne çıkar: önemli ödül, sıra dışı mekân, güçlü sayı, ilk olma, tanınmış isim veya özgün kültürel gelişme. Clickbait yapma ve kaynakta olmayan üstünlük ekleme. Başlığı yalnız yer adı + iki isimden oluşan katalog kalıbına bırakma; kaynak izin veriyorsa somut bir eylem, gelişme veya etkinlik türüyle tamamla.',
           '“Çin bağlantılı”, “sahnede”, “buluştu”, “görücüye çıktı”, “heyecanı yaşandı” gibi muğlak veya klişe ifadeler yerine kaynak izin veriyorsa daha kesin özne ve fiil kullan. “X’te Y ve Z” gibi eksik isim dizilerini yalnız güçlü bir dergi başlığı etkisi yaratıyorsa kullan; sıradan haberlerde cümleyi doğal bir fiille tamamla.',
@@ -234,9 +234,9 @@ async function chooseMoreNaturalDraft(article, factSheet, before, after, { signa
             role: 'system',
             content: [
               'Türkiye Türkçesiyle çalışan tarafsız bir haber dili hakemisin.',
-              'İki metin aynı doğrulanmış olgulara dayanıyor. Yalnız dil doğallığı, açıklık, haber ritmi, somut fiil kullanımı ve çeviri kokusunun yokluğu bakımından karşılaştır.',
+              'İki metin aynı doğrulanmış olgulara dayanıyor. Dil doğallığı, açıklık, haber ritmi, somut fiil kullanımı ve çeviri kokusunun yokluğunun yanında başlık ve girişin haberin ANA FİKRİNİ doğru temsil edip etmediğini de karşılaştır.',
               'Bilgi ekleyen, sayı/ad değiştiren, daha muğlaklaşan veya sırf farklı görünmek için cümleleri bozan sürümü seçme. A sürümündeki önemli tarih, sayı, kişi ve ayırt edici olgu B sürümünde kayboluyorsa A sürümünü koru.',
-              'B sürümünü yalnız açıkça daha iyi ise seç; eşitlikte veya kuşkuda A sürümünü koru.',
+              'B sürümünü yalnız açıkça daha iyi ise seç; eşitlikte veya kuşkuda A sürümünü koru. Başlık ana gelişmeyi bırakıp tek bir sayıya, yan ürüne, yan etkinliğe, kurumsal duyuruya veya renkli ayrıntıya daralıyorsa bunu gerileme say.',
               'İngilizce kurum adını, mekanik malzeme tamlamasını, bilgi vermeyen terim açıklamasını ve nesneye araştırmacı eylemi yükleyen başlığı kalite kusuru say. Yeni olgu eklemeyen doğal Türkçe anlatımı tercih et.',
               'Çin National Day tatili için Milli Bayram, Mid-Autumn Festival için Güz Ortası Bayramı kullan. Girişte kaynakla doğrulanmış gelişmeyi, yeri ve haber değerini somut bir fiille anlat; protokol listesini ve uzun kurum adlarını sonraya bırak. Soyut önem cümlesi yerine kaynaktaki eser, üretim veya olay ayrıntısını ver.',
               'Yalnız geçerli JSON ver.'
@@ -285,10 +285,10 @@ async function refineHeadline(article, factSheet, draft, { signal, completeJson 
         role: 'system',
         content: [
           'Türkçe kültür-sanat haberleri için başlık editörüsün.',
-          'Verilen haber için zihninde en az üç farklı başlık açısı üret: somut haber gelişmesi, kültürel/hikâyesel ayırt edici unsur ve varsa güçlü görsel/mekânsal unsur. Doğruluk, somutluk, merak, Türkçe doğallık ve haber ritmi bakımından en iyisini seç; yalnız seçtiğin başlığı JSON içinde döndür.',
+          'Önce kaynak başlığının haberin ana fikrini ne kadar iyi taşıdığını değerlendir. Kaynak başlık açık ve kapsayıcıysa bilgi hiyerarşisini koruyan doğal bir Türkçe uyarlama adaylardan biri olsun. Ardından zihninde en az üç farklı başlık açısı üret: ana haber gelişmesi, kültürel/hikâyesel ayırt edici unsur ve varsa güçlü görsel/mekânsal unsur. Doğruluk, ana fikre sadakat, somutluk, Türkçe doğallık ve haber ritmi bakımından en iyisini seç; yalnız seçtiğin başlığı JSON içinde döndür.',
           'Başlık kaynakta olmayan bilgi, sıfat, önem atfı veya neden-sonuç eklememeli.',
           'Türkiye’de bilinmeyen kurum, etkinlik veya teknik terimi açıklamasız biçimde başlığın merkezine koyma.',
-          'Daha somut bir fiil veya daha güçlü bir haber açısı mümkünse “sunuyor”, “genişliyor”, “öne çıkıyor”, “buluşuyor”, “yer alıyor”, “aynı sahneyi paylaştı” gibi jenerik kalıplara yaslanma. Kaynaktaki sayı veya katılımcı adedi hikâyenin özü değilse sırf kolay olduğu için başlığı rakam üzerine kurma.',
+          'Daha somut bir fiil veya daha güçlü bir haber açısı mümkünse “sunuyor”, “genişliyor”, “öne çıkıyor”, “buluşuyor”, “yer alıyor”, “aynı sahneyi paylaştı” gibi jenerik kalıplara yaslanma. Kaynaktaki sayı, katılımcı adedi, tek bir sıra dışı ürün/tat ya da yan duyuru hikâyenin özü değilse sırf kolay veya çarpıcı olduğu için başlığı onun üzerine kurma.',
           'Sayı veya sıra dışı ayrıntı ana haber değeriyse kullan; yalnız rakam var diye başlığı mekanikleştirme.',
           'Başlık yaklaşık 35-95 karakter arasında, tek okumada anlaşılır ve doğal Türkiye Türkçesiyle olmalı.',
           'İngilizce kurum adını, mekanik malzeme tamlamasını, bilgi vermeyen terim açıklamasını ve nesneye araştırmacı eylemi yükleyen başlığı kalite kusuru say. Yeni olgu eklemeyen doğal Türkçe anlatımı tercih et.',
@@ -591,7 +591,7 @@ export async function translateArticle(article, { signal, completeJson = request
     fluency: editorialFluencyProfile(final.draft),
     elapsedSeconds: elapsedSeconds(startedAt)
   });
-  // v15: v14 doğal Türkçe yazımına ek olarak Pinyin yanlış pozitifleri yayını durdurmaz
-  // ve mikro başlık yalnız bağımsız hakem açıkça daha iyi bulursa kabul edilir.
-  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v15-safe-headline-gate' };
+  // v16: kaynak başlığının bilgi hiyerarşisini referans alır; ana fikir daraltmasını
+  // ve yeni çeviri kokusu kalıplarını son edit kapısında cezalandırır.
+  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v16-main-angle-gate' };
 }

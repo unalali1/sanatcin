@@ -91,3 +91,24 @@ test('observed jade translation defects no longer get a perfect fluency score', 
 test('source-title duplicate is classified as duplicate rather than editorial failure', () => {
   assert.equal(classifyError(new Error('Kaynak başlığı daha önce yayımlanan haberle eşleşiyor')).code, 'DUPLICATE');
 });
+
+
+test('aynı dar konu ailesi minimum hedef öncesinde ertelenir, yalnız fallbackte dönebilir', () => {
+  const prior = { id: 'prior', title: 'Ay çöreklerinde yeni tatlar', topicCluster: 'mid-autumn-mooncake-2026' };
+  const repeat = { ...candidate('repeat', 'cgtn', 90), title: 'Ay çörekleri daha küçük ve hafif', topicCluster: 'mid-autumn-mooncake-2026' };
+  assert.equal(candidateForRound([repeat], {}, {
+    ...options,
+    topicPortfolio: [prior],
+    enforceTopicDiversity: true,
+    allowTopicOverflow: false
+  }).candidate, null);
+
+  const rescued = candidateForRound([repeat], {}, {
+    ...options,
+    topicPortfolio: [prior],
+    enforceTopicDiversity: true,
+    allowTopicOverflow: true
+  }).candidate;
+  assert.equal(rescued.id, 'repeat');
+  assert.equal(rescued.topicPenalty, 8);
+});

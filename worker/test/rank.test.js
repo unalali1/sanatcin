@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildBalancedShortlist, diversifyBySource, diversifyByTopic, isNearTopicRepeat, looksLikeCinemaCandidate, rerankInputsResilient, selectCinemaRescueCandidates, sourceCrowdingPenalty } from '../src/rank.js';
+import { applyAiScores, buildBalancedShortlist, diversifyBySource, diversifyByTopic, isNearTopicRepeat, looksLikeCinemaCandidate, rerankInputsResilient, selectCinemaRescueCandidates, sourceCrowdingPenalty } from '../src/rank.js';
 
 const silentLogger = () => {};
 
@@ -178,4 +178,35 @@ test('post-AI sinema kurtarma yalnız elenen veya yanlış kategorilenen sinema 
     { ...shortlist[3], eligible: true, category: 'kultur-sanat' }
   ];
   assert.deepEqual(selectCinemaRescueCandidates(shortlist, ranked).map((item) => item.id), ['film-b', 'film-c']);
+});
+
+
+test('iyi haber yanlış kategoriye sırf kota için zorlanmaz', () => {
+  const now = new Date('2026-09-27T02:00:00Z');
+  const candidate = {
+    id: 'mooncake',
+    title: 'China’s mooncakes get a fresh twist',
+    summary: 'New fillings and lighter recipes reshape Mid-Autumn mooncakes.',
+    publishedAt: '2026-09-27T01:00:00Z',
+    source: { id: 'cgtn-culture', name: 'CGTN Culture', quality: 9 }
+  };
+  const [ranked] = applyAiScores([candidate], [{
+    id: 'mooncake',
+    eligible: true,
+    category: 'moda-tasarim',
+    fit: 8,
+    categoryFit: 4,
+    interest: 80,
+    relevance: 80,
+    storyStrength: 75,
+    institutionalEvent: false,
+    commercialDominant: false,
+    recentTopicRepeat: false,
+    topicCluster: 'mid-autumn-mooncake-2026',
+    contentType: 'city-life',
+    reason: 'Gastronomi ana konu; tasarım tali.'
+  }], now);
+  assert.equal(ranked.eligible, false);
+  assert.equal(ranked.category, 'uygunsuz');
+  assert.equal(ranked.categoryFit, 4);
 });

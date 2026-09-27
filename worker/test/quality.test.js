@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertImageDimensions, countCjk, detectImageContentType, editorialFluencyProfile, imageDimensions, isUsableImageUrl, likelyDuplicateTitles, sourceContentIssues, nativeNameRegression, titleSimilarity, translationIssues } from '../src/quality.js';
+import { assertImageDimensions, countCjk, detectImageContentType, editorialFluencyProfile, imageDimensions, isUsableImageUrl, likelyDuplicateTitles, normalizeNewsroomTerms, newsroomLanguageIssues, sourceContentIssues, nativeNameRegression, titleSimilarity, translationIssues } from '../src/quality.js';
 
 test('Çince karakterleri yakalar', () => {
   assert.equal(countCjk('Türkçe metin 龟兹'), 2);
@@ -257,4 +257,15 @@ test('jenerik başlık kalıpları akıcılık puanını düşürür', () => {
   });
   assert.ok(weak.headlineWeaknessHits >= 1);
   assert.ok(weak.score < strong.score);
+});
+
+
+test('ay çöreği terminolojisini Türkçeleştirir ve yeni çeviri kokusu örneklerini işaretler', () => {
+  assert.equal(normalizeNewsroomTerms('Yeni mooncake’ler satışa çıktı'), 'Yeni ay çörekleri satışa çıktı');
+  const issues = newsroomLanguageIssues({
+    title: 'Şanghay’da hotpot aromalı yeni ürünler',
+    text: 'Etkinlikte non-invaziv kan rutin testi robotu da sergilendi.'
+  });
+  assert.ok(issues.some((item) => item.includes('sağlık ifadesi')));
+  assert.ok(issues.some((item) => item.includes('hotpot')));
 });
