@@ -258,7 +258,8 @@ async function run() {
         enforceTopicDiversity: results.length + attempts.length < 4,
         rescueBelowScore: rescueSlot ? config.minPublishScore : null,
         rescueMinimumFit: config.minEditorialFit,
-        allowPublisherOverflow: fallbackActive && firstSlot
+        allowPublisherOverflow: fallbackActive && firstSlot,
+        allowTopicOverflow: fallbackActive && results.length + attempts.length < config.minDailyTarget
       });
 
       if (!selected.candidate) {
@@ -301,7 +302,9 @@ async function run() {
         score: candidate.score,
         effectiveScore: candidate.effectiveScore,
         editorialFit: candidate.editorialFit,
-        sourcePenalty: candidate.sourcePenalty
+        categoryFit: candidate.categoryFit,
+        sourcePenalty: candidate.sourcePenalty,
+        topicPenalty: candidate.topicPenalty
       }))
     });
     const outcomes = await mapLimit(attempts, config.articleConcurrency, async ({ slug, candidate, attempt, fallbackActive: usedFallback }) => {
