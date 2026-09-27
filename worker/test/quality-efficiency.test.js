@@ -86,7 +86,7 @@ test('başlık üretimi katalog kalıbı ve klişe heyecan dilinden kaçınır',
   assert.match(translate, /yer adı \+ iki isimden oluşan katalog kalıbına bırakma/);
   assert.match(translate, /“heyecanı yaşandı”/);
   assert.match(translate, /daha güçlü bir haber açısıyla yeniden kur/);
-  assert.match(translate, /fact-ledger-turkish-newsroom-v15-safe-headline-gate/);
+  assert.match(translate, /fact-ledger-turkish-newsroom-v16-main-angle-gate/);
 });
 
 test('Pinyin kalite notu onarım ister ama tek başına yayını engellemez', () => {

@@ -68,7 +68,7 @@ test('olgu çıkarımı, haber yazımı ve Türkçe son okuma ardışık çalı�
   assert.match(calls[3].input[0].content, /en az üç farklı başlık açısı üret/);
   assert.doesNotMatch(calls[1].input[1].content, /Kaynak metin:/);
   assert.match(calls[1].input[1].content, /leadFacts/);
-  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v15-safe-headline-gate');
+  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v16-main-angle-gate');
   assert.equal(result.factSheet.facts.length, 4);
   assert.match(result.title, /Şanghay/);
 });
