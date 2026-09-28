@@ -57,6 +57,57 @@ async function postsForCategory(category) {
   return all;
 }
 
+function normalizeDossierIdentity(value = '') {
+  return text(value)
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function titleValue(post) {
+  return post?.title?.rendered ?? post?.title?.raw ?? post?.title ?? '';
+}
+
+export function dossierPostMatchesTopic(post, topic) {
+  if (!post || !topic) return false;
+  const slug = String(post.slug ?? '').toLocaleLowerCase('tr-TR');
+  const expected = `cin-sanatlari-dosyasi-${topic.slug}`;
+  if (slug === expected || slug.startsWith(`${expected}-`)) return true;
+
+  // Eski veya elle girilmiş dosyalar standart slug kullanmamış olabilir.
+  // Konunun kendi slug'ı ayrı bir slug segmenti olarak geçiyorsa yine kullanılmış say.
+  const legacySlugPattern = new RegExp(`(^|-)${topic.slug.replace(/[.*+?^$()|[\\]{}]/g, '\\async function postsForCategory(category) {
+  const statuses = ['draft', 'publish', 'pending', 'future', 'private'];
+  const all = [];
+  for (const status of statuses) {
+    try {
+      const posts = await wp(`/wp/v2/posts?categories=${category}&status=${status}&per_page=100&context=edit&_fields=id,slug,date,date_gmt,status,title`);
+      if (Array.isArray(posts)) all.push(...posts);
+    } catch (error) {
+      if (status === 'private') continue;
+      throw error;
+    }
+  }
+  return all;
+}
+
+export async function dossierRunState(now = new Date()) {')}(-|$)`, 'i');
+  if (legacySlugPattern.test(slug)) return true;
+
+  // Son güvenlik katmanı: başlıktaki konu adı. "Çin" öneki olmadan da eşleşir,
+  // fakat yalnız başlık başında kabul edilir; böylece yakın ama farklı konular çakışmaz.
+  const normalizedTitle = normalizeDossierIdentity(titleValue(post));
+  if (!normalizedTitle) return false;
+  const fullTopic = normalizeDossierIdentity(topic.title);
+  const shortTopic = fullTopic.replace(/^cin\s+/, '');
+  return [fullTopic, shortTopic]
+    .filter((value) => value.length >= 6)
+    .some((value) => normalizedTitle === value || normalizedTitle.startsWith(`${value} `));
+}
+
 export async function dossierRunState(now = new Date()) {
   const dossierCategory = await categoryId('cin-sanatlari-dosyasi');
   const cultureCategory = await categoryId('kultur-sanat');
@@ -68,8 +119,7 @@ export async function dossierRunState(now = new Date()) {
   });
   const usedSlugs = new Set();
   for (const topic of DOSSIER_TOPICS) {
-    const expected = `cin-sanatlari-dosyasi-${topic.slug}`;
-    if (posts.some((post) => post.slug === expected || post.slug?.startsWith(`${expected}-`))) usedSlugs.add(topic.slug);
+    if (posts.some((post) => dossierPostMatchesTopic(post, topic))) usedSlugs.add(topic.slug);
   }
   const topic = usedSlugs.size >= DOSSIER_TOPICS.length ? null : nextUnusedTopic(usedSlugs);
   return { dossierCategory, cultureCategory, posts, currentWeekPost, usedSlugs, topic, weekKey: isoWeekKey(now) };
