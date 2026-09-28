@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { insertAfterParagraph, secondaryCandidatePassesThreshold } from '../src/secondary-image.js';
+import { insertAfterParagraph, insertFiguresAfterParagraphs, secondaryCandidatePassesThreshold } from '../src/secondary-image.js';
 
 test('ikinci görsel ikinci paragraftan sonra yerleştirilir', () => {
   const html = '<p>Birinci paragraf.</p>\n<p>İkinci paragraf.</p>\n<p>Üçüncü paragraf.</p>';
@@ -16,6 +16,17 @@ test('paragraf sayısı beklenenden azsa ikinci görsel gövdenin sonuna eklenir
   const html = '<p>Tek paragraf.</p>';
   const figure = '<figure>Görsel</figure>';
   assert.equal(insertAfterParagraph(html, figure, 2), '<p>Tek paragraf.</p>\n<figure>Görsel</figure>');
+});
+
+test('birden fazla kaynak görsel gövde boyunca dağıtılır', () => {
+  const html = '<p>Bir.</p><p>İki.</p><p>Üç.</p><p>Dört.</p><p>Beş.</p>';
+  const result = insertFiguresAfterParagraphs(html, [
+    '<figure id="a">A</figure>',
+    '<figure id="b">B</figure>'
+  ], 2);
+
+  assert.match(result, /<p>İki\.<\/p>\n<figure id="a">A<\/figure>/);
+  assert.match(result, /<p>Dört\.<\/p>\n<figure id="b">B<\/figure>/);
 });
 
 test('ikinci görsel kalite ve ilişki eşiklerini birlikte geçmelidir', () => {
