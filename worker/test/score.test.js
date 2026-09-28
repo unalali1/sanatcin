@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { freshnessPoints, hasExcludedTopic, inferCategory, isCommercialEconomyDominant, isFreshForCategory, scoreCandidate, selectByCategory } from '../src/score.js';
+import { freshnessPoints, hasExcludedTopic, inferCategory, isCommercialEconomyDominant, isDeathNewsCandidate, isFreshForCategory, scoreCandidate, selectByCategory } from '../src/score.js';
 import { applyAiScores, buildBalancedShortlist } from '../src/rank.js';
 
 const source = { id: 'test', name: 'Test', quality: 9, defaultCategory: null };
@@ -68,6 +68,20 @@ test('fit puanı eşik altındaysa aday yayıma alınmaz', () => {
   const [ranked] = applyAiScores([candidate], [{ id:'weak', eligible:true, category:'sehir-yasam', fit:4, interest:90, relevance:90 }]);
   assert.equal(ranked.eligible, false);
   assert.equal(ranked.category, 'uygunsuz');
+});
+
+test('ölüm ve vefat haberlerini AI sıralamasından önce eler', () => {
+  const death = { id:'death', title:'Singer Liu Huan dies at 63', summary:'Chinese musician and educator', source };
+  const turkish = { id:'vefat', title:'Çinli müzisyen Liu Huan 63 yaşında hayatını kaybetti', summary:'Sanatçı haberi', source };
+  assert.equal(isDeathNewsCandidate(death), true);
+  assert.equal(isDeathNewsCandidate(turkish), true);
+  assert.equal(scoreCandidate(death).eligible, false);
+  assert.match(scoreCandidate(turkish).scoreReason, /Ölüm\/vefat/);
+});
+
+test('ölüm sözcüğünü eser adında taşıyan kültür haberi yanlışlıkla elenmez', () => {
+  const candidate = { id:'play', title:'Death of a Salesman returns to Beijing stage', summary:'Theatre production opens this week', source };
+  assert.equal(isDeathNewsCandidate(candidate), false);
 });
 
 test('bankacılık haberi kaynak kategorisi olsa bile kapsam dışı kalır', () => {
