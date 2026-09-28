@@ -14,6 +14,18 @@ const excludedTopicPatterns = [
   /(?:银行资本|资本补充|中央银行|金融机构|股票市场|债券市场|国内生产总值|关税|军事|导弹|选举|党代会)/u
 ];
 
+const deathNewsTitlePatterns = [
+  /\b(?:dies|died|has died|passes away|passed away|obituary)\b/i,
+  /\bis dead\b/i,
+  /(?:^|[^\p{L}])(?:öldü|vefat etti|hayatını kaybetti|aramızdan ayrıldı)(?:$|[^\p{L}])/iu,
+  /(?:去世|逝世|病逝|离世|辞世)/u
+];
+
+export function isDeathNewsCandidate(candidate) {
+  const title = String(candidate?.title ?? '').trim();
+  return deathNewsTitlePatterns.some((pattern) => pattern.test(title));
+}
+
 const commercialEconomySignals = [
   /\bexports?\b/i,
   /\bimports?\b/i,
@@ -60,7 +72,9 @@ export function isCommercialEconomyDominant(candidate) {
 
 export function hasExcludedTopic(candidate) {
   const haystack = `${candidate.title ?? ''} ${candidate.summary ?? ''}`;
-  return excludedTopicPatterns.some((pattern) => pattern.test(haystack)) || isCommercialEconomyDominant(candidate);
+  return isDeathNewsCandidate(candidate)
+    || excludedTopicPatterns.some((pattern) => pattern.test(haystack))
+    || isCommercialEconomyDominant(candidate);
 }
 
 export function inferCategory(candidate) {
@@ -87,6 +101,9 @@ export function freshnessPoints(publishedAt, now = new Date()) {
 }
 
 export function scoreCandidate(candidate, now = new Date()) {
+  if (isDeathNewsCandidate(candidate)) {
+    return { ...candidate, category: 'uygunsuz', eligible: false, score: 0, scoreReason: 'Ölüm/vefat haberi SanatÇin yayın politikası gereği kapsam dışı.' };
+  }
   if (hasExcludedTopic(candidate)) {
     return { ...candidate, category: 'uygunsuz', eligible: false, score: 0, scoreReason: 'Kapsam dışı finans, siyaset, askerî veya ticari-ekonomi ağırlıklı gündem.' };
   }
