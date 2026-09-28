@@ -49,6 +49,7 @@ async function run() {
 
     log('info', 'Haftanın dosya konusu seçildi', {
       topicId: state.topic.id,
+      topicSlug: state.topic.slug,
       topic: topicDisplayName(state.topic),
       group: state.topic.group
     });
