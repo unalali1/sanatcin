@@ -33,6 +33,16 @@ test('standart olmayan eski slug aynı dosya konusunu kullanılmış sayar', () 
   assert.equal(dossierPostMatchesTopic(legacy, topic), true);
 });
 
+test('eski mürekkep dosyası kayıt kimliğiyle de kullanılmış sayılır', () => {
+  const topic = DOSSIER_TOPICS.find((item) => item.slug === 'murekkep-resmi');
+  const legacy = {
+    id: 228,
+    slug: 'eski-manuel-dosya',
+    title: { rendered: 'Arşiv yazısı' }
+  };
+  assert.equal(dossierPostMatchesTopic(legacy, topic), true);
+});
+
 test('başlık eşleşmesi standart slug olmasa da tekrar dosyayı yakalar', () => {
   const topic = DOSSIER_TOPICS.find((item) => item.slug === 'murekkep-resmi');
   const legacy = {
