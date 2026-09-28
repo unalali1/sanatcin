@@ -71,6 +71,12 @@ function titleValue(post) {
   return post?.title?.rendered ?? post?.title?.raw ?? post?.title ?? '';
 }
 
+// Legacy dossiers created before canonical weekly slugs were introduced.
+// Keep these explicit migration identities so historical manual posts cannot be selected again.
+const LEGACY_DOSSIER_TOPIC_BY_POST_ID = new Map([
+  [228, 'murekkep-resmi']
+]);
+
 export function isCompletedDossierPost(post) {
   if (!post) return false;
   if (post.status === 'publish') return true;
@@ -80,6 +86,7 @@ export function isCompletedDossierPost(post) {
 
 export function dossierPostMatchesTopic(post, topic) {
   if (!post || !topic) return false;
+  if (LEGACY_DOSSIER_TOPIC_BY_POST_ID.get(Number(post.id)) === topic.slug) return true;
   const slug = String(post.slug ?? '').toLocaleLowerCase('tr-TR');
   const expected = `cin-sanatlari-dosyasi-${topic.slug}`;
   if (slug === expected || slug.startsWith(`${expected}-`)) return true;
