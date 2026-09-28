@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DOSSIER_TOPICS, nextUnusedTopic } from '../src/dossier-topics.js';
 import { orderDossierImages, shortDossierCaption } from '../src/dossier-images.js';
-import { dossierFigureHtml, dossierPostMatchesTopic, injectDossierImages, isCompletedDossierPost, isoWeekKey, isoWeekStart } from '../src/dossier-wordpress.js';
+import { dossierFigureHtml, dossierPostMatchesTopic, injectDossierImages, isCompletedDossierPost, isReadyDossierDraftForIsoWeek, isoWeekKey, isoWeekStart } from '../src/dossier-wordpress.js';
 import { applyDossierNewsletterBonus } from '../src/newsletter-dossier.js';
 
 test('Çin Sanatları Dosyası 52 benzersiz haftalık konu içerir', () => {
@@ -78,6 +78,23 @@ test('ISO hafta anahtarı pazartesi-pazar arasında sabit kalır', () => {
   const sunday = new Date('2026-09-20T22:00:00Z');
   assert.equal(isoWeekKey(monday), isoWeekKey(sunday));
   assert.equal(isoWeekStart(monday).toISOString(), '2026-09-14T00:00:00.000Z');
+});
+
+test('pazartesi yayımlanan dosya aynı haftanın cuma taslak üretimini bloke etmez', () => {
+  const friday = new Date('2026-10-02T01:00:00Z');
+  const publishedMonday = {
+    status: 'publish',
+    date_gmt: '2026-09-28T02:00:00Z',
+    content: { rendered: '<p>' + 'Tamamlanmış dosya. '.repeat(60) + '</p>' }
+  };
+  const fridayDraft = {
+    status: 'draft',
+    date_gmt: '2026-10-02T01:00:00Z',
+    content: { rendered: '<p>' + 'Tamamlanmış dosya. '.repeat(60) + '</p>' }
+  };
+
+  assert.equal(isReadyDossierDraftForIsoWeek(publishedMonday, friday), false);
+  assert.equal(isReadyDossierDraftForIsoWeek(fridayDraft, friday), true);
 });
 
 test('dosya gövde görselleri ana görsel tekrarlanmadan paragraflara dağıtılır', () => {
