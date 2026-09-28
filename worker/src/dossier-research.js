@@ -185,7 +185,7 @@ export async function verifyDossierResearch(research, {
 
 function sourceListHtml(sources) {
   const items = sources.map((source) => `<li><a href="${source.url}" target="_blank" rel="noopener noreferrer nofollow">${text(source.publisher || source.title)}</a>${source.title && source.title !== source.publisher ? ` — ${text(source.title)}` : ''}</li>`).join('');
-  return `<h2>Kaynaklar ve ileri okuma</h2><ul class="sanatcin-dossier-sources">${items}</ul>`;
+  return `<h2 style="font-size:1.05rem">Kaynaklar ve ileri okuma</h2><ul class="sanatcin-dossier-sources" style="font-size:0.86rem;line-height:1.55">${items}</ul>`;
 }
 
 async function requestArticle(client, model, research, signal, repairNote = '') {
