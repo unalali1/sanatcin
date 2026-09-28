@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DOSSIER_TOPICS, nextUnusedTopic } from '../src/dossier-topics.js';
 import { orderDossierImages, shortDossierCaption } from '../src/dossier-images.js';
-import { dossierFigureHtml, dossierPostMatchesTopic, injectDossierImages, isoWeekKey, isoWeekStart } from '../src/dossier-wordpress.js';
+import { dossierFigureHtml, dossierPostMatchesTopic, injectDossierImages, isCompletedDossierPost, isoWeekKey, isoWeekStart } from '../src/dossier-wordpress.js';
 import { applyDossierNewsletterBonus } from '../src/newsletter-dossier.js';
 
 test('Çin Sanatları Dosyası 52 benzersiz haftalık konu içerir', () => {
@@ -49,6 +49,18 @@ test('yakın fakat farklı resim konusu yanlışlıkla aynı sayılmaz', () => {
     title: { rendered: 'Dunhuang duvar resimleri: Mağaralardaki renkli miras' }
   };
   assert.equal(dossierPostMatchesTopic(other, topic), false);
+});
+
+test('yarım placeholder taslak haftalık dosyayı bloke etmez', () => {
+  assert.equal(isCompletedDossierPost({
+    status: 'draft',
+    content: { rendered: '<p>Taslak hazırlanıyor.</p>' }
+  }), false);
+  assert.equal(isCompletedDossierPost({
+    status: 'draft',
+    content: { rendered: '<p>' + 'Uzun ve tamamlanmış dosya içeriği. '.repeat(40) + '</p>' }
+  }), true);
+  assert.equal(isCompletedDossierPost({ status: 'publish', content: { rendered: '' } }), true);
 });
 
 test('ISO hafta anahtarı pazartesi-pazar arasında sabit kalır', () => {
