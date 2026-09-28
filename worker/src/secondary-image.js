@@ -19,7 +19,7 @@ const MIN_RELEVANCE = Number.parseInt(process.env.SECONDARY_IMAGE_MIN_RELEVANCE 
 const MIN_QUALITY = Number.parseInt(process.env.SECONDARY_IMAGE_MIN_QUALITY ?? '65', 10) || 65;
 const MAX_SIMILARITY = Number.parseInt(process.env.SECONDARY_IMAGE_MAX_SIMILARITY ?? '85', 10) || 85;
 const MIN_COMPLEMENT = Number.parseInt(process.env.SECONDARY_IMAGE_MIN_COMPLEMENT ?? '55', 10) || 55;
-const REVIEW_LIMIT = Math.max(1, Math.min(4, Number.parseInt(process.env.SECONDARY_IMAGE_REVIEW_LIMIT ?? '3', 10) || 3));
+const REVIEW_LIMIT = Math.max(1, Math.min(10, Number.parseInt(process.env.SECONDARY_IMAGE_REVIEW_LIMIT ?? '10', 10) || 10));
 
 function clampScore(value, fallback = 0) {
   const number = Number(value);
@@ -197,6 +197,17 @@ export function insertAfterParagraph(html, insertion, paragraphNumber = 2) {
   return `${source}\n${fragment}`;
 }
 
+export function insertFiguresAfterParagraphs(html, figures, firstParagraphNumber = 2) {
+  const list = (Array.isArray(figures) ? figures : []).filter(Boolean);
+  if (!list.length) return String(html ?? '');
+  let content = String(html ?? '');
+  list.forEach((figure, index) => {
+    const paragraphNumber = firstParagraphNumber + (index * 2);
+    content = insertAfterParagraph(content, figure, paragraphNumber);
+  });
+  return content;
+}
+
 function sourceCaption(article, image) {
   return image?.captionTr || image?.caption || `Görsel: ${article.source?.imageCredit || article.source?.name || 'Kaynak'}`;
 }
@@ -248,21 +259,23 @@ function uniqueCandidateUrls(article, primaryImage) {
     if (!key || key === primaryKey || seen.has(key)) continue;
     seen.add(key);
     result.push(rawUrl);
-    if (result.length >= 6) break;
+    if (result.length >= 10) break;
   }
   return result;
 }
 
-async function selectSecondaryImage(article, primaryImage, signal) {
-  if (!sourceImageReuseAllowed(article)) return null;
+async function selectSecondaryImages(article, primaryImage, signal) {
+  const maxCount = config.secondaryImageMaxCount;
+  if (maxCount <= 0) return [];
+  if (!sourceImageReuseAllowed(article)) return [];
   const urls = uniqueCandidateUrls(article, primaryImage);
-  if (!urls.length) return null;
+  if (!urls.length) return [];
 
   const reviewed = [];
   const errors = [];
   let attempted = 0;
   for (const imageUrl of urls) {
-    if (attempted >= REVIEW_LIMIT) break;
+    if (attempted >= REVIEW_LIMIT || reviewed.length >= maxCount) break;
     attempted += 1;
     try {
       const loaded = await loadCandidate(article, imageUrl, signal);
@@ -287,25 +300,24 @@ async function selectSecondaryImage(article, primaryImage, signal) {
     }
   }
 
-  const selected = reviewed.sort((left, right) => right.secondaryScore - left.secondaryScore)[0] ?? null;
-  if (!selected) {
-    log('info', 'Uygun ikinci görsel bulunamadı; haber tek görselle korunacak', {
+  const selected = reviewed
+    .sort((left, right) => right.secondaryScore - left.secondaryScore)
+    .slice(0, maxCount);
+  if (!selected.length) {
+    log('info', 'Uygun ek kaynak görsel bulunamadı; haber tek görselle korunacak', {
       source: article.source?.id,
       candidates: urls.length,
       attempted,
       errors: errors.slice(0, 5)
     });
-    return null;
+    return [];
   }
-  log('info', 'Tamamlayıcı ikinci görsel seçildi', {
+  log('info', 'Tamamlayıcı kaynak görseller seçildi', {
     source: article.source?.id,
-    dimensions: `${selected.dimensions.width}x${selected.dimensions.height}`,
-    relevanceScore: selected.relevanceScore,
-    qualityScore: selected.qualityScore,
-    similarityScore: selected.similarityScore,
-    complementaryScore: selected.complementaryScore,
-    secondaryScore: selected.secondaryScore,
-    scene: selected.scene,
+    selected: selected.length,
+    maxCount,
+    scores: selected.map((image) => image.secondaryScore),
+    scenes: selected.map((image) => image.scene),
     attempted
   });
   return selected;
@@ -313,33 +325,42 @@ async function selectSecondaryImage(article, primaryImage, signal) {
 
 export async function attachSecondaryImage(article, primaryImage, post, { signal } = {}) {
   if (config.dryRun || !post?.id || !primaryImage?.buffer) {
-    return { attached: false, reason: config.dryRun ? 'dry-run' : 'missing-post-or-primary' };
+    return { attached: false, attachedCount: 0, reason: config.dryRun ? 'dry-run' : 'missing-post-or-primary' };
   }
-  const selected = await selectSecondaryImage(article, primaryImage, signal);
-  if (!selected) return { attached: false, reason: 'no-qualified-secondary-image' };
+  const selectedImages = await selectSecondaryImages(article, primaryImage, signal);
+  if (!selectedImages.length) return { attached: false, attachedCount: 0, reason: 'no-qualified-secondary-image' };
 
-  const media = await uploadSecondaryImage(article, post.id, selected, signal);
+  const uploaded = [];
+  for (const image of selectedImages) {
+    const media = await uploadSecondaryImage(article, post.id, image, signal);
+    uploaded.push({ image, media });
+  }
   const current = await wp(`/wp/v2/posts/${post.id}?context=edit&_fields=id,content`, { signal });
   const rawContent = current.content?.raw ?? '';
-  if (!rawContent) throw new Error('İkinci görsel eklenecek haber gövdesi WordPress’ten okunamadı.');
-  const figure = inlineFigure(article, selected, media);
-  const content = insertAfterParagraph(rawContent, figure, 2);
+  if (!rawContent) throw new Error('Ek görsel eklenecek haber gövdesi WordPress’ten okunamadı.');
+  const figures = uploaded.map(({ image, media }) => inlineFigure(article, image, media));
+  const content = insertFiguresAfterParagraphs(rawContent, figures, 2);
   await wp(`/wp/v2/posts/${post.id}`, {
     method: 'POST',
     body: JSON.stringify({ content }),
     signal
   });
 
+  const first = uploaded[0];
   return {
     attached: true,
-    mediaId: media.id,
-    imageUrl: media.source_url,
-    sourceUrl: selected.sourceUrl,
-    relevanceScore: selected.relevanceScore,
-    qualityScore: selected.qualityScore,
-    similarityScore: selected.similarityScore,
-    complementaryScore: selected.complementaryScore,
-    secondaryScore: selected.secondaryScore,
-    scene: selected.scene
+    attachedCount: uploaded.length,
+    mediaIds: uploaded.map(({ media }) => media.id),
+    imageUrls: uploaded.map(({ media }) => media.source_url),
+    sourceUrls: uploaded.map(({ image }) => image.sourceUrl),
+    mediaId: first.media.id,
+    imageUrl: first.media.source_url,
+    sourceUrl: first.image.sourceUrl,
+    relevanceScore: first.image.relevanceScore,
+    qualityScore: first.image.qualityScore,
+    similarityScore: first.image.similarityScore,
+    complementaryScore: first.image.complementaryScore,
+    secondaryScore: first.image.secondaryScore,
+    scene: first.image.scene
   };
 }
