@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DOSSIER_TOPICS, nextUnusedTopic } from '../src/dossier-topics.js';
 import { orderDossierImages, shortDossierCaption } from '../src/dossier-images.js';
-import { dossierFigureHtml, injectDossierImages, isoWeekKey, isoWeekStart } from '../src/dossier-wordpress.js';
+import { dossierFigureHtml, dossierPostMatchesTopic, injectDossierImages, isoWeekKey, isoWeekStart } from '../src/dossier-wordpress.js';
 import { applyDossierNewsletterBonus } from '../src/newsletter-dossier.js';
 
 test('Çin Sanatları Dosyası 52 benzersiz haftalık konu içerir', () => {
@@ -22,6 +22,33 @@ test('Çin Sanatları Dosyası 52 benzersiz haftalık konu içerir', () => {
 test('kullanılmış konu atlanarak sıradaki dosya seçilir', () => {
   const used = new Set([DOSSIER_TOPICS[0].slug, DOSSIER_TOPICS[1].slug]);
   assert.equal(nextUnusedTopic(used).slug, DOSSIER_TOPICS[2].slug);
+});
+
+test('standart olmayan eski slug aynı dosya konusunu kullanılmış sayar', () => {
+  const topic = DOSSIER_TOPICS.find((item) => item.slug === 'murekkep-resmi');
+  const legacy = {
+    slug: 'cin-murekkep-resmi-boslugun-ve-murekkebin-bin-yillik-dili',
+    title: { rendered: 'Çin mürekkep resmi: Boşluğun ve mürekkebin bin yıllık dili' }
+  };
+  assert.equal(dossierPostMatchesTopic(legacy, topic), true);
+});
+
+test('başlık eşleşmesi standart slug olmasa da tekrar dosyayı yakalar', () => {
+  const topic = DOSSIER_TOPICS.find((item) => item.slug === 'murekkep-resmi');
+  const legacy = {
+    slug: 'ozel-dosya-228',
+    title: { rendered: 'Çin mürekkep resmi: Boşluk ve fırçanın dili' }
+  };
+  assert.equal(dossierPostMatchesTopic(legacy, topic), true);
+});
+
+test('yakın fakat farklı resim konusu yanlışlıkla aynı sayılmaz', () => {
+  const topic = DOSSIER_TOPICS.find((item) => item.slug === 'murekkep-resmi');
+  const other = {
+    slug: 'dunhuang-duvar-resimleri',
+    title: { rendered: 'Dunhuang duvar resimleri: Mağaralardaki renkli miras' }
+  };
+  assert.equal(dossierPostMatchesTopic(other, topic), false);
 });
 
 test('ISO hafta anahtarı pazartesi-pazar arasında sabit kalır', () => {
