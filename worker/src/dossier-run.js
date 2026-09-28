@@ -30,6 +30,7 @@ async function run() {
     setLogContext({ worker: 'chinese-arts-dossier', week: state.weekKey, mode });
     log('info', 'Çin Sanatları Dosyası haftalık çalışma başladı', {
       usedTopics: state.usedSlugs.size,
+      usedTopicSlugs: [...state.usedSlugs],
       remainingTopics: Math.max(0, 52 - state.usedSlugs.size)
     });
 
