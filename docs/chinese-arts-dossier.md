@@ -2,14 +2,17 @@
 
 ## Amaç
 
-SanatÇin'de haftada bir kez geleneksel Çin sanatları hakkında kaynak temelli, uzun ömürlü ve arşiv değeri yüksek bir Türkçe dosya üretmek. Sistem günlük haber worker'ından bağımsızdır ve hiçbir dosyayı otomatik olarak yayımlamaz; WordPress'e taslak bırakır.
+SanatÇin'de haftada bir kez geleneksel Çin sanatları hakkında kaynak temelli, uzun ömürlü ve arşiv değeri yüksek bir Türkçe dosya üretmek. Sistem günlük haber worker'ından bağımsızdır. Cuma worker'ı yalnız taslak üretir; pazartesi ayrı publisher job yalnız bütün güvenlik kontrollerini geçen taslağı yayımlar.
 
 ## Yayın ritmi
 
-- Railway cron: `0 1 * * 5`
-- Zaman: Cuma 01:00 UTC / Cuma 09:00 Pekin
-- Hedef: haftada 1 taslak
-- Aynı ISO haftasında ikinci kez çalışırsa yeni taslak üretmez.
+- Taslak worker cron: `0 1 * * 5` — Cuma 01:00 UTC / Cuma 09:00 Pekin
+- Publisher cron: `0 2 * * 1` — Pazartesi 02:00 UTC / Pazartesi 10:00 Pekin
+- Hedef: haftada 1 taslak ve en fazla 1 yayımlanmış dosya
+- Taslak worker aynı ISO haftasında ikinci kez çalışırsa yeni taslak üretmez.
+- Publisher yalnız `draft` durumundaki, doğru kategori/slug kullanan, son 7 günde oluşturulmuş, en az yaklaşık 800 karakter gerçek içerik ve featured image içeren taslakları değerlendirir.
+- Aynı ISO haftasında bir dosya zaten yayımlanmışsa publisher hiçbir şey yayımlamaz.
+- Geçmişte kullanılan konular, farklı WordPress yazarları dahil `context=view` yayımlanmış tarihçeden ve legacy kayıt kimliklerinden kontrol edilir.
 - 52 benzersiz konu havuzu sırayla kullanılır.
 
 ## Editoryal akış
@@ -23,7 +26,8 @@ SanatÇin'de haftada bir kez geleneksel Çin sanatları hakkında kaynak temelli
 7. Görsel adayları konu ilgisi ve editoryal kalite açısından görsel modelle değerlendirilir.
 8. Görseller WordPress medya kütüphanesine yüklenir; kaynak ve lisans bilgisi caption/description alanına yazılır.
 9. Yazı `Kültür & Sanat` + `Çin Sanatları Dosyası` kategorileriyle `draft` statüsünde oluşturulur.
-10. Editör WordPress'te fact-check, başlık, görsel ve kaynak kontrolünü yaptıktan sonra manuel yayımlar.
+10. Pazartesi publisher job; durum, kategori, slug, içerik uzunluğu, oluşturulma tarihi, featured image, aynı hafta yayını ve geçmiş konu tekrarını doğrular.
+11. Birden fazla geçerli taslak varsa en yenisini seçer; başarılı yayından sonra aynı haftadaki sonraki çalışmalarda idempotent biçimde hiçbir işlem yapmaz.
 
 ## İçerik standardı
 
@@ -76,6 +80,12 @@ Zorunlu:
 - `DOSSIER_IMAGE_TARGET=5`
 - `DOSSIER_MAX_RUN_MINUTES=25`
 - `NEWSLETTER_DOSSIER_BONUS=10`
+
+Publisher servisi yalnız WordPress değişkenlerini kullanır:
+
+- `WP_BASE_URL`
+- `WP_USERNAME`
+- `WP_APP_PASSWORD`
 
 ## Editör kontrol listesi
 
