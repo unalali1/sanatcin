@@ -24,6 +24,7 @@ export function candidateForRound(queue, sourceUseCounts, {
 
   for (let index = 0; index < queue.length; index += 1) {
     const candidate = queue[index];
+    if (candidate.minimumTargetRescue && !fallbackActive) continue;
     if (candidate.score < hardMinimum) continue;
     if (rescueBelowScore != null && candidate.score < rescueBelowScore) {
       if ((candidate.source?.quality ?? 0) < 8 || (candidate.editorialFit ?? 0) < rescueMinimumFit) continue;

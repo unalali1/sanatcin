@@ -190,7 +190,8 @@ export function applyAiScores(candidates, items, now = new Date(), sourceHealth 
     const recentTopicRepeat = ai.recentTopicRepeat === true;
     const realPersonCentered = ai.realPersonCentered === true;
     const health = sourceHealth.get(candidate.source?.id) ?? { blocked: false, penalty: 0 };
-    const baseEligible = ai.eligible === true && allowedCategories.has(ai.category);
+    const suggestedCategory = allowedCategories.has(ai.category) ? ai.category : null;
+    const baseEligible = ai.eligible === true && Boolean(suggestedCategory);
     const freshness = freshnessPoints(candidate.publishedAt, now);
     const fit6ExceptionApplied = allowFit6Exception(editorialFit, storyStrength, freshness, institutionalEvent, commercialDominant);
     const categoryFitEligible = categoryFitProvided
@@ -201,8 +202,22 @@ export function applyAiScores(candidates, items, now = new Date(), sourceHealth 
       && categoryFitEligible
       && !(commercialDominant && editorialFit <= 6)
       && !health.blocked;
-    const category = eligible ? ai.category : 'uygunsuz';
-    const sourceBoost = eligible ? categorySourceBoost(candidate, category) + (health.categoryPerformance?.[category] ?? 0) : 0;
+    const rescueFitFloor = Math.max(6, config.minEditorialFit - 1);
+    const minimumTargetRescue = !eligible
+      && Boolean(suggestedCategory)
+      && editorialFit >= rescueFitFloor
+      && categoryFit >= 6
+      && interest >= 45
+      && relevance >= 55
+      && storyStrength >= 60
+      && !institutionalEvent
+      && !commercialDominant
+      && !recentTopicRepeat
+      && !health.blocked
+      && (candidate.source?.quality ?? 0) >= 8;
+    const category = eligible ? suggestedCategory : 'uygunsuz';
+    const scoringCategory = eligible || minimumTargetRescue ? suggestedCategory : null;
+    const sourceBoost = scoringCategory ? categorySourceBoost(candidate, scoringCategory) + (health.categoryPerformance?.[scoringCategory] ?? 0) : 0;
     const fitAdjustment = (editorialFit - 7) * 4;
     const institutionalPenalty = institutionalEvent ? (editorialFit <= 6 ? 8 : 4) : 0;
     const commercialPenalty = commercialDominant ? 10 : 0;
@@ -231,6 +246,8 @@ export function applyAiScores(candidates, items, now = new Date(), sourceHealth 
       ...candidate,
       eligible,
       category,
+      rescueCategory: minimumTargetRescue ? suggestedCategory : null,
+      minimumTargetRescue,
       interest,
       relevance,
       storyStrength,
@@ -251,6 +268,7 @@ export function applyAiScores(candidates, items, now = new Date(), sourceHealth 
       institutionalPenalty,
       commercialPenalty,
       score: eligible ? Math.max(0, Math.min(100, Math.round(rawScore * 10) / 10)) : 0,
+      rescueScore: minimumTargetRescue ? Math.max(0, Math.min(100, Math.round(rawScore * 10) / 10)) : 0,
       scoreReason: `${String(ai.reason ?? '').slice(0, 260)} ${healthReason}`.trim().slice(0, 360)
     };
   });
@@ -695,3 +713,4 @@ export async function rerankCandidates(candidates, { signal, prepareCandidates }
     return ranked;
   }
 }
+

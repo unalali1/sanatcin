@@ -210,3 +210,23 @@ test('iyi haber yanlış kategoriye sırf kota için zorlanmaz', () => {
   assert.equal(ranked.category, 'uygunsuz');
   assert.equal(ranked.categoryFit, 4);
 });
+
+test('yakın eşikteki güvenli kültür haberi yalnız minimum hedef rezervine alınır', () => {
+  const candidate = {
+    id: 'reserve',
+    title: 'Neighbourhood craft workshops open to the public',
+    summary: 'A city programme connects residents with working craftspeople.',
+    publishedAt: new Date().toISOString(),
+    source: { id: 'trusted', name: 'Trusted Source', quality: 9 }
+  };
+  const [ranked] = applyAiScores([candidate], [{
+    id: 'reserve', eligible: false, category: 'sehir-yasam', fit: 6, categoryFit: 6,
+    interest: 70, relevance: 75, storyStrength: 70, institutionalEvent: false,
+    commercialDominant: false, recentTopicRepeat: false, reason: 'Gerçek ama ikincil şehir kültürü haberi.'
+  }]);
+  assert.equal(ranked.eligible, false);
+  assert.equal(ranked.minimumTargetRescue, true);
+  assert.equal(ranked.rescueCategory, 'sehir-yasam');
+  assert.ok(ranked.rescueScore >= 50);
+});
+

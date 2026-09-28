@@ -185,9 +185,14 @@ async function run() {
       candidates: ranked.length
     });
   }
+  const selectableCandidates = ranked
+    .filter((item) => item.eligible !== false || item.minimumTargetRescue === true)
+    .map((item) => item.minimumTargetRescue
+      ? { ...item, category: item.rescueCategory, score: item.rescueScore }
+      : item);
   const queues = Object.fromEntries(CATEGORIES.map(({ slug }) => [
     slug,
-    diversifyByTopic(diversifyBySource(ranked.filter((item) => item.eligible !== false && item.category === slug && isFreshForCategory(item))))
+    diversifyByTopic(diversifyBySource(selectableCandidates.filter((item) => item.category === slug && isFreshForCategory(item))))
   ]));
   selectionStats.topicPenalized = Object.values(queues).flat().filter((item) => item.topicPenalty > 0).length;
   log('info', 'Aday seçimi tamamlandı', {
@@ -198,6 +203,10 @@ async function run() {
     fitDistribution: Object.fromEntries(CATEGORIES.map(({ slug }) => [
       slug,
       queues[slug].map((item) => item.editorialFit).filter((value) => Number.isFinite(value))
+    ])),
+    minimumTargetReserves: Object.fromEntries(CATEGORIES.map(({ slug }) => [
+      slug,
+      queues[slug].filter((item) => item.minimumTargetRescue).length
     ])),
     topicPenalized: selectionStats.topicPenalized
   });
@@ -387,6 +396,7 @@ async function run() {
           imageScene: image.scene ?? null,
           heroEligible: image.heroEligible === true,
           hasSecondaryImage: secondaryImage.attached === true,
+          secondaryImageCount: secondaryImage.attachedCount ?? (secondaryImage.attached ? 1 : 0),
           secondaryImageScore: secondaryImage.secondaryScore ?? null,
           secondaryImageSimilarity: secondaryImage.similarityScore ?? null,
           secondaryImageScene: secondaryImage.scene ?? null,
@@ -520,3 +530,4 @@ async function main() {
 }
 
 main();
+

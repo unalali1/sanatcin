@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dateFromUrl, discoverFromFeedXml, discoverFromHtml, extractBestArticleTextFromHtml, normalizeUrl } from '../src/fetch.js';
+import { dateFromText, dateFromUrl, discoverFromFeedXml, discoverFromHtml, extractBestArticleTextFromHtml, normalizeUrl } from '../src/fetch.js';
 import { SOURCES, SOURCE_SET_VERSION } from '../src/sources.js';
 
 test('Excel kaynak havuzu eksiksiz ve eski havuzdan bağımsızdır', () => {
@@ -33,6 +33,10 @@ test('China Daily ve Xinhua tarihlerini URL yolundan çıkarır', () => {
   assert.equal(dateFromUrl('https://www.chinadaily.com.cn/a/202609/11/WS1.html'), '2026-09-10T16:00:00.000Z');
   assert.equal(dateFromUrl('https://english.news.cn/20260911/abcdef/c.html'), '2026-09-10T16:00:00.000Z');
   assert.equal(dateFromUrl('https://www.china.cn/culture/2026-09/10/content_118688751.shtml'), '2026-09-09T16:00:00.000Z');
+});
+
+test('İngilizce yazılmış yayın tarihini haber sayfasından çıkarır', () => {
+  assert.equal(dateFromText('By Hayley Zhao September 25, 2026 Arts Festival'), '2026-09-24T16:00:00.000Z');
 });
 
 test('China Daily adaptörü yalnız tarihli haber bağlantılarını alır', () => {
@@ -93,3 +97,4 @@ test('Readability kısa kaldığında JSON-LD haber gövdesini kullanır', () =>
   const result = extractBestArticleTextFromHtml(html, 'https://example.com/story');
   assert.match(result, /verified culture reporting sentence number 7/i);
 });
+

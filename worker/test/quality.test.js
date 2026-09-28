@@ -147,6 +147,16 @@ test('Yasal site metnini haber gövdesi olarak reddeder', () => {
   assert.ok(sourceContentIssues(text.repeat(4)).some((item) => item.includes('yasal metin')));
 });
 
+test('Kısa ama dört açıklayıcı cümle içeren gerçek haberi kabul eder', () => {
+  const text = [
+    'The museum opened a new exhibition that brings together contemporary works from four regions and explains their shared historical context.',
+    'Curators spent two years researching the collection and worked with local archives to verify the stories behind the objects.',
+    'Visitors can follow the development of the craft through sketches, finished pieces and recorded interviews with working artists.',
+    'The programme also includes public workshops and guided tours that connect the exhibition to the city and its changing neighbourhoods.'
+  ].join(' ');
+  assert.deepEqual(sourceContentIssues(text), []);
+});
+
 test('PNG boyutlarını okur', () => {
   const buffer = Buffer.alloc(24);
   Buffer.from('89504e470d0a1a0a', 'hex').copy(buffer, 0);
@@ -269,3 +279,4 @@ test('ay çöreği terminolojisini Türkçeleştirir ve yeni çeviri kokusu örn
   assert.ok(issues.some((item) => item.includes('sağlık ifadesi')));
   assert.ok(issues.some((item) => item.includes('hotpot')));
 });
+

@@ -20,6 +20,7 @@ export const config = {
   openaiEditorModel: process.env.OPENAI_EDITOR_MODEL ?? process.env.OPENAI_MODEL ?? 'gpt-5.6-terra',
   openaiImageModel: process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-2.5-flare',
   openaiImageQuality: process.env.OPENAI_IMAGE_QUALITY ?? 'medium',
+  generatedImageAttempts: boundedInteger('GENERATED_IMAGE_ATTEMPTS', 2, 1, 2),
   generateFallbackImages: boolean('GENERATE_FALLBACK_IMAGES', true),
   sourceImagePolicy: process.env.SOURCE_IMAGE_POLICY ?? 'allow-all',
   sourceImageMinWidth: boundedInteger('SOURCE_IMAGE_MIN_WIDTH', 640, 320, 1600),
@@ -57,7 +58,7 @@ export const config = {
   editorialJudgeTimeoutMs: boundedInteger('EDITORIAL_JUDGE_TIMEOUT_MS', 18_000, 8_000, 40_000),
   editorialJudgeRetries: boundedInteger('EDITORIAL_JUDGE_RETRIES', 1, 0, 2),
   maxPublisherGroupDaily: boundedInteger('MAX_PUBLISHER_GROUP_DAILY', 2, 1, 4),
-  failedCandidateCacheHours: boundedInteger('FAILED_CANDIDATE_CACHE_HOURS', 72, 12, 168),
+  failedCandidateCacheHours: boundedInteger('FAILED_CANDIDATE_CACHE_HOURS', 24, 6, 168),
   recentTopicLookbackDays: boundedInteger('RECENT_TOPIC_LOOKBACK_DAYS', 21, 7, 45),
   sourceHealthLookbackDays: boundedInteger('SOURCE_HEALTH_LOOKBACK_DAYS', 7, 3, 30),
   primaryLookbackHours: integer('PRIMARY_LOOKBACK_HOURS', 72),
@@ -89,3 +90,4 @@ export function validateConfig() {
     throw new Error('OPENAI_IMAGE_QUALITY low, medium, high veya auto olmalı.');
   }
 }
+

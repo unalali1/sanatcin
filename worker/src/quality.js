@@ -239,7 +239,7 @@ export function sourceContentIssues(text = '') {
   if (compact.length < 500) issues.push('Makale gövdesi güvenilir biçimde çıkarılamadı.');
   if (boilerplateHits >= 2) issues.push('Makale yerine site navigasyonu veya yasal metin çıkarıldı.');
   const sentences = compact.split(/(?<=[.!?。！？])\s+/u).filter((item) => item.trim().length > 30);
-  if (compact.length < 1100 && sentences.length < 6) issues.push('Kaynak, tam haber yerine kısa duyuru veya görsel altyazı dizisi gibi görünüyor.');
+  if (compact.length < 800 && sentences.length < 4) issues.push('Kaynak, tam haber yerine kısa duyuru veya görsel altyazı dizisi gibi görünüyor.');
   return issues;
 }
 
@@ -514,3 +514,4 @@ export function numericFactRegression(before = {}, after = {}) {
   const kept = numbers(after);
   return [...numbers(before)].some((number) => !kept.has(number));
 }
+

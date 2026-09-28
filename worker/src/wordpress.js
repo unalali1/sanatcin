@@ -230,12 +230,14 @@ function sourceImageCandidates(article) {
   const rawCandidates = sourceImageReuseAllowed(article)
     ? (article.sourceImageUrls?.length ? article.sourceImageUrls : [article.sourceImageUrl])
     : [];
-  return [...new Set(rawCandidates.filter((value) => isUsableImageUrl(value)))].slice(0, 6);
+  return [...new Set(rawCandidates.filter((value) => isUsableImageUrl(value)))].slice(0, 10);
 }
 
-function visualPrompt(article) {
+function visualPrompt(article, { strictNoPeople = false } = {}) {
   const facts = article.factSheet?.facts?.slice(0, 5).join(' | ') ?? '';
-  const personRule = article.realPersonCentered === true
+  const personRule = strictNoPeople
+    ? 'Show no people at all: no face, body, hand, silhouette, portrait, crowd or human-like figure. Build the image only from story-specific objects, materials, architecture, venue details or landscape.'
+    : article.realPersonCentered === true
     ? 'This article is centered on a named real person. Do not depict any human figure, face, body, silhouette, portrait or lookalike. Represent the story only through relevant products, objects, venue, award, materials, workspace or event context.'
     : 'Do not depict a recognizable real person or imitate the appearance of any named person.';
   return [
@@ -252,10 +254,10 @@ function visualPrompt(article) {
   ].filter(Boolean).join('\n');
 }
 
-async function generateEditorialImage(article, signal) {
+async function generateEditorialImage(article, signal, { strictNoPeople = false, attempt = 1 } = {}) {
   const result = await ai.images.generate({
     model: config.openaiImageModel,
-    prompt: visualPrompt(article),
+    prompt: visualPrompt(article, { strictNoPeople }),
     size: '1536x1024',
     quality: config.openaiImageQuality,
     output_format: 'jpeg'
@@ -267,7 +269,7 @@ async function generateEditorialImage(article, signal) {
   const contentType = 'image/jpeg';
   const dimensions = assertImageDimensions(buffer, contentType);
   const imageHash = crypto.createHash('sha256').update(buffer).digest('hex');
-  const imageSourceHash = sourceHash(`openai:${article.url}`);
+  const imageSourceHash = sourceHash(`openai:${article.url}:attempt-${attempt}`);
   if (runImageHashes.has(imageHash)) throw new Error('Üretilen görsel bu çalışmada başka bir haber için zaten kullanıldı.');
   const existing = await wp(`/sanatcin/v1/image-known?hash=${encodeURIComponent(imageHash)}&source_hash=${encodeURIComponent(imageSourceHash)}`, { signal });
   if (existing.known) throw new Error('Bu haber için üretilen görsel daha önce kullanılmış.');
@@ -294,7 +296,11 @@ async function generateEditorialImage(article, signal) {
   return image;
 }
 
-async function loadSourceImage(article, imageUrl, signal) {
+async function loadSourceImage(article, imageUrl, signal, {
+  minWidth = config.sourceImageMinWidth,
+  minHeight = config.sourceImageMinHeight,
+  lowResolutionFallback = false
+} = {}) {
   const response = await fetch(imageUrl, {
     redirect: 'follow',
     signal: signal
@@ -311,8 +317,8 @@ async function loadSourceImage(article, imageUrl, signal) {
   if (buffer.length < 12_000) throw new Error('Kaynak görsel güvenilir kalite için çok küçük.');
   if (buffer.length > 10_000_000) throw new Error('Kaynak görsel 10 MB sınırını aşıyor.');
   const dimensions = assertImageDimensions(buffer, contentType, {
-    minWidth: config.sourceImageMinWidth,
-    minHeight: config.sourceImageMinHeight,
+    minWidth,
+    minHeight,
     minRatio: 0.75,
     maxRatio: 3.2
   });
@@ -331,7 +337,8 @@ async function loadSourceImage(article, imageUrl, signal) {
     sourceUrl: imageUrl,
     caption: article.sourceImageCaptions?.[captionKey] || article.sourceImageCaptions?.[imageUrl] || '',
     dimensions,
-    origin: 'source-editorial'
+    origin: 'source-editorial',
+    lowResolutionFallback
   };
 }
 
@@ -339,24 +346,37 @@ export async function preflightFeaturedImage(article, { signal } = {}) {
   const candidates = sourceImageCandidates(article);
   const errors = [];
   const loaded = [];
+  const fallbackLoaded = [];
   for (const imageUrl of candidates) {
     try {
       loaded.push(await loadSourceImage(article, imageUrl, signal));
     } catch (error) {
       errors.push(error.message);
+      if (/çözünürlüğü yetersiz/i.test(error.message)) {
+        try {
+          fallbackLoaded.push(await loadSourceImage(article, imageUrl, signal, {
+            minWidth: 480,
+            minHeight: 270,
+            lowResolutionFallback: true
+          }));
+        } catch (fallbackError) {
+          if (fallbackError.message !== error.message) errors.push(fallbackError.message);
+        }
+      }
     }
   }
-  if (!loaded.length && !config.generateFallbackImages) {
+  if (!loaded.length && !fallbackLoaded.length && !config.generateFallbackImages) {
     throw new Error(`Haber için kullanılabilir kaynak görseli bulunamadı: ${errors.slice(0, 3).join(' | ') || 'görsel adayı yok'}`);
   }
   log('info', 'Görsel ön kontrolü tamamlandı', {
     source: article.source.id,
     candidates: candidates.length,
     usableSourceImages: loaded.length,
+    emergencySourceImages: fallbackLoaded.length,
     fallbackAvailable: config.generateFallbackImages,
     errors: errors.slice(0, 3)
   });
-  return { candidates, loaded, errors };
+  return { candidates, loaded, fallbackLoaded, errors };
 }
 
 export async function prepareFeaturedImage(article, { signal, preflight } = {}) {
@@ -364,6 +384,7 @@ export async function prepareFeaturedImage(article, { signal, preflight } = {}) 
   const candidates = prepared.candidates ?? sourceImageCandidates(article);
   const errors = [...(prepared.errors ?? [])];
   const loaded = [...(prepared.loaded ?? [])];
+  const fallbackLoaded = [...(prepared.fallbackLoaded ?? [])];
 
   loaded.sort((left, right) => resolutionPreference(right.dimensions) - resolutionPreference(left.dimensions));
   let best = null;
@@ -423,30 +444,43 @@ export async function prepareFeaturedImage(article, { signal, preflight } = {}) 
       realPersonCentered: article.realPersonCentered === true,
       errors: errors.slice(0, 5)
     });
-    try {
-      const generated = await generateEditorialImage(article, signal);
-      noteVisualScene(generated.scene);
-      log('info', 'AI editoryal illüstrasyonu güvenlik kapısından geçti', {
-        source: article.source.id,
-        visualScore: generated.visualScore,
-        hasHuman: generated.hasHuman,
-        cropSafe: generated.cropSafe,
-        heroEligible: generated.heroEligible,
-        realPersonCentered: article.realPersonCentered === true
-      });
-      return generated;
-    } catch (error) {
-      errors.push(error.message);
-      if (best) {
-        noteVisualScene(best.scene);
-        log('warn', 'Temsili illüstrasyon üretilemedi; kullanılabilir en iyi kaynak görseli korunacak', {
-          source: article.source.id,
-          visualScore: best.visualScore,
-          scene: best.scene,
-          error: error.message
+    for (let attempt = 1; attempt <= config.generatedImageAttempts; attempt += 1) {
+      try {
+        const generated = await generateEditorialImage(article, signal, {
+          strictNoPeople: attempt > 1,
+          attempt
         });
-        return best;
+        noteVisualScene(generated.scene);
+        log('info', 'AI editoryal illüstrasyonu güvenlik kapısından geçti', {
+          source: article.source.id,
+          attempt,
+          visualScore: generated.visualScore,
+          hasHuman: generated.hasHuman,
+          cropSafe: generated.cropSafe,
+          heroEligible: generated.heroEligible,
+          realPersonCentered: article.realPersonCentered === true
+        });
+        return generated;
+      } catch (error) {
+        errors.push(error.message);
+        if (attempt < config.generatedImageAttempts) {
+          log('warn', 'İlk AI görseli uygun bulunmadı; insan figürü içermeyen nesne ve mekân odaklı ikinci üretim denenecek', {
+            source: article.source.id,
+            attempt,
+            error: error.message
+          });
+        }
       }
+    }
+    if (best) {
+      noteVisualScene(best.scene);
+      log('warn', 'Temsili illüstrasyon üretilemedi; kullanılabilir en iyi kaynak görseli korunacak', {
+        source: article.source.id,
+        visualScore: best.visualScore,
+        scene: best.scene,
+        error: errors.at(-1)
+      });
+      return best;
     }
   }
 
@@ -459,6 +493,38 @@ export async function prepareFeaturedImage(article, { signal, preflight } = {}) 
       cropSafe: best.cropSafe
     });
     return best;
+  }
+
+  let emergencyBest = null;
+  for (const image of fallbackLoaded) {
+    try {
+      const validation = await validateEditorialImage(article, image, signal);
+      const reviewed = {
+        ...image,
+        kind: validation.kind,
+        scene: validation.scene,
+        visualScore: validation.visualScore,
+        adjustedVisualScore: validation.visualScore - 12,
+        hasHuman: validation.hasHuman,
+        cropSafe: validation.cropSafe,
+        heroEligible: false,
+        altText: validation.altText,
+        visualReason: validation.reason
+      };
+      if (!emergencyBest || reviewed.adjustedVisualScore > emergencyBest.adjustedVisualScore) emergencyBest = reviewed;
+    } catch (error) {
+      errors.push(error.message);
+    }
+  }
+  if (emergencyBest) {
+    noteVisualScene(emergencyBest.scene);
+    log('warn', 'AI görseli hazırlanamadı; yayını kaybetmemek için denetimden geçen düşük çözünürlüklü kaynak görseli kullanıldı', {
+      source: article.source.id,
+      dimensions: `${emergencyBest.dimensions.width}x${emergencyBest.dimensions.height}`,
+      visualScore: emergencyBest.visualScore,
+      scene: emergencyBest.scene
+    });
+    return emergencyBest;
   }
 
   log('error', 'Haber için zorunlu görsel hazırlanamadı', {
@@ -678,3 +744,4 @@ export async function assertNoSimilarPublishedCandidate(sourceTitle, { signal } 
     throw new Error(`Kaynak başlığı daha önce yayımlanan haberle eşleşiyor: "${existingTitle}" (${Math.round(similarity.score * 100)}%).`);
   }
 }
+

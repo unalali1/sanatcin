@@ -50,6 +50,12 @@ test('source switching never relaxes quality floors or explicit exclusions', () 
   assert.equal(candidateForRound(queue, {}, args).candidate.id, 'usable');
 });
 
+test('minimum hedef rezervi normal turda bekler, fallback turunda kullanılabilir', () => {
+  const reserve = { ...candidate('reserve', 'trusted', 70), minimumTargetRescue: true };
+  assert.equal(candidateForRound([reserve], {}, { ...options, fallbackActive: false }).candidate, null);
+  assert.equal(candidateForRound([reserve], {}, { ...options, fallbackActive: true }).candidate.id, 'reserve');
+});
+
 test('four publications with an empty cinema category report 75 percent coverage', () => {
   const report = editorialCoverage({ 'kultur-sanat': 2, sinema: 0, 'moda-tasarim': 1, 'sehir-yasam': 1 }, [{ heroEligible: false }]);
   assert.deepEqual(report.missingCategories, ['sinema']);
@@ -112,3 +118,4 @@ test('aynı dar konu ailesi minimum hedef öncesinde ertelenir, yalnız fallback
   assert.equal(rescued.id, 'repeat');
   assert.equal(rescued.topicPenalty, 8);
 });
+

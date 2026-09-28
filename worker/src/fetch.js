@@ -91,9 +91,20 @@ function dateValue(value) {
 export function dateFromText(value = '') {
   const normalized = String(value).replace(/年|\//g, '-').replace(/月/g, '-').replace(/日/g, ' ');
   const match = normalized.match(/\b(20\d{2})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/);
-  if (!match) return null;
-  const [, year, month, day, hour = '00', minute = '00'] = match;
-  return dateValue(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute}:00+08:00`);
+  if (match) {
+    const [, year, month, day, hour = '00', minute = '00'] = match;
+    return dateValue(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute}:00+08:00`);
+  }
+
+  const months = {
+    january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
+    july: 7, august: 8, september: 9, october: 10, november: 11, december: 12
+  };
+  const english = normalized.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2}),?\s+(20\d{2})\b/i);
+  if (!english) return null;
+  const [, monthName, day, year] = english;
+  const month = String(months[monthName.toLowerCase()]).padStart(2, '0');
+  return dateValue(`${year}-${month}-${day.padStart(2, '0')}T00:00:00+08:00`);
 }
 
 export function dateFromUrl(value = '') {
@@ -431,7 +442,7 @@ export async function extractArticle(candidate, { signal, allowBrowser = true } 
       $('meta[name="publish_date"]').attr('content') ||
       $('meta[itemprop="datePublished"]').attr('content') ||
       $('time').first().attr('datetime')
-    ) || dateFromText($('body').text().slice(0, 5000)) || dateFromUrl(candidate.url);
+    ) || dateFromText($('body').text().slice(0, 20_000)) || dateFromUrl(candidate.url);
     const text = extractBestArticleTextFromHtml(html, candidate.url, { dom, readable: article });
     if (candidate.source.rejectBodyPatterns?.some((pattern) => pattern.test(text))) {
       throw new Error('Ödeme duvarlı veya üyelik gerektiren haber gövdesi atlandı.');
@@ -472,3 +483,4 @@ export async function extractArticle(candidate, { signal, allowBrowser = true } 
     dom.window.close();
   }
 }
+
