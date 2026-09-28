@@ -123,18 +123,28 @@ export function dossierPostMatchesTopic(post, topic) {
     .some((value) => normalizedTitle === value || normalizedTitle.startsWith(`${value} `));
 }
 
+export function isReadyDossierDraftForIsoWeek(post, now = new Date()) {
+  if (post?.status !== 'draft' || !isCompletedDossierPost(post)) return false;
+  const start = isoWeekStart(now).getTime();
+  const end = start + (7 * 24 * 60 * 60 * 1000);
+  const timestamp = Date.parse(post.date_gmt || post.date || 0);
+  return Number.isFinite(timestamp) && timestamp >= start && timestamp < end;
+}
+
 export async function dossierRunState(now = new Date()) {
   const dossierCategory = await categoryId('cin-sanatlari-dosyasi');
   const cultureCategory = await categoryId('kultur-sanat');
   const posts = await postsForCategory(dossierCategory);
-  const weekStart = isoWeekStart(now).getTime();
-  const currentWeekPost = posts.find((post) => {
-    const timestamp = Date.parse(post.date_gmt || post.date || 0);
-    return Number.isFinite(timestamp) && timestamp >= weekStart && isCompletedDossierPost(post);
-  });
+
+  // Friday prepares the following Monday's issue. A dossier already published
+  // earlier in the same ISO week must not block creation of the next draft.
+  const currentWeekPost = posts.find((post) => isReadyDossierDraftForIsoWeek(post, now));
+
   const usedSlugs = new Set(LEGACY_USED_DOSSIER_TOPIC_SLUGS);
   for (const topic of DOSSIER_TOPICS) {
-    if (posts.some((post) => dossierPostMatchesTopic(post, topic))) usedSlugs.add(topic.slug);
+    if (posts.some((post) => isCompletedDossierPost(post) && dossierPostMatchesTopic(post, topic))) {
+      usedSlugs.add(topic.slug);
+    }
   }
   const topic = usedSlugs.size >= DOSSIER_TOPICS.length ? null : nextUnusedTopic(usedSlugs);
   return { dossierCategory, cultureCategory, posts, currentWeekPost, usedSlugs, topic, weekKey: isoWeekKey(now) };
