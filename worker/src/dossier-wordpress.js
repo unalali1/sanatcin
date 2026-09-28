@@ -47,7 +47,7 @@ async function postsForCategory(category) {
   const all = [];
   for (const status of statuses) {
     try {
-      const posts = await wp(`/wp/v2/posts?categories=${category}&status=${status}&per_page=100&context=edit&_fields=id,slug,date,date_gmt,status,title`);
+      const posts = await wp(`/wp/v2/posts?categories=${category}&status=${status}&per_page=100&context=edit&_fields=id,slug,date,date_gmt,status,title,content`);
       if (Array.isArray(posts)) all.push(...posts);
     } catch (error) {
       if (status === 'private') continue;
@@ -69,6 +69,13 @@ function normalizeDossierIdentity(value = '') {
 
 function titleValue(post) {
   return post?.title?.rendered ?? post?.title?.raw ?? post?.title ?? '';
+}
+
+export function isCompletedDossierPost(post) {
+  if (!post) return false;
+  if (post.status === 'publish') return true;
+  const body = text(post?.content?.rendered ?? post?.content?.raw ?? post?.content ?? '');
+  return body.length >= 800;
 }
 
 export function dossierPostMatchesTopic(post, topic) {
@@ -105,7 +112,7 @@ export async function dossierRunState(now = new Date()) {
   const weekStart = isoWeekStart(now).getTime();
   const currentWeekPost = posts.find((post) => {
     const timestamp = Date.parse(post.date_gmt || post.date || 0);
-    return Number.isFinite(timestamp) && timestamp >= weekStart;
+    return Number.isFinite(timestamp) && timestamp >= weekStart && isCompletedDossierPost(post);
   });
   const usedSlugs = new Set();
   for (const topic of DOSSIER_TOPICS) {
