@@ -43,14 +43,22 @@ export async function categoryId(slug) {
 }
 
 async function postsForCategory(category) {
-  const statuses = ['draft', 'publish', 'pending', 'future', 'private'];
   const all = [];
-  for (const status of statuses) {
+
+  // Published dossier history must be read in public view context. The worker
+  // account may not have edit_others_posts, which would otherwise hide older
+  // dossiers written by a different WordPress author.
+  const published = await wp(`/wp/v2/posts?categories=${category}&status=publish&per_page=100&context=view&_fields=id,slug,date,date_gmt,status,title,content`);
+  if (Array.isArray(published)) all.push(...published);
+
+  for (const status of ['draft', 'pending', 'future', 'private']) {
     try {
       const posts = await wp(`/wp/v2/posts?categories=${category}&status=${status}&per_page=100&context=edit&_fields=id,slug,date,date_gmt,status,title,content`);
       if (Array.isArray(posts)) all.push(...posts);
     } catch (error) {
-      if (status === 'private') continue;
+      // Limited worker roles can legitimately be unable to inspect other
+      // authors' non-public posts; public history above remains authoritative.
+      if (status === 'private' || status === 'draft' || status === 'pending' || status === 'future') continue;
       throw error;
     }
   }
