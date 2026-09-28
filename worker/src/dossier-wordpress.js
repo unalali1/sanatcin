@@ -79,23 +79,13 @@ export function dossierPostMatchesTopic(post, topic) {
 
   // Eski veya elle girilmiş dosyalar standart slug kullanmamış olabilir.
   // Konunun kendi slug'ı ayrı bir slug segmenti olarak geçiyorsa yine kullanılmış say.
-  const legacySlugPattern = new RegExp(`(^|-)${topic.slug.replace(/[.*+?^$()|[\\]{}]/g, '\\async function postsForCategory(category) {
-  const statuses = ['draft', 'publish', 'pending', 'future', 'private'];
-  const all = [];
-  for (const status of statuses) {
-    try {
-      const posts = await wp(`/wp/v2/posts?categories=${category}&status=${status}&per_page=100&context=edit&_fields=id,slug,date,date_gmt,status,title`);
-      if (Array.isArray(posts)) all.push(...posts);
-    } catch (error) {
-      if (status === 'private') continue;
-      throw error;
-    }
-  }
-  return all;
-}
-
-export async function dossierRunState(now = new Date()) {')}(-|$)`, 'i');
-  if (legacySlugPattern.test(slug)) return true;
+  const legacySlug = topic.slug.toLocaleLowerCase('tr-TR');
+  if (
+    slug === legacySlug
+    || slug.startsWith(`${legacySlug}-`)
+    || slug.endsWith(`-${legacySlug}`)
+    || slug.includes(`-${legacySlug}-`)
+  ) return true;
 
   // Son güvenlik katmanı: başlıktaki konu adı. "Çin" öneki olmadan da eşleşir,
   // fakat yalnız başlık başında kabul edilir; böylece yakın ama farklı konular çakışmaz.
