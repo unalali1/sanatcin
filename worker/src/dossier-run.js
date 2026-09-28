@@ -31,6 +31,7 @@ async function run() {
     log('info', 'Çin Sanatları Dosyası haftalık çalışma başladı', {
       usedTopics: state.usedSlugs.size,
       usedTopicSlugs: [...state.usedSlugs],
+      publishedHistoryPostIds: state.posts.filter((post) => post.status === 'publish').map((post) => post.id),
       remainingTopics: Math.max(0, 52 - state.usedSlugs.size)
     });
 
