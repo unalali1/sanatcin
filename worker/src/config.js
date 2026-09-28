@@ -58,6 +58,7 @@ export const config = {
   editorialJudgeTimeoutMs: boundedInteger('EDITORIAL_JUDGE_TIMEOUT_MS', 18_000, 8_000, 40_000),
   editorialJudgeRetries: boundedInteger('EDITORIAL_JUDGE_RETRIES', 1, 0, 2),
   maxPublisherGroupDaily: boundedInteger('MAX_PUBLISHER_GROUP_DAILY', 2, 1, 4),
+  failedCandidatePolicyVersion: process.env.FAILED_CANDIDATE_POLICY_VERSION ?? '2026-09-28-02',
   failedCandidateCacheHours: boundedInteger('FAILED_CANDIDATE_CACHE_HOURS', 24, 6, 168),
   recentTopicLookbackDays: boundedInteger('RECENT_TOPIC_LOOKBACK_DAYS', 21, 7, 45),
   sourceHealthLookbackDays: boundedInteger('SOURCE_HEALTH_LOOKBACK_DAYS', 7, 3, 30),

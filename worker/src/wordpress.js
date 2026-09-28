@@ -154,13 +154,15 @@ function normalizeFailedCandidateEntries(entries = []) {
   for (const entry of Array.isArray(entries) ? entries : []) {
     const url = String(entry?.url ?? '').trim();
     const failedAt = new Date(entry?.failedAt ?? 0).getTime();
+    if (entry?.policyVersion !== config.failedCandidatePolicyVersion) continue;
     if (!url || !Number.isFinite(failedAt) || failedAt < cutoff) continue;
     const previous = byUrl.get(url);
     if (!previous || failedAt > new Date(previous.failedAt).getTime()) {
       byUrl.set(url, {
         url,
         failedAt: new Date(failedAt).toISOString(),
-        code: String(entry?.code ?? 'SOURCE_EXTRACTION').slice(0, 80)
+        code: String(entry?.code ?? 'SOURCE_EXTRACTION').slice(0, 80),
+        policyVersion: config.failedCandidatePolicyVersion
       });
     }
   }

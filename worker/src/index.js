@@ -163,7 +163,12 @@ async function run() {
     });
     for (const [url, article] of preflight.articles) articleCache.set(url, article);
     for (const [url, { candidate }] of preflight.rejected) {
-      failedCandidateMap.set(url, { url, failedAt: new Date().toISOString(), code: 'SOURCE_EXTRACTION' });
+      failedCandidateMap.set(url, {
+        url,
+        failedAt: new Date().toISOString(),
+        code: 'SOURCE_EXTRACTION',
+        policyVersion: config.failedCandidatePolicyVersion
+      });
       const stats = sourceStats[candidate.source.id];
       stats.preflightRejected = (stats.preflightRejected ?? 0) + 1;
     }
@@ -429,7 +434,8 @@ async function run() {
           failedCandidateMap.set(candidate.url, {
             url: candidate.url,
             failedAt: new Date().toISOString(),
-            code: classified.code
+            code: classified.code,
+            policyVersion: config.failedCandidatePolicyVersion
           });
         }
         log('error', 'Haber işlenemedi; sıradaki aday denenecek', {
