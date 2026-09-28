@@ -81,9 +81,12 @@ function titleValue(post) {
 
 // Legacy dossiers created before canonical weekly slugs were introduced.
 // Keep these explicit migration identities so historical manual posts cannot be selected again.
-const LEGACY_DOSSIER_TOPIC_BY_POST_ID = new Map([
+export const LEGACY_DOSSIER_TOPIC_BY_POST_ID = new Map([
+  [221, 'cin-kaligrafisi'],
   [228, 'murekkep-resmi']
 ]);
+
+export const LEGACY_USED_DOSSIER_TOPIC_SLUGS = new Set(LEGACY_DOSSIER_TOPIC_BY_POST_ID.values());
 
 export function isCompletedDossierPost(post) {
   if (!post) return false;
@@ -129,7 +132,7 @@ export async function dossierRunState(now = new Date()) {
     const timestamp = Date.parse(post.date_gmt || post.date || 0);
     return Number.isFinite(timestamp) && timestamp >= weekStart && isCompletedDossierPost(post);
   });
-  const usedSlugs = new Set();
+  const usedSlugs = new Set(LEGACY_USED_DOSSIER_TOPIC_SLUGS);
   for (const topic of DOSSIER_TOPICS) {
     if (posts.some((post) => dossierPostMatchesTopic(post, topic))) usedSlugs.add(topic.slug);
   }
