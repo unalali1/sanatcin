@@ -49,6 +49,20 @@ function sanatcin_frontend_asset_cleanup() {
 }
 add_action('wp_enqueue_scripts', 'sanatcin_frontend_asset_cleanup', 100);
 
+/**
+ * Remove WordPress emoji fallback assets from the public frontend.
+ */
+function sanatcin_disable_frontend_emoji_assets() {
+    remove_action('wp_head', 'print_emoji_detection_script', 7);
+    remove_action('wp_head', 'wp_print_emoji_detection_script', 7);
+    remove_action('wp_print_styles', 'print_emoji_styles');
+    remove_action('wp_print_styles', 'wp_enqueue_emoji_styles');
+    remove_filter('the_content_feed', 'wp_staticize_emoji');
+    remove_filter('comment_text_rss', 'wp_staticize_emoji');
+    remove_filter('wp_mail', 'wp_staticize_emoji_for_email');
+}
+add_action('init', 'sanatcin_disable_frontend_emoji_assets');
+
 function sanatcin_widgets() {
     register_sidebar([
         'name' => __('Üst reklam alanı', 'sanatcin'),
