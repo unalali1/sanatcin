@@ -19,6 +19,50 @@ function sanatcin_assets() {
 }
 add_action('wp_enqueue_scripts', 'sanatcin_assets');
 
+function sanatcin_home_preload_hero() {
+    if (!is_front_page()) return;
+    $sticky_ids = array_values(array_filter(array_map('intval', (array) get_option('sticky_posts', array()))));
+    if (!$sticky_ids) return;
+    $post_id = (int) $sticky_ids[0];
+    $image_id = (int) get_post_meta($post_id, 'sanatcin_hero_image_id', true);
+    if (!$image_id || !wp_attachment_is_image($image_id)) $image_id = (int) get_post_thumbnail_id($post_id);
+    if (!$image_id) return;
+    $meta = wp_get_attachment_metadata($image_id);
+    $width = isset($meta['width']) ? (int) $meta['width'] : 0;
+    $height = isset($meta['height']) ? (int) $meta['height'] : 0;
+    $ratio = $height > 0 ? $width / $height : 0;
+    if ($width < 1400 || $ratio < 1.35 || $ratio > 1.90) return;
+    if (get_post_meta($post_id, 'sanatcin_image_crop_safe', true) === '0' || get_post_meta($post_id, 'sanatcin_hero_eligible', true) === '0') return;
+    $src = wp_get_attachment_image_url($image_id, 'large');
+    if (!$src) return;
+    $srcset = wp_get_attachment_image_srcset($image_id, 'large');
+    echo '<link rel="preload" as="image" href="' . esc_url($src) . '" fetchpriority="high" imagesizes="(max-width: 980px) 100vw, 60vw"';
+    if ($srcset) echo ' imagesrcset="' . esc_attr($srcset) . '"';
+    echo ">\n";
+}
+add_action('wp_head', 'sanatcin_home_preload_hero', 2);
+
+function sanatcin_frontend_asset_cleanup() {
+    if (is_admin() || !is_front_page()) return;
+    wp_dequeue_script('hostinger-reach-embed');
+    wp_deregister_script('hostinger-reach-embed');
+}
+add_action('wp_enqueue_scripts', 'sanatcin_frontend_asset_cleanup', 100);
+
+/**
+ * Remove WordPress emoji fallback assets from the public frontend.
+ */
+function sanatcin_disable_frontend_emoji_assets() {
+    remove_action('wp_head', 'print_emoji_detection_script', 7);
+    remove_action('wp_head', 'wp_print_emoji_detection_script', 7);
+    remove_action('wp_print_styles', 'print_emoji_styles');
+    remove_action('wp_print_styles', 'wp_enqueue_emoji_styles');
+    remove_filter('the_content_feed', 'wp_staticize_emoji');
+    remove_filter('comment_text_rss', 'wp_staticize_emoji');
+    remove_filter('wp_mail', 'wp_staticize_emoji_for_email');
+}
+add_action('init', 'sanatcin_disable_frontend_emoji_assets');
+
 function sanatcin_widgets() {
     register_sidebar([
         'name' => __('Üst reklam alanı', 'sanatcin'),

@@ -236,9 +236,9 @@ if ($hero->have_posts()) : while ($hero->have_posts()) : $hero->the_post(); $her
     <a class="sc-hero-media <?php echo $hero_image['eligible'] ? 'sc-image-cover' : esc_attr(sanatcin_home_image_fit_class(get_the_ID())); ?>" href="<?php the_permalink(); ?>">
       <?php
       if (!empty($hero_image['id'])) {
-        echo wp_get_attachment_image($hero_image['id'], 'full', false, array('fetchpriority'=>'high','loading'=>'eager'));
+        echo wp_get_attachment_image($hero_image['id'], 'large', false, array('fetchpriority'=>'high','loading'=>'eager','decoding'=>'async','sizes'=>'(max-width: 980px) 100vw, 60vw'));
       } elseif (has_post_thumbnail()) {
-        the_post_thumbnail('large');
+        the_post_thumbnail('large', array('fetchpriority'=>'high','loading'=>'eager','decoding'=>'async','sizes'=>'(max-width: 980px) 100vw, 60vw'));
       } else {
         echo '<div style="height:100%;background:linear-gradient(135deg,#dfe8e9,#b9cbd0)"></div>';
       }
@@ -272,7 +272,7 @@ if ($hero->have_posts()) : while ($hero->have_posts()) : $hero->the_post(); $her
       if ($latest->have_posts()) : while ($latest->have_posts()) : $latest->the_post(); ?>
         <article <?php post_class('entry-card ' . sanatcin_home_image_fit_class(get_the_ID())); ?>>
           <a href="<?php the_permalink(); ?>">
-            <?php if (has_post_thumbnail()) the_post_thumbnail('large'); ?>
+            <?php if (has_post_thumbnail()) the_post_thumbnail('medium_large', array('loading'=>'lazy','decoding'=>'async','fetchpriority'=>'low','sizes'=>'(max-width: 980px) 100vw, 33vw')); ?>
           </a>
           <div class="entry-card-body">
             <div class="entry-kicker"><?php sanatcin_post_kicker(); ?></div>
@@ -350,7 +350,7 @@ if ($dossier_q && $dossier_q->have_posts()) :
     ?>
     <article class="sc-arts-feature">
       <a class="sc-arts-feature-media" href="<?php echo esc_url($lead_url); ?>">
-        <?php if (has_post_thumbnail()) { the_post_thumbnail('large'); } ?>
+        <?php if (has_post_thumbnail()) { the_post_thumbnail('large', array('loading'=>'lazy','decoding'=>'async','fetchpriority'=>'low','sizes'=>'(max-width: 980px) 100vw, 60vw')); } ?>
       </a>
       <div class="sc-arts-feature-copy">
         <div class="sc-arts-badge">Çin Sanatları Dosyası</div>
@@ -376,7 +376,7 @@ if ($dossier_q && $dossier_q->have_posts()) :
           }
         ?>
           <article class="sc-arts-mini">
-            <a class="sc-arts-mini-media" href="<?php echo esc_url($item_url); ?>"><?php if (has_post_thumbnail()) the_post_thumbnail('medium_large'); ?></a>
+            <a class="sc-arts-mini-media" href="<?php echo esc_url($item_url); ?>"><?php if (has_post_thumbnail()) the_post_thumbnail('medium', array('loading'=>'lazy','decoding'=>'async','fetchpriority'=>'low','sizes'=>'132px')); ?></a>
             <div class="sc-arts-mini-copy">
               <div class="sc-arts-mini-kicker">Arşivden</div>
               <h4><a href="<?php echo esc_url($item_url); ?>"><?php the_title(); ?></a></h4>
