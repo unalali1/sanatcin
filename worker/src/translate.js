@@ -227,16 +227,17 @@ async function chooseMoreNaturalDraft(article, factSheet, before, after, { signa
       : AbortSignal.timeout(config.editorialJudgeTimeoutMs);
     try {
       const result = await completeJson({
-        model: config.openaiSelectionModel,
+        model: config.openaiEditorModel,
         signal: judgeSignal,
         input: [
           {
             role: 'system',
             content: [
               'Türkiye Türkçesiyle çalışan tarafsız bir haber dili hakemisin.',
-              'İki metin aynı doğrulanmış olgulara dayanıyor. Dil doğallığı, açıklık, haber ritmi, somut fiil kullanımı ve çeviri kokusunun yokluğunun yanında başlık ve girişin haberin ANA FİKRİNİ doğru temsil edip etmediğini de karşılaştır.',
-              'Bilgi ekleyen, sayı/ad değiştiren, daha muğlaklaşan veya sırf farklı görünmek için cümleleri bozan sürümü seçme. A sürümündeki önemli tarih, sayı, kişi ve ayırt edici olgu B sürümünde kayboluyorsa A sürümünü koru.',
-              'B sürümünü yalnız açıkça daha iyi ise seç; eşitlikte veya kuşkuda A sürümünü koru. Başlık ana gelişmeyi bırakıp tek bir sayıya, yan ürüne, yan etkinliğe, kurumsal duyuruya veya renkli ayrıntıya daralıyorsa bunu gerileme say.',
+              'İki metin aynı doğrulanmış olgulara dayanıyor. A ilk Türkçe taslak, B ise çeviri kokusunu gidermek için kıdemli editör tarafından yeniden yazılmış sürümdür. Dil doğallığı, açıklık, haber ritmi, somut fiil kullanımı, Türkçe söz dizimi ve çeviri kokusunun yokluğunun yanında başlık ve girişin haberin ANA FİKRİNİ doğru temsil edip etmediğini karşılaştır.',
+              'Olgu fişi doğruluk sınırıdır. B kaynakta olmayan bilgi ekliyor, doğrulanmış kişi/sayı/tarihi değiştiriyor veya ana haber gelişmesini bozuyorsa A’yı seç. Buna karşılık A’daki her tali ayrıntının B’de aynı cümleyle veya aynı uzunlukta bulunmasını şart koşma; doğru özetleme ve sadeleştirme bilgi kaybı değildir.',
+              'B doğruluk sınırını koruyor ve Türkiye Türkçesinde belirgin biçimde daha doğal okunuyorsa B’yi tercih et. Yalnız “A daha ayrıntılı” gerekçesi, B ana olguları ve haber açısını koruyorsa A’ya dönmek için yeterli değildir. Eşitlikte A korunabilir; ancak B’nin cümle yapısı ve haber akışı açıkça daha doğalsa bunu önceliklendir.',
+              'Özellikle şu soruyu bağımsız değerlendir: Okur B metninin yabancı dilden çevrildiğini cümle yapısından hissediyor mu? Hissedilmiyorsa ve olgusal güvenlik korunuyorsa B lehine değerlendir.',
               'İngilizce kurum adını, mekanik malzeme tamlamasını, bilgi vermeyen terim açıklamasını ve nesneye araştırmacı eylemi yükleyen başlığı kalite kusuru say. Yeni olgu eklemeyen doğal Türkçe anlatımı tercih et.',
               'Çin National Day tatili için Milli Bayram, Mid-Autumn Festival için Güz Ortası Bayramı kullan. Girişte kaynakla doğrulanmış gelişmeyi, yeri ve haber değerini somut bir fiille anlat; protokol listesini ve uzun kurum adlarını sonraya bırak. Soyut önem cümlesi yerine kaynaktaki eser, üretim veya olay ayrıntısını ver.',
               'Yalnız geçerli JSON ver.'
@@ -246,6 +247,7 @@ async function chooseMoreNaturalDraft(article, factSheet, before, after, { signa
             role: 'user',
             content: [
               `Haber açısı: ${factSheet.angle}`,
+              `Doğrulanmış olgu fişi:\n${JSON.stringify(factSheet)}`,
               `A sürümü:\n${JSON.stringify({ title: before.title, excerpt: before.excerpt, paragraphs: before.paragraphs })}`,
               `B sürümü:\n${JSON.stringify({ title: after.title, excerpt: after.excerpt, paragraphs: after.paragraphs })}`,
               'JSON şeması: {"preferred":"A|B","reason":"kısa gerekçe","aScore":0,"bScore":0}'
@@ -334,6 +336,7 @@ async function polishTurkishNews(article, factSheet, draft, { signal, completeJs
           'Sen kaynak dilden çeviri yapan biri değil, Türkçe bir haber merkezinin son okuma ve başlık editörüsün.',
           "Metnin üretim sürecini anlatan meta-dil kullanma; 'Kaynak metne göre', 'Kaynak, ...' ve 'metinde belirtildi' gibi ifadeler yazma. Bilgi atfedilecekse gerçek kaynak, kişi veya kurum adını kullan.",
           'Görevin verilen taslağı yeniden çevirmek değil; metindeki çeviri kokusunu, yabancı sözdizimini, gereksiz isimleştirmeleri, mekanik cümle ritmini ve muğlak başlığı temizlemektir. Taslağın bilgi sırasına da bağlı değilsin: olguları değiştirmeden, Türk okur için daha güçlü bir haber akışı gerekiyorsa paragraf ve vurgu sırasını yeniden kur.',
+          'Bu metni yayımlanmadan önce bir kez daha gerçekten YENİDEN YAZ. Kaynak dilin cümle sırasını, kelime dizimini ve paragraf örgüsünü unut; aynı doğrulanmış olguları Türkiye’de bir kültür-sanat editörü haberi ilk kez Türkçe kaleme alıyormuş gibi kur. Yüzeysel eş anlamlı sözcük değişiklikleri yapma. Anlamı doğru olsa bile bir Türk gazetecinin doğal biçimde kurmayacağı her cümleyi baştan kur.',
           'Metin, ilk kez Türkçe yazılmış bir kültür-sanat haberi gibi okunmalı. Fiilleri doğal kullan; uzun tamlamaları böl; özne-yüklem ilişkisini Türkçe haber diline göre yeniden kur. Anlamı doğru fakat Türkçesi mekanik bir cümleyi yüzeysel sözcük değişiklikleriyle bırakma; gerekirse baştan yaz.',
           'Başlık, spot ve giriş aynı bilgiyi tekrar etmesin. Paragraflar arasında doğal akış kur. Kültür-sanat haberinde kaynakta bulunan somut mekân, eser, gelenek, malzeme veya performans ayrıntısını uygun olduğunda öne çıkar; fakat kaynakta olmayan atmosfer, yorum, sıfat veya duygu ekleme.',
           'Başlığı ayrıca bağımsız bir editör gibi yeniden değerlendir. Türkiye’de bilinmeyen etkinlik veya kurum adını açıklamasız biçimde başlığın merkezinde bırakma. Gerekirse özel adı gövdeye indir ve başlıkta etkinliğin ne olduğunu açık Türkçeyle söyle.',
@@ -442,8 +445,9 @@ export async function translateArticle(article, { signal, completeJson = request
     throw new Error(`Editoryal doğrulama başarısız: ${final.issues.join(' ') || 'gerekçe belirtilmedi'}`);
   }
 
-  // Son Türkçe editör geçişi kaliteyi artırır; ancak bu isteğin başarısız olması
-  // çalışan sistemi durdurmaz. Daha önce doğrulanmış taslak güvenli fallback'tir.
+  // Son Türkçe editör geçişi yayın hattının ana doğallık adayıdır.
+  // Akıcı sürümde güvenlik sorunu görülürse eski metne hemen dönmek yerine
+  // aynı akıcı sürüm üzerinde olgu/biçim onarımı yapılır.
   const prePolish = final;
   const prePolishIssues = editorialIssues(prePolish.draft, factSheet);
   const prePolishFluency = editorialFluencyProfile(prePolish.draft);
@@ -451,47 +455,145 @@ export async function translateArticle(article, { signal, completeJson = request
     const polished = await polishTurkishNews(article, factSheet, prePolish.draft, { signal, completeJson });
     if (polished.accepted) {
       assertUsableEditorialOutput(polished.draft);
-      const polishedIssues = editorialIssues(polished.draft, factSheet);
-      const headlineRegression = headlineQualityRegression(prePolish.draft.title, polished.draft.title);
-      const factRegression = numericFactRegression(prePolish.draft, polished.draft);
-      const namingRegression = nativeNameRegression(prePolish.draft, polished.draft, factSheet.nativeNames);
-      const polishedFluency = editorialFluencyProfile(polished.draft);
-      const changed = editorialDraftChanged(prePolish.draft, polished.draft);
-      const mechanicallySafe = polishedIssues.length <= prePolishIssues.length && !headlineRegression && !namingRegression && !factRegression;
-      let naturalnessDecision = { preferred: changed ? 'A' : 'B', reason: changed ? 'hakem çalıştırılmadı' : 'metin değişmedi' };
-      if (mechanicallySafe && changed && polishedFluency.score >= prePolishFluency.score - 3) {
+      let candidateDraft = polished.draft;
+
+      // Gövde ve spot daha iyi ise yalnız zayıflayan başlık yüzünden tüm yeniden yazımı kaybetme.
+      if (headlineQualityRegression(prePolish.draft.title, candidateDraft.title)) {
+        candidateDraft = { ...candidateDraft, title: prePolish.draft.title };
+        log('info', 'Türkçe son okumada gövde korundu; gerileyen başlık önceki sürümden alındı', {
+          source: article.source.id,
+          restoredTitle: prePolish.draft.title
+        });
+      }
+
+      let candidateIssues = editorialIssues(candidateDraft, factSheet);
+      let factRegression = numericFactRegression(prePolish.draft, candidateDraft);
+      let namingRegression = nativeNameRegression(prePolish.draft, candidateDraft, factSheet.nativeNames);
+      const addedIssues = candidateIssues.filter((issue) => !prePolishIssues.includes(issue));
+      const repairFeedback = [
+        factRegression ? 'Akıcı sürümde ilk taslaktaki doğrulanmış sayı veya tarih bilgilerinden biri kaybolmuş. Eski metnin cümle yapısına dönmeden eksik doğrulanmış bilgiyi akıcı sürüme geri ekle.' : '',
+        namingRegression ? 'Akıcı sürümde doğrulanmış özgün ad veya adlandırma bilgisi kaybolmuş. Akıcı Türkçeyi koruyarak doğru adı geri getir.' : '',
+        ...addedIssues,
+        'Bu onarımda akıcı sürümün Türkçe cümle yapısını ve haber ritmini koru; eski taslağın çeviri kokan söz dizimine dönme. Yalnız doğrulanmış olguları ve gerekli biçim kurallarını onar.'
+      ].filter(Boolean);
+
+      if (factRegression || namingRegression || addedIssues.length) {
+        log('info', 'Akıcı Türkçe sürüm güvenlik/biçim onarımına alındı', {
+          source: article.source.id,
+          factRegression,
+          namingRegression,
+          addedIssues
+        });
         try {
-          naturalnessDecision = await chooseMoreNaturalDraft(article, factSheet, prePolish.draft, polished.draft, { signal, completeJson });
-        } catch (judgeError) {
-          naturalnessDecision = { preferred: 'A', reason: `Akıcılık hakemi tamamlanamadı: ${String(judgeError?.message ?? judgeError).slice(0, 180)}` };
+          const repaired = await writeTurkishNews(article, factSheet, {
+            draft: candidateDraft,
+            feedback: repairFeedback,
+            signal,
+            completeJson
+          });
+          if (repaired.accepted) {
+            assertUsableEditorialOutput(repaired.draft);
+            candidateDraft = repaired.draft;
+            candidateIssues = editorialIssues(candidateDraft, factSheet);
+            factRegression = numericFactRegression(prePolish.draft, candidateDraft);
+            namingRegression = nativeNameRegression(prePolish.draft, candidateDraft, factSheet.nativeNames);
+          }
+        } catch (repairError) {
+          log('warn', 'Akıcı Türkçe sürüm onarımı tamamlanamadı', {
+            source: article.source.id,
+            error: String(repairError?.message ?? repairError).slice(0, 400)
+          });
         }
       }
-      const acceptPolish = mechanicallySafe && (!changed || naturalnessDecision.preferred === 'B');
+
+      const changed = editorialDraftChanged(prePolish.draft, candidateDraft);
+      const candidateFluency = editorialFluencyProfile(candidateDraft);
+      const hardSafe = !factRegression && !namingRegression;
+      let naturalnessDecision = {
+        preferred: changed ? 'A' : 'B',
+        reason: changed ? 'hakem çalıştırılmadı' : 'metin değişmedi'
+      };
+
+      if (hardSafe && changed) {
+        try {
+          naturalnessDecision = await chooseMoreNaturalDraft(
+            article,
+            factSheet,
+            prePolish.draft,
+            candidateDraft,
+            { signal, completeJson }
+          );
+        } catch (judgeError) {
+          naturalnessDecision = {
+            preferred: 'A',
+            reason: `Akıcılık hakemi tamamlanamadı: ${String(judgeError?.message ?? judgeError).slice(0, 180)}`
+          };
+        }
+      }
+
+      // Hakem yalnız olgu/kapsam gerekçesiyle A'yı seçerse B'yi çöpe atmak yerine
+      // B üzerinde bir kez daha hedefli onarım yap ve yeniden değerlendir.
+      if (hardSafe && changed && naturalnessDecision.preferred === 'A') {
+        try {
+          const judgeRepair = await writeTurkishNews(article, factSheet, {
+            draft: candidateDraft,
+            feedback: [
+              `Akıcılık hakemi şu nedenle eski sürümü tercih etti: ${naturalnessDecision.reason}`,
+              'Eski sürümün yabancı dilden çevrilmiş hissi veren cümle yapısına dönme. Mevcut akıcı sürümü koru; hakemin işaret ettiği doğrulanmış olgu, kapsam veya ana fikir eksikliğini olgu fişinden tamamla. Yeni bilgi ekleme.'
+            ],
+            signal,
+            completeJson
+          });
+          if (judgeRepair.accepted) {
+            assertUsableEditorialOutput(judgeRepair.draft);
+            const repairedFactRegression = numericFactRegression(prePolish.draft, judgeRepair.draft);
+            const repairedNamingRegression = nativeNameRegression(prePolish.draft, judgeRepair.draft, factSheet.nativeNames);
+            if (!repairedFactRegression && !repairedNamingRegression) {
+              const repairedDecision = await chooseMoreNaturalDraft(
+                article,
+                factSheet,
+                prePolish.draft,
+                judgeRepair.draft,
+                { signal, completeJson }
+              );
+              if (repairedDecision.preferred === 'B') {
+                candidateDraft = judgeRepair.draft;
+                candidateIssues = editorialIssues(candidateDraft, factSheet);
+                naturalnessDecision = repairedDecision;
+              }
+            }
+          }
+        } catch (repairError) {
+          log('warn', 'Akıcılık hakemi sonrası hedefli onarım tamamlanamadı', {
+            source: article.source.id,
+            error: String(repairError?.message ?? repairError).slice(0, 400)
+          });
+        }
+      }
+
+      const acceptPolish = hardSafe && (!changed || naturalnessDecision.preferred === 'B');
       if (acceptPolish) {
-        final = polished;
-        mechanicalIssues = polishedIssues;
+        final = { ...polished, draft: candidateDraft };
+        mechanicalIssues = candidateIssues;
         log('info', 'Türkçe son okuma tamamlandı', {
           source: article.source.id,
           title: final.draft.title,
           beforeFluency: prePolishFluency,
-          afterFluency: polishedFluency,
+          afterFluency: editorialFluencyProfile(final.draft),
           naturalnessDecision,
           elapsedSeconds: elapsedSeconds(startedAt)
         });
       } else {
-        log('warn', headlineRegression
-          ? 'Türkçe son okuma başlık kalitesini düşürdü; önceki taslak korundu'
-          : 'Türkçe son okuma mekanik kaliteyi düşürdü; önceki taslak korundu', {
+        log('warn', 'Türkçe son okuma güvenlik veya editör hakemi nedeniyle önceki taslağa döndü', {
           source: article.source.id,
           beforeIssues: prePolishIssues,
-          afterIssues: polishedIssues,
+          afterIssues: candidateIssues,
           beforeTitle: prePolish.draft.title,
-          afterTitle: polished.draft.title,
-          headlineRegression,
+          afterTitle: candidateDraft.title,
           namingRegression,
           factRegression,
           beforeFluency: prePolishFluency,
-          afterFluency: polishedFluency,
+          afterFluency: candidateFluency,
           naturalnessDecision
         });
       }
@@ -593,5 +695,5 @@ export async function translateArticle(article, { signal, completeJson = request
   });
   // v16: kaynak başlığının bilgi hiyerarşisini referans alır; ana fikir daraltmasını
   // ve yeni çeviri kokusu kalıplarını son edit kapısında cezalandırır.
-  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v16-main-angle-gate' };
+  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v17-natural-rewrite-repair' };
 }
