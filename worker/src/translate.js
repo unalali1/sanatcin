@@ -227,16 +227,17 @@ async function chooseMoreNaturalDraft(article, factSheet, before, after, { signa
       : AbortSignal.timeout(config.editorialJudgeTimeoutMs);
     try {
       const result = await completeJson({
-        model: config.openaiSelectionModel,
+        model: config.openaiEditorModel,
         signal: judgeSignal,
         input: [
           {
             role: 'system',
             content: [
               'Türkiye Türkçesiyle çalışan tarafsız bir haber dili hakemisin.',
-              'İki metin aynı doğrulanmış olgulara dayanıyor. Dil doğallığı, açıklık, haber ritmi, somut fiil kullanımı ve çeviri kokusunun yokluğunun yanında başlık ve girişin haberin ANA FİKRİNİ doğru temsil edip etmediğini de karşılaştır.',
-              'Bilgi ekleyen, sayı/ad değiştiren, daha muğlaklaşan veya sırf farklı görünmek için cümleleri bozan sürümü seçme. A sürümündeki önemli tarih, sayı, kişi ve ayırt edici olgu B sürümünde kayboluyorsa A sürümünü koru.',
-              'B sürümünü yalnız açıkça daha iyi ise seç; eşitlikte veya kuşkuda A sürümünü koru. Başlık ana gelişmeyi bırakıp tek bir sayıya, yan ürüne, yan etkinliğe, kurumsal duyuruya veya renkli ayrıntıya daralıyorsa bunu gerileme say.',
+              'İki metin aynı doğrulanmış olgulara dayanıyor. A ilk Türkçe taslak, B ise çeviri kokusunu gidermek için kıdemli editör tarafından yeniden yazılmış sürümdür. Dil doğallığı, açıklık, haber ritmi, somut fiil kullanımı, Türkçe söz dizimi ve çeviri kokusunun yokluğunun yanında başlık ve girişin haberin ANA FİKRİNİ doğru temsil edip etmediğini karşılaştır.',
+              'Olgu fişi doğruluk sınırıdır. B kaynakta olmayan bilgi ekliyor, doğrulanmış kişi/sayı/tarihi değiştiriyor veya ana haber gelişmesini bozuyorsa A’yı seç. Buna karşılık A’daki her tali ayrıntının B’de aynı cümleyle veya aynı uzunlukta bulunmasını şart koşma; doğru özetleme ve sadeleştirme bilgi kaybı değildir.',
+              'B doğruluk sınırını koruyor ve Türkiye Türkçesinde belirgin biçimde daha doğal okunuyorsa B’yi tercih et. Yalnız “A daha ayrıntılı” gerekçesi, B ana olguları ve haber açısını koruyorsa A’ya dönmek için yeterli değildir. Eşitlikte A korunabilir; ancak B’nin cümle yapısı ve haber akışı açıkça daha doğalsa bunu önceliklendir.',
+              'Özellikle şu soruyu bağımsız değerlendir: Okur B metninin yabancı dilden çevrildiğini cümle yapısından hissediyor mu? Hissedilmiyorsa ve olgusal güvenlik korunuyorsa B lehine değerlendir.',
               'İngilizce kurum adını, mekanik malzeme tamlamasını, bilgi vermeyen terim açıklamasını ve nesneye araştırmacı eylemi yükleyen başlığı kalite kusuru say. Yeni olgu eklemeyen doğal Türkçe anlatımı tercih et.',
               'Çin National Day tatili için Milli Bayram, Mid-Autumn Festival için Güz Ortası Bayramı kullan. Girişte kaynakla doğrulanmış gelişmeyi, yeri ve haber değerini somut bir fiille anlat; protokol listesini ve uzun kurum adlarını sonraya bırak. Soyut önem cümlesi yerine kaynaktaki eser, üretim veya olay ayrıntısını ver.',
               'Yalnız geçerli JSON ver.'
@@ -246,6 +247,7 @@ async function chooseMoreNaturalDraft(article, factSheet, before, after, { signa
             role: 'user',
             content: [
               `Haber açısı: ${factSheet.angle}`,
+              `Doğrulanmış olgu fişi:\n${JSON.stringify(factSheet)}`,
               `A sürümü:\n${JSON.stringify({ title: before.title, excerpt: before.excerpt, paragraphs: before.paragraphs })}`,
               `B sürümü:\n${JSON.stringify({ title: after.title, excerpt: after.excerpt, paragraphs: after.paragraphs })}`,
               'JSON şeması: {"preferred":"A|B","reason":"kısa gerekçe","aScore":0,"bScore":0}'
@@ -334,6 +336,7 @@ async function polishTurkishNews(article, factSheet, draft, { signal, completeJs
           'Sen kaynak dilden çeviri yapan biri değil, Türkçe bir haber merkezinin son okuma ve başlık editörüsün.',
           "Metnin üretim sürecini anlatan meta-dil kullanma; 'Kaynak metne göre', 'Kaynak, ...' ve 'metinde belirtildi' gibi ifadeler yazma. Bilgi atfedilecekse gerçek kaynak, kişi veya kurum adını kullan.",
           'Görevin verilen taslağı yeniden çevirmek değil; metindeki çeviri kokusunu, yabancı sözdizimini, gereksiz isimleştirmeleri, mekanik cümle ritmini ve muğlak başlığı temizlemektir. Taslağın bilgi sırasına da bağlı değilsin: olguları değiştirmeden, Türk okur için daha güçlü bir haber akışı gerekiyorsa paragraf ve vurgu sırasını yeniden kur.',
+          'Bu metni yayımlanmadan önce bir kez daha gerçekten YENİDEN YAZ. Kaynak dilin cümle sırasını, kelime dizimini ve paragraf örgüsünü unut; aynı doğrulanmış olguları Türkiye’de bir kültür-sanat editörü haberi ilk kez Türkçe kaleme alıyormuş gibi kur. Yüzeysel eş anlamlı sözcük değişiklikleri yapma. Anlamı doğru olsa bile bir Türk gazetecinin doğal biçimde kurmayacağı her cümleyi baştan kur.',
           'Metin, ilk kez Türkçe yazılmış bir kültür-sanat haberi gibi okunmalı. Fiilleri doğal kullan; uzun tamlamaları böl; özne-yüklem ilişkisini Türkçe haber diline göre yeniden kur. Anlamı doğru fakat Türkçesi mekanik bir cümleyi yüzeysel sözcük değişiklikleriyle bırakma; gerekirse baştan yaz.',
           'Başlık, spot ve giriş aynı bilgiyi tekrar etmesin. Paragraflar arasında doğal akış kur. Kültür-sanat haberinde kaynakta bulunan somut mekân, eser, gelenek, malzeme veya performans ayrıntısını uygun olduğunda öne çıkar; fakat kaynakta olmayan atmosfer, yorum, sıfat veya duygu ekleme.',
           'Başlığı ayrıca bağımsız bir editör gibi yeniden değerlendir. Türkiye’de bilinmeyen etkinlik veya kurum adını açıklamasız biçimde başlığın merkezinde bırakma. Gerekirse özel adı gövdeye indir ve başlıkta etkinliğin ne olduğunu açık Türkçeyle söyle.',
