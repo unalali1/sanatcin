@@ -695,5 +695,5 @@ export async function translateArticle(article, { signal, completeJson = request
   });
   // v16: kaynak başlığının bilgi hiyerarşisini referans alır; ana fikir daraltmasını
   // ve yeni çeviri kokusu kalıplarını son edit kapısında cezalandırır.
-  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v16-main-angle-gate' };
+  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v17-natural-rewrite-repair' };
 }
