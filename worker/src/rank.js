@@ -191,6 +191,10 @@ export function applyAiScores(candidates, items, now = new Date(), sourceHealth 
     const realPersonCentered = ai.realPersonCentered === true;
     const health = sourceHealth.get(candidate.source?.id) ?? { blocked: false, penalty: 0 };
     const suggestedCategory = allowedCategories.has(ai.category) ? ai.category : null;
+    const preliminaryCategory = candidate.preliminaryCategory ?? candidate.category;
+    const preliminaryScore = Number.isFinite(Number(candidate.preliminaryScore))
+      ? Number(candidate.preliminaryScore)
+      : (Number(candidate.score) || 0);
     const baseEligible = ai.eligible === true && Boolean(suggestedCategory);
     const freshness = freshnessPoints(candidate.publishedAt, now);
     const fit6ExceptionApplied = allowFit6Exception(editorialFit, storyStrength, freshness, institutionalEvent, commercialDominant);
@@ -246,6 +250,9 @@ export function applyAiScores(candidates, items, now = new Date(), sourceHealth 
       ...candidate,
       eligible,
       category,
+      suggestedCategory,
+      preliminaryCategory,
+      preliminaryScore,
       rescueCategory: minimumTargetRescue ? suggestedCategory : null,
       minimumTargetRescue,
       interest,
@@ -355,6 +362,57 @@ export function selectCinemaRescueCandidates(shortlist, ranked, limit = 8) {
   ).slice(0, Math.max(0, limit));
 }
 
+export function selectCategoryRescueCandidates(ranked, sparseCategories, limit = 16, perCategoryLimit = 8) {
+  const categories = sparseCategories instanceof Set ? [...sparseCategories] : [...(sparseCategories ?? [])];
+  const pools = categories.map((category) => {
+    const pool = ranked
+      .filter((candidate) => candidate.eligible === false)
+      .filter((candidate) => !candidate.sourceHealthBlocked)
+      .filter((candidate) => !candidate.institutionalEvent && !candidate.commercialDominant && !candidate.recentTopicRepeat)
+      .filter((candidate) => candidate.suggestedCategory === category || candidate.preliminaryCategory === category)
+      .filter((candidate) => (candidate.editorialFit ?? 0) >= 4
+        || (candidate.categoryFit ?? 0) >= 5
+        || (candidate.preliminaryScore ?? 0) >= 60)
+      .sort((left, right) => (right.preliminaryScore ?? 0) - (left.preliminaryScore ?? 0));
+    return [category, diversifyBySource(pool).slice(0, Math.max(1, perCategoryLimit))];
+  });
+
+  const selected = [];
+  const used = new Set();
+  for (let slot = 0; slot < Math.max(1, perCategoryLimit) && selected.length < limit; slot += 1) {
+    for (const [category, pool] of pools) {
+      const candidate = pool[slot];
+      if (!candidate || used.has(String(candidate.id))) continue;
+      selected.push({ ...candidate, rescueTargetCategory: category });
+      used.add(String(candidate.id));
+      if (selected.length >= limit) break;
+    }
+  }
+  return selected;
+}
+
+export function aiSelectionDiagnostics(ranked = []) {
+  return Object.fromEntries([...allowedCategories].map((category) => {
+    const rows = ranked.filter((candidate) => (candidate.preliminaryCategory ?? candidate.category) === category);
+    const rejected = rows.filter((candidate) => !candidate.eligible);
+    return [category, {
+      evaluated: rows.length,
+      eligible: rows.filter((candidate) => candidate.eligible).length,
+      categoryRescued: rows.filter((candidate) => candidate.categoryRescued).length,
+      rejected: rejected.length,
+      reasons: {
+        aiIneligible: rejected.filter((candidate) => candidate.suggestedCategory == null || candidate.editorialFit < config.minEditorialFit).length,
+        editorialFitBelowMinimum: rejected.filter((candidate) => (candidate.editorialFit ?? 0) < config.minEditorialFit).length,
+        categoryFitBelowSeven: rejected.filter((candidate) => (candidate.categoryFit ?? 0) < 7).length,
+        institutional: rejected.filter((candidate) => candidate.institutionalEvent).length,
+        commercial: rejected.filter((candidate) => candidate.commercialDominant).length,
+        recentRepeat: rejected.filter((candidate) => candidate.recentTopicRepeat).length,
+        sourceBlocked: rejected.filter((candidate) => candidate.sourceHealthBlocked).length
+      }
+    }];
+  }));
+}
+
 function mergeRankedCandidates(primary, replacements) {
   const replacementById = new Map(replacements.map((candidate) => [String(candidate.id), candidate]));
   const merged = primary.map((candidate) => replacementById.get(String(candidate.id)) ?? candidate);
@@ -455,7 +513,7 @@ export function diversifyByTopic(candidates) {
   return selected;
 }
 
-async function rerankBatch(batch, signal, recentContext = [], { cinemaRescue = false } = {}) {
+async function rerankBatch(batch, signal, recentContext = [], { cinemaRescue = false, categoryRescue = false } = {}) {
   const history = recentContext.length
     ? `\n\nSon ${config.recentTopicLookbackDays} günde SanatÇin'de yayımlanan otomatik haberler. Bunları yalnız konu tekrarı denetimi için kullan:\n${JSON.stringify(recentContext)}`
     : '';
@@ -475,6 +533,9 @@ async function rerankBatch(batch, signal, recentContext = [], { cinemaRescue = f
           'Kategori kotasını doldurmak uğruna zayıf veya yanlış kategorilenmiş bir adayı uygun sayma. Haber SanatÇin için iyi olsa bile önerdiğin kategoriye uyumu 7/10 altında ise categoryFit alanını düşük ver ve eligible=false bırak; kategori boş kalması yanlış sınıflandırmadan iyidir. Ancak orta düzey ama gerçek kültür-sanat haberlerini yalnız çok çarpıcı olmadıkları için reddetme.',
           cinemaRescue
             ? 'Bu ikinci değerlendirme yalnız sinema/film-TV kapsamı için yapılıyor. Film, dizi, belgesel, animasyon, yönetmen/oyuncu yaratıcı çalışması, festival, gösterim, ödül, gişe veya izleyici verisi somut bir yapım/hikâye gelişmesine bağlıysa sinema kategorisini gereksiz yere reddetme. Salt ünlü magazini, marka PR’ı veya yalnız ticari sektör verisi yine uygun değildir.'
+            : '',
+          categoryRescue
+            ? 'Bu bir kategori kurtarma turudur. Aday ilk kısa başlık/özet değerlendirmesinde elendi; body_excerpt varsa haber gövdesinden alınmış doğrulanmış metindir. Kalite eşiğini düşürme, ancak kısa özetin gizlediği gerçek kültür-sanat, sinema, moda-tasarım veya şehir kültürü değerini body_excerpt açıkça gösteriyorsa adayı yeniden değerlendir. Açık PR/reklam, rutin kurumsal etkinlik, ticari-ekonomi ağırlığı ve yakın konu tekrarı yine reddedilmelidir.'
             : ''
         ].filter(Boolean).join(' ')
       },
@@ -594,18 +655,19 @@ export async function rerankInputsResilient(input, {
   return items;
 }
 
-function rerankInput(candidate) {
+function rerankInput(candidate, { includeBody = false } = {}) {
   return {
     id: candidate.id,
     title: candidate.title,
     summary: candidate.summary?.slice(0, 450) ?? '',
     source: candidate.source.name,
-    preliminary_category: candidate.category,
-    published_at: candidate.publishedAt
+    preliminary_category: candidate.preliminaryCategory ?? candidate.category,
+    published_at: candidate.publishedAt,
+    ...(includeBody && candidate.rankingText ? { body_excerpt: candidate.rankingText.slice(0, 1500) } : {})
   };
 }
 
-export async function rerankCandidates(candidates, { signal, prepareCandidates } = {}) {
+export async function rerankCandidates(candidates, { signal, prepareCandidates, prepareRescueCandidates } = {}) {
   if (!candidates.length) return [];
   const [recentContext, sourceHealth] = await Promise.all([
     loadRecentEditorialContext(signal),
@@ -664,7 +726,7 @@ export async function rerankCandidates(candidates, { signal, prepareCandidates }
     }
   }
 
-  if (config.rescueAiCandidates <= 0 || shortlist.length >= eligibleCandidates.length) return ranked;
+  if (config.rescueAiCandidates <= 0) return ranked;
   const counts = Object.fromEntries([...allowedCategories].map((category) => [
     category,
     ranked.filter((candidate) => candidate.eligible && candidate.category === category).length
@@ -676,33 +738,60 @@ export async function rerankCandidates(candidates, { signal, prepareCandidates }
   );
   if (!sparseCategories.size) return ranked;
 
-  const used = new Set(shortlist.map((candidate) => candidate.id));
-  const remainder = eligibleCandidates.filter((candidate) => !used.has(candidate.id) && candidate.eligible !== false);
+  const nearMisses = selectCategoryRescueCandidates(
+    ranked,
+    sparseCategories,
+    config.rescueAiCandidates,
+    8
+  );
+  const used = new Set(shortlist.map((candidate) => String(candidate.id)));
+  const remainder = eligibleCandidates
+    .filter((candidate) => !used.has(String(candidate.id)) && candidate.eligible !== false);
   const preferred = remainder
     .filter((candidate) => sparseCategories.has(candidate.category))
     .sort((left, right) => right.score - left.score);
   const backup = remainder
     .filter((candidate) => !sparseCategories.has(candidate.category))
     .sort((left, right) => right.score - left.score);
-  const rescuePool = [...preferred, ...backup].slice(0, config.rescueAiCandidates);
+  const rescueIds = new Set(nearMisses.map((candidate) => String(candidate.id)));
+  let rescuePool = [
+    ...nearMisses,
+    ...preferred.filter((candidate) => !rescueIds.has(String(candidate.id))),
+    ...backup.filter((candidate) => !rescueIds.has(String(candidate.id)))
+  ].slice(0, config.rescueAiCandidates);
+  if (!rescuePool.length) return ranked;
+
+  if (prepareRescueCandidates) {
+    rescuePool = await prepareRescueCandidates(rescuePool);
+  }
   if (!rescuePool.length) return ranked;
 
   log('info', 'Kategori kurtarma AI turu başladı', {
     sparseCategories: [...sparseCategories],
-    candidates: rescuePool.length
+    candidates: rescuePool.length,
+    fullTextCandidates: rescuePool.filter((candidate) => candidate.rankingText).length,
+    previouslyEvaluatedNearMisses: nearMisses.length
   });
   try {
-    const rescueItems = await rerankInputsResilient(rescuePool.map(rerankInput), { signal, rerank: contextualRerank });
+    const categoryRerank = (batch, batchSignal) => rerankBatch(batch, batchSignal, recentContext, { categoryRescue: true });
+    const rescueItems = await rerankInputsResilient(
+      rescuePool.map((candidate) => rerankInput(candidate, { includeBody: true })),
+      { signal, rerank: categoryRerank }
+    );
     const rescued = applyAiScores(rescuePool, rescueItems, new Date(), sourceHealth, recentContext);
+    const recovered = rescued
+      .filter((candidate) => candidate.eligible && sparseCategories.has(candidate.category))
+      .map((candidate) => ({ ...candidate, categoryRescued: true }));
+    ranked = mergeRankedCandidates(ranked, recovered);
     log('info', 'Kategori kurtarma AI turu tamamlandı', {
       evaluated: rescued.length,
-      eligible: rescued.filter((candidate) => candidate.eligible).length,
+      recovered: recovered.length,
       queues: Object.fromEntries([...allowedCategories].map((category) => [
         category,
-        rescued.filter((candidate) => candidate.eligible && candidate.category === category).length
+        ranked.filter((candidate) => candidate.eligible && candidate.category === category).length
       ]))
     });
-    return [...ranked, ...rescued];
+    return ranked;
   } catch (error) {
     if (signal?.aborted) throw error;
     log('warn', 'Kategori kurtarma AI turu başarısız; başarılı ilk AI sıralaması korunacak', {
