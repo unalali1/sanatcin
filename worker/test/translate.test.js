@@ -65,10 +65,11 @@ test('olgu çıkarımı, haber yazımı ve Türkçe son okuma ardışık çalı�
   assert.match(calls[1].input[0].content, /Bir Türk gazeteci bu cümleyi gerçekten böyle kurar mı/);
   assert.match(calls[2].input[0].content, /Taslağın bilgi sırasına da bağlı değilsin/);
   assert.match(calls[2].input[0].content, /Cümlenin yabancı dilden çevrildiği hissediliyor mu/);
+  assert.match(calls[2].input[0].content, /gerçekten YENİDEN YAZ/);
   assert.match(calls[3].input[0].content, /en az üç farklı başlık açısı üret/);
   assert.doesNotMatch(calls[1].input[1].content, /Kaynak metin:/);
   assert.match(calls[1].input[1].content, /leadFacts/);
-  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v16-main-angle-gate');
+  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v17-natural-rewrite-repair');
   assert.equal(result.factSheet.facts.length, 4);
   assert.match(result.title, /Şanghay/);
 });
@@ -91,7 +92,7 @@ test('dil veya biçim notu adayı elemek yerine hedefli düzeltme ve son okuma b
   assert.ok(result.excerpt.length >= 105);
 });
 
-test('değişen son okuma yalnız bağımsız akıcılık hakemi seçerse kabul edilir', async () => {
+test('değişen son okuma güçlü editör hakemi daha doğal bulursa ana sürüm olur', async () => {
   const calls = [];
   const first = editorialResult();
   const polished = { ...editorialResult(), title: 'Şanghay’daki sergi çağdaş zanaata yeni bir yorum getiriyor' };
@@ -100,16 +101,50 @@ test('değişen son okuma yalnız bağımsız akıcılık hakemi seçerse kabul 
     if (calls.length === 1) return { factSheet };
     if (calls.length === 2) return first;
     if (calls.length === 3) return polished;
-    return { preferred: 'A', reason: 'İlk başlık daha somut ve haber ritmi daha güçlü.', aScore: 91, bScore: 84 };
+    if (calls.length === 4) return { preferred: 'B', reason: 'B, aynı olguları daha doğal Türkiye Türkçesiyle aktarıyor.', aScore: 84, bScore: 94 };
+    return { title: polished.title, reason: 'Mevcut başlık korunmalı.' };
   };
 
   const result = await translateArticle(article, { completeJson });
 
   assert.equal(calls.length, 5);
-  assert.equal(calls[3].model, config.openaiSelectionModel);
-  assert.match(calls[3].input[0].content, /tarafsız bir haber dili hakemisin/);
-  assert.equal(calls[4].model, config.openaiEditorModel);
-  assert.equal(result.title, first.title);
+  assert.equal(calls[3].model, config.openaiEditorModel);
+  assert.match(calls[3].input[0].content, /B ise çeviri kokusunu gidermek/);
+  assert.match(calls[3].input[1].content, /Doğrulanmış olgu fişi/);
+  assert.equal(result.title, polished.title);
+});
+
+test('hakem eski sürümü seçerse akıcı sürüm geri atılmadan onarılıp yeniden değerlendirilir', async () => {
+  const calls = [];
+  const first = editorialResult();
+  const polished = { ...editorialResult(), title: 'Şanghay’daki sergi çağdaş zanaatı bugünün diliyle yorumluyor' };
+  const repaired = {
+    ...polished,
+    paragraphs: [
+      polished.paragraphs[0],
+      polished.paragraphs[1],
+      polished.paragraphs[2],
+      'Sergiye eşlik eden programda sanatçı konuşmaları ve atölyeler bulunuyor. Toplam 42 eserin yer aldığı sergi 20 Ekim’e kadar açık kalacak.'
+    ]
+  };
+  const completeJson = async (request) => {
+    calls.push(request);
+    if (calls.length === 1) return { factSheet };
+    if (calls.length === 2) return first;
+    if (calls.length === 3) return polished;
+    if (calls.length === 4) return { preferred: 'A', reason: 'B sürümünde program ayrıntısı daha zayıf kalmış.', aScore: 90, bScore: 86 };
+    if (calls.length === 5) return repaired;
+    if (calls.length === 6) return { preferred: 'B', reason: 'Eksik ayrıntı tamamlandı; B artık daha doğal ve aynı ölçüde doğru.', aScore: 88, bScore: 95 };
+    return { title: repaired.title, reason: 'Başlık doğal ve yeterince somut.' };
+  };
+
+  const result = await translateArticle(article, { completeJson });
+
+  assert.equal(calls.length, 7);
+  assert.match(calls[4].input[1].content, /Eski sürümün yabancı dilden çevrilmiş hissi veren cümle yapısına dönme/);
+  assert.equal(calls[5].model, config.openaiEditorModel);
+  assert.equal(result.title, repaired.title);
+  assert.match(result.text, /42 eserin/);
 });
 
 test('düşük Türkçe doğallık puanı yayını kesmeden hedefli düzeltme başlatır', async () => {
@@ -153,7 +188,7 @@ test('başlık mikro-editörü ancak bağımsız hakem açıkça daha iyi bulurs
   const result = await translateArticle(article, { completeJson });
 
   assert.equal(calls.length, 5);
-  assert.equal(calls[4].model, config.openaiSelectionModel);
+  assert.equal(calls[4].model, config.openaiEditorModel);
   assert.equal(result.title, original.title);
 });
 
