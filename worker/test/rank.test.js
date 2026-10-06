@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyAiScores, buildBalancedShortlist, diversifyBySource, diversifyByTopic, isNearTopicRepeat, looksLikeCinemaCandidate, rerankInputsResilient, selectCinemaRescueCandidates, sourceCrowdingPenalty } from '../src/rank.js';
+import { aiSelectionDiagnostics, applyAiScores, buildBalancedShortlist, diversifyBySource, diversifyByTopic, isNearTopicRepeat, looksLikeCinemaCandidate, rerankInputsResilient, selectCategoryRescueCandidates, selectCinemaRescueCandidates, sourceCrowdingPenalty } from '../src/rank.js';
 
 const silentLogger = () => {};
 
@@ -230,3 +230,57 @@ test('yakın eşikteki güvenli kültür haberi yalnız minimum hedef rezervine 
   assert.ok(ranked.rescueScore >= 50);
 });
 
+
+
+test('seyrek kategori ilk AI turunda tamamen elense bile yakın adayları rescue havuzuna alır', () => {
+  const source = (id) => ({ id, publisherGroup: id, quality: 9 });
+  const ranked = [
+    {
+      id: 'art-near-1', eligible: false, category: 'uygunsuz',
+      suggestedCategory: 'kultur-sanat', preliminaryCategory: 'kultur-sanat',
+      preliminaryScore: 86, editorialFit: 5, categoryFit: 6,
+      institutionalEvent: false, commercialDominant: false, recentTopicRepeat: false,
+      sourceHealthBlocked: false, source: source('a')
+    },
+    {
+      id: 'art-near-2', eligible: false, category: 'uygunsuz',
+      suggestedCategory: null, preliminaryCategory: 'kultur-sanat',
+      preliminaryScore: 79, editorialFit: 4, categoryFit: 5,
+      institutionalEvent: false, commercialDominant: false, recentTopicRepeat: false,
+      sourceHealthBlocked: false, source: source('b')
+    },
+    {
+      id: 'art-pr', eligible: false, category: 'uygunsuz',
+      suggestedCategory: 'kultur-sanat', preliminaryCategory: 'kultur-sanat',
+      preliminaryScore: 95, editorialFit: 6, categoryFit: 6,
+      institutionalEvent: true, commercialDominant: false, recentTopicRepeat: false,
+      sourceHealthBlocked: false, source: source('c')
+    }
+  ];
+
+  const rescued = selectCategoryRescueCandidates(ranked, new Set(['kultur-sanat']), 8, 8);
+  assert.deepEqual(rescued.map((item) => item.id), ['art-near-1', 'art-near-2']);
+  assert.ok(rescued.every((item) => item.rescueTargetCategory === 'kultur-sanat'));
+});
+
+test('AI seçim teşhisi kategori bazında red nedenlerini görünür kılar', () => {
+  const rows = [
+    {
+      id: 'a', eligible: false, category: 'uygunsuz', preliminaryCategory: 'kultur-sanat',
+      suggestedCategory: 'kultur-sanat', editorialFit: 5, categoryFit: 6,
+      institutionalEvent: false, commercialDominant: false, recentTopicRepeat: false, sourceHealthBlocked: false
+    },
+    {
+      id: 'b', eligible: true, category: 'kultur-sanat', preliminaryCategory: 'kultur-sanat',
+      suggestedCategory: 'kultur-sanat', editorialFit: 8, categoryFit: 9,
+      categoryRescued: true, institutionalEvent: false, commercialDominant: false,
+      recentTopicRepeat: false, sourceHealthBlocked: false
+    }
+  ];
+  const diagnostic = aiSelectionDiagnostics(rows);
+  assert.equal(diagnostic['kultur-sanat'].evaluated, 2);
+  assert.equal(diagnostic['kultur-sanat'].eligible, 1);
+  assert.equal(diagnostic['kultur-sanat'].categoryRescued, 1);
+  assert.equal(diagnostic['kultur-sanat'].reasons.editorialFitBelowMinimum, 1);
+  assert.equal(diagnostic['kultur-sanat'].reasons.categoryFitBelowSeven, 1);
+});
