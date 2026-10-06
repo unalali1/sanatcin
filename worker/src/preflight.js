@@ -3,7 +3,7 @@ import { classifyError } from './errors.js';
 
 // Bounded existing extraction requests run before ranking and are reused later.
 export async function preflightCandidates(candidates, selected, {
-  extract, signal, concurrency = 2, maxMs = 20_000
+  extract, signal, concurrency = 2, maxMs = 20_000, acceptArticle
 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), maxMs);
@@ -17,10 +17,19 @@ export async function preflightCandidates(candidates, selected, {
       checked += 1;
       try {
         const article = await extract(candidate, { signal: combined, allowBrowser: false });
+        if (acceptArticle && !acceptArticle(candidate, article)) {
+          rejected.set(candidate.url, {
+            candidate,
+            code: 'STALE_ARTICLE',
+            error: 'Makale doğrulanmış yayın tarihi nedeniyle kategori güncellik penceresinin dışında.'
+          });
+          return;
+        }
         articles.set(candidate.url, article);
       } catch (error) {
-        if (!combined.aborted && classifyError(error).code === 'SOURCE_EXTRACTION') {
-          rejected.set(candidate.url, { candidate, error: String(error.message) });
+        const classified = classifyError(error);
+        if (!combined.aborted && classified.code === 'SOURCE_EXTRACTION') {
+          rejected.set(candidate.url, { candidate, code: classified.code, error: String(error.message) });
         }
       }
     });
@@ -28,7 +37,12 @@ export async function preflightCandidates(candidates, selected, {
     return {
       candidates: candidates.filter((candidate) => !rejected.has(candidate.url)).map((candidate) => {
         const article = articles.get(candidate.url);
-        return article ? { ...candidate, summary: article.text.slice(0, 600), sourcePreflight: 'usable' } : candidate;
+        return article ? {
+          ...candidate,
+          summary: article.text.slice(0, 600),
+          rankingText: article.text.slice(0, 1500),
+          sourcePreflight: 'usable'
+        } : candidate;
       }),
       articles, rejected, checked
     };
