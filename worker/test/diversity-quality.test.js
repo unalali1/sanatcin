@@ -56,3 +56,23 @@ test('polishing keeps dates and counts even when moved between headline and body
   assert.equal(numericFactRegression(before, { title: 'Eserler iade edildi', text: '12 eser 23 Eylül 2026 tarihinde teslim edildi.' }), false);
   assert.equal(numericFactRegression(before, { title: 'Eserler iade edildi', text: '23 Eylül 2026 tarihinde teslim edildi.' }), true);
 });
+
+
+test('preflight doğrulanmış eski haberi AI sıralamasından önce ayırır', async () => {
+  const items = [
+    { id: 'fresh', url: 'fresh', category: 'kultur-sanat', source: {} },
+    { id: 'old', url: 'old', category: 'kultur-sanat', source: {} }
+  ];
+  const result = await preflightCandidates(items, items, {
+    extract: async (candidate) => ({
+      ...candidate,
+      text: 'Uzun ve doğrulanmış makale gövdesi '.repeat(80),
+      publishedAt: candidate.id === 'old' ? '2026-09-15T00:00:00Z' : '2026-10-06T00:00:00Z'
+    }),
+    acceptArticle: (_candidate, article) => article.publishedAt >= '2026-10-01T00:00:00Z'
+  });
+  assert.deepEqual(result.candidates.map((item) => item.id), ['fresh']);
+  assert.equal(result.rejected.get('old').code, 'STALE_ARTICLE');
+  assert.ok(result.candidates[0].rankingText.length > 600);
+  assert.ok(result.candidates[0].rankingText.length <= 1500);
+});
