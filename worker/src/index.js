@@ -8,7 +8,7 @@ import { discover, extractArticle, sourceHash } from './fetch.js';
 import { classifyError } from './errors.js';
 import { flushLogs, log, setLogContext } from './logger.js';
 import { isFreshForCategory, scoreCandidate } from './score.js';
-import { buildBalancedShortlist, diversifyBySource, diversifyByTopic, rerankCandidates } from './rank.js';
+import { aiSelectionDiagnostics, buildBalancedShortlist, diversifyBySource, diversifyByTopic, rerankCandidates } from './rank.js';
 import { createRunBudget } from './run-budget.js';
 import { attachSecondaryImage } from './secondary-image.js';
 import { CATEGORIES, SOURCES, SOURCE_SET_VERSION } from './sources.js';
@@ -156,32 +156,65 @@ async function run() {
   }
   const articleCache = new Map();
   let preparedCandidates = newCandidates;
-  const prepareCandidates = async (pool) => {
-    const preflight = await preflightCandidates(pool, buildBalancedShortlist(pool, 12), {
-      extract: extractArticle, signal: runController.signal,
-      concurrency: config.articleConcurrency, maxMs: Math.min(20_000, budget.remainingMs())
+  const preflightPool = async (pool, limit, phase) => {
+    const selected = phase === 'primary'
+      ? buildBalancedShortlist(pool, Math.min(limit, pool.length))
+      : pool.slice(0, Math.min(limit, pool.length));
+    const preflight = await preflightCandidates(pool, selected, {
+      extract: extractArticle,
+      signal: runController.signal,
+      concurrency: config.articleConcurrency,
+      maxMs: Math.min(20_000, budget.remainingMs()),
+      acceptArticle: (candidate, article) => isFreshForCategory({
+        ...candidate,
+        category: candidate.rescueTargetCategory
+          ?? candidate.suggestedCategory
+          ?? candidate.preliminaryCategory
+          ?? candidate.category,
+        publishedAt: article.publishedAt ?? candidate.publishedAt
+      })
     });
     for (const [url, article] of preflight.articles) articleCache.set(url, article);
-    for (const [url, { candidate }] of preflight.rejected) {
-      failedCandidateMap.set(url, {
-        url,
-        failedAt: new Date().toISOString(),
-        code: 'SOURCE_EXTRACTION',
-        policyVersion: config.failedCandidatePolicyVersion
-      });
+    const rejectedByReason = {};
+    for (const [url, { candidate, code = 'SOURCE_EXTRACTION' }] of preflight.rejected) {
+      increment(rejectedByReason, code);
       const stats = sourceStats[candidate.source.id];
-      stats.preflightRejected = (stats.preflightRejected ?? 0) + 1;
+      if (code === 'SOURCE_EXTRACTION') {
+        failedCandidateMap.set(url, {
+          url,
+          failedAt: new Date().toISOString(),
+          code,
+          policyVersion: config.failedCandidatePolicyVersion
+        });
+        stats.preflightRejected = (stats.preflightRejected ?? 0) + 1;
+      } else if (code === 'STALE_ARTICLE') {
+        stats.preflightStale = (stats.preflightStale ?? 0) + 1;
+      }
     }
-    preparedCandidates = preflight.candidates;
-    log('info', 'AI öncesi kaynak gövdesi kontrolü tamamlandı', {
-      checked: preflight.checked, reusableBodies: articleCache.size,
-      rejected: preflight.rejected.size, maxMs: 20_000
+    log('info', phase === 'primary'
+      ? 'AI öncesi kaynak gövdesi kontrolü tamamlandı'
+      : 'Kategori kurtarma kaynak gövdesi kontrolü tamamlandı', {
+      phase,
+      checked: preflight.checked,
+      reusableBodies: articleCache.size,
+      rejected: preflight.rejected.size,
+      rejectedByReason,
+      maxMs: 20_000
     });
+    return preflight.candidates;
+  };
+  const prepareCandidates = async (pool) => {
+    preparedCandidates = await preflightPool(pool, 12, 'primary');
     return preparedCandidates;
   };
+  const prepareRescueCandidates = async (pool) => preflightPool(pool, 8, 'category-rescue');
   let ranked;
   try {
-    ranked = await rerankCandidates(newCandidates, { signal: runController.signal, prepareCandidates });
+    ranked = await rerankCandidates(newCandidates, {
+      signal: runController.signal,
+      prepareCandidates,
+      prepareRescueCandidates
+    });
   } catch (error) {
     ranked = [...preparedCandidates].sort((left, right) => right.score - left.score);
     log('warn', 'Yapay zekâ puanlaması başarısız; deterministik puanlarla devam edilecek', {
@@ -190,6 +223,7 @@ async function run() {
       candidates: ranked.length
     });
   }
+  log('info', 'AI seçim teşhisi', { categories: aiSelectionDiagnostics(ranked) });
   const selectableCandidates = ranked
     .filter((item) => item.eligible !== false || item.minimumTargetRescue === true)
     .map((item) => item.minimumTargetRescue
