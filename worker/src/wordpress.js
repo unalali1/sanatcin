@@ -675,6 +675,7 @@ export async function publishArticle(article, preparedImage = undefined, { signa
       sanatcin_score: Math.round(article.score),
       sanatcin_original_title: article.originalTitle,
       sanatcin_editorial_mode: article.editorialMode,
+      sanatcin_social_instagram_text: article.instagramText ?? '',
       sanatcin_hero_eligible: image?.heroEligible ? 1 : 0
     }
   };
