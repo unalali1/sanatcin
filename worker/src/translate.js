@@ -496,7 +496,7 @@ async function buildInstagramCaption(article, factSheet, draft, { signal, comple
     }
     return text;
   } catch (error) {
-    log('warn', 'Instagram metni AI ile hazırlanamadı; güvenli yerel şablon kullanılacak', {
+    log('warn', 'Instagram metni AI ile hazırlanamadı; güvenli uzun yerel şablon kullanılacak', {
       source: article.source.id,
       error: String(error?.message ?? error).slice(0, 280)
     });
