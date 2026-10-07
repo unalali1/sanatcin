@@ -675,12 +675,36 @@ export async function publishArticle(article, preparedImage = undefined, { signa
       sanatcin_score: Math.round(article.score),
       sanatcin_original_title: article.originalTitle,
       sanatcin_editorial_mode: article.editorialMode,
-      sanatcin_social_instagram_text: article.instagramText ?? '',
       sanatcin_hero_eligible: image?.heroEligible ? 1 : 0
     }
   };
   payload.featured_media = featuredMedia;
   let post = await wp('/wp/v2/posts', { method: 'POST', body: JSON.stringify(payload), signal });
+
+  // Instagram metni yeni WordPress meta alanına best-effort olarak yazılır.
+  // Tema/plugin rollout penceresinde alan henüz kayıtlı değilse haber yayını durmaz;
+  // alan kullanılabilir olduğunda publish tetiklenmeden önce kaydedilir.
+  if (article.instagramText) {
+    try {
+      post = await wp(`/wp/v2/posts/${post.id}`, {
+        method: 'POST',
+        body: JSON.stringify({ meta: { sanatcin_social_instagram_text: article.instagramText } }),
+        signal
+      });
+      log('info', 'Instagram sosyal metni WordPress kaydına eklendi', {
+        source: article.source.id,
+        postId: post.id,
+        chars: article.instagramText.length
+      });
+    } catch (error) {
+      log('warn', 'Instagram sosyal metni WordPress meta alanına yazılamadı; haber normal biçimde yayımlanacak', {
+        source: article.source.id,
+        postId: post.id,
+        error: String(error?.message ?? error).slice(0, 300)
+      });
+    }
+  }
+
   if (config.publishStatus === 'publish') {
     post = await wp(`/wp/v2/posts/${post.id}`, { method: 'POST', body: JSON.stringify({ status: 'publish' }), signal });
   }
