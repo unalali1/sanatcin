@@ -55,7 +55,7 @@ test('olgu çıkarımı, haber yazımı ve Türkçe son okuma ardışık çalı�
 
   const result = await translateArticle(article, { completeJson });
 
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 5);
   assert.equal(calls[0].model, config.openaiFactModel);
   assert.equal(calls[1].model, config.openaiEditorModel);
   assert.equal(calls[2].model, config.openaiEditorModel);
@@ -69,7 +69,8 @@ test('olgu çıkarımı, haber yazımı ve Türkçe son okuma ardışık çalı�
   assert.match(calls[3].input[0].content, /en az üç farklı başlık açısı üret/);
   assert.doesNotMatch(calls[1].input[1].content, /Kaynak metin:/);
   assert.match(calls[1].input[1].content, /leadFacts/);
-  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v17-natural-rewrite-repair');
+  assert.equal(result.editorialMode, 'fact-ledger-turkish-newsroom-v18-instagram-editorial');
+  assert.match(result.instagramText, /Haberin tamamı SanatÇin’de\./);
   assert.equal(result.factSheet.facts.length, 4);
   assert.match(result.title, /Şanghay/);
 });
@@ -85,7 +86,7 @@ test('dil veya biçim notu adayı elemek yerine hedefli düzeltme ve son okuma b
 
   const result = await translateArticle(article, { completeJson });
 
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 6);
   assert.equal(calls[2].model, config.openaiEditorModel);
   assert.match(calls[2].input[1].content, /Spot 105-180 karakter aralığında değil/);
   assert.match(calls[3].input[0].content, /son okuma.*editörüsün/);
@@ -107,7 +108,7 @@ test('değişen son okuma güçlü editör hakemi daha doğal bulursa ana sürü
 
   const result = await translateArticle(article, { completeJson });
 
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 6);
   assert.equal(calls[3].model, config.openaiEditorModel);
   assert.match(calls[3].input[0].content, /B ise çeviri kokusunu gidermek/);
   assert.match(calls[3].input[1].content, /Doğrulanmış olgu fişi/);
@@ -140,7 +141,7 @@ test('hakem eski sürümü seçerse akıcı sürüm geri atılmadan onarılıp y
 
   const result = await translateArticle(article, { completeJson });
 
-  assert.equal(calls.length, 7);
+  assert.equal(calls.length, 8);
   assert.match(calls[4].input[1].content, /Eski sürümün yabancı dilden çevrilmiş hissi veren cümle yapısına dönme/);
   assert.equal(calls[5].model, config.openaiEditorModel);
   assert.equal(result.title, repaired.title);
@@ -167,7 +168,7 @@ test('düşük Türkçe doğallık puanı yayını kesmeden hedefli düzeltme ba
 
   await translateArticle(article, { completeJson });
 
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 6);
   assert.match(calls[2].input[1].content, /Türkçe doğallık puanı düşük/);
 });
 
@@ -187,7 +188,7 @@ test('başlık mikro-editörü ancak bağımsız hakem açıkça daha iyi bulurs
 
   const result = await translateArticle(article, { completeJson });
 
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 6);
   assert.equal(calls[4].model, config.openaiEditorModel);
   assert.equal(result.title, original.title);
 });
@@ -208,6 +209,6 @@ test('nonduplicate early guard adds no AI call to the normal pipeline', async ()
     completeJson: async () => ++calls === 1 ? { factSheet } : editorialResult(),
     validateDraft: async () => { checks += 1; }
   });
-  assert.equal(calls, 4);
+  assert.equal(calls, 5);
   assert.equal(checks, 1);
 });
