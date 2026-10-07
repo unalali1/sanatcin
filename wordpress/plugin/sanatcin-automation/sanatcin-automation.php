@@ -2,14 +2,14 @@
 /**
  * Plugin Name: SanatÇin Otomasyon Köprüsü
  * Description: Railway haber işleyicisi için kaynak alanlarını ve tekrar kontrolü REST uçlarını sağlar.
- * Version: 0.5.2
+ * Version: 0.5.3
  * Requires at least: 6.5
  * Requires PHP: 8.1
  */
 
 if (!defined('ABSPATH')) exit;
 
-const SANATCIN_AUTOMATION_VERSION = '0.5.2';
+const SANATCIN_AUTOMATION_VERSION = '0.5.3';
 
 const SANATCIN_META_FIELDS = [
     'sanatcin_source_url' => 'string',
@@ -196,3 +196,35 @@ function sanatcin_source_box() {
     }, 'post', 'side', 'default');
 }
 add_action('add_meta_boxes', 'sanatcin_source_box');
+
+/**
+ * Instagram paylaşım metnini tema katmanına dokunmadan Buffer'a aktarır.
+ * X/Twitter ve Facebook davranışları bu eklenti tarafından değiştirilmez.
+ */
+function sanatcin_automation_buffer_instagram_build_args($args, $post, $profile_id, $service, $status, $action) {
+    if (!is_array($args) || !($post instanceof WP_Post) || $post->post_type !== 'post') return $args;
+
+    $network = strtolower((string) $service);
+    if ($network !== 'instagram') return $args;
+
+    $instagram_text = trim((string) get_post_meta($post->ID, 'sanatcin_social_instagram_text', true));
+    if ($instagram_text !== '') {
+        $args['text'] = $instagram_text;
+    }
+
+    return $args;
+}
+add_filter('wp_to_buffer_pro_publish_build_args', 'sanatcin_automation_buffer_instagram_build_args', 20, 6);
+
+function sanatcin_automation_buffer_instagram_prevent_update_duplicates($conditions_met, $status, $post, $profile_id, $service, $action) {
+    if (!$conditions_met) return false;
+
+    $network = strtolower((string) $service);
+    if ($network !== 'instagram') return $conditions_met;
+
+    // Rutin haber düzeltmeleri ikinci bir Instagram paylaşımı üretmesin.
+    if ($action === 'update') return false;
+
+    return $conditions_met;
+}
+add_filter('wp_to_buffer_pro_publish_status_conditions_met', 'sanatcin_automation_buffer_instagram_prevent_update_duplicates', 20, 6);
