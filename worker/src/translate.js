@@ -398,6 +398,112 @@ function editorialIssues(draft, factSheet) {
   return issues;
 }
 
+function instagramCategoryEmoji(category) {
+  return {
+    'kultur-sanat': '🎨',
+    'sinema': '🎬',
+    'moda-tasarim': '✨',
+    'sehir-yasam': '🏙️',
+    'editorden': '✍️'
+  }[category] ?? '🔎';
+}
+
+function normalizeInstagramText(value) {
+  return String(value ?? '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function fallbackInstagramCaption(article, draft) {
+  const emoji = instagramCategoryEmoji(article.category);
+  const detailEmoji = {
+    'kultur-sanat': ['🖼️', '🏛️', '🔎'],
+    'sinema': ['🎞️', '🎥', '🔎'],
+    'moda-tasarim': ['👗', '🧵', '🔎'],
+    'sehir-yasam': ['🌿', '🏙️', '🔎'],
+    'editorden': ['📝', '💬', '🔎']
+  }[article.category] ?? ['📌', '🔎', '✨'];
+  const details = draft.paragraphs
+    .slice(0, 3)
+    .map((paragraph, index) => {
+      const firstSentence = String(paragraph).split(/(?<=[.!?…])\s+/u)[0].trim();
+      return firstSentence ? `${detailEmoji[index] ?? '🔹'} ${firstSentence}` : '';
+    })
+    .filter(Boolean);
+  const tags = [...new Set(['SanatÇin', ...(draft.tags ?? [])])]
+    .map((tag) => String(tag).replace(/^#/, '').replace(/[^\p{L}\p{N}_]/gu, ''))
+    .filter(Boolean)
+    .slice(0, 6)
+    .map((tag) => `#${tag}`)
+    .join(' ');
+
+  return normalizeInstagramText([
+    `${emoji} ${draft.title}`,
+    '',
+    `📍 ${draft.excerpt}`,
+    '',
+    ...details,
+    '',
+    '👉 Haberin tamamı SanatÇin’de.',
+    '',
+    tags
+  ].join('\n'));
+}
+
+async function buildInstagramCaption(article, factSheet, draft, { signal, completeJson = requestJson } = {}) {
+  try {
+    const result = await completeJson({
+      model: config.openaiEditorModel,
+      signal,
+      input: [
+        {
+          role: 'system',
+          content: [
+            'SanatÇin için Instagram gönderi metni yazan deneyimli bir sosyal medya editörüsün.',
+            'Yalnız verilen doğrulanmış haber ve olgu fişini kullan; yeni bilgi, yorum, abartı veya çıkarım ekleme.',
+            'Metin Türkiye Türkçesinde doğal, sıcak ama haber ciddiyetini koruyan bir tonda olsun.',
+            'Hedef uzunluk 500-900 karakterdir; gerektiğinde 1.100 karaktere kadar çıkabilirsin.',
+            'İlk satır güçlü ve anlaşılır bir başlık/hook olsun ve uygun tek bir emojiyle başlasın.',
+            'Ardından bir kısa açıklama paragrafı yaz.',
+            'Haberde gerçekten bulunan 3-5 önemli ayrıntıyı, her satırın başında bağlama uygun bir emoji olacak şekilde ayrı satırlarda ver.',
+            'Sonra haberi bağlayan tek kısa cümle yaz ve ayrı satırda tam olarak “👉 Haberin tamamı SanatÇin’de.” ifadesini kullan.',
+            'En sonda 4-7 özgün hashtag ver. #SanatÇin zorunludur. Aynı etiketi tekrarlama; ilgisiz popüler etiket ekleme.',
+            'Toplam 5-8 emoji hedefle. Emoji yığını, markdown, yıldızla kalın yazı, URL veya uydurma alıntı kullanma.',
+            'Yalnız geçerli JSON ver.'
+          ].join(' ')
+        },
+        {
+          role: 'user',
+          content: [
+            `Kategori: ${article.category}`,
+            `Başlık: ${draft.title}`,
+            `Spot: ${draft.excerpt}`,
+            `Haber metni:\n${draft.paragraphs.join('\n\n')}`,
+            `Olgu fişi:\n${JSON.stringify(factSheet)}`,
+            `Mevcut etiketler: ${JSON.stringify(draft.tags ?? [])}`,
+            'JSON şeması: {"text":"satır sonları korunmuş Instagram metni"}'
+          ].join('\n\n')
+        }
+      ]
+    });
+    const text = normalizeInstagramText(result.text);
+    const emojiCount = (text.match(/\p{Extended_Pictographic}/gu) ?? []).length;
+    if (!text || text.length < 350 || text.length > 1400 || !/Haberin tamamı SanatÇin’de\./u.test(text) || !/#SanatÇin/u.test(text) || emojiCount < 3) {
+      throw new Error('Instagram metni biçim kapısından geçmedi.');
+    }
+    return text;
+  } catch (error) {
+    log('warn', 'Instagram metni AI ile hazırlanamadı; güvenli yerel şablon kullanılacak', {
+      source: article.source.id,
+      error: String(error?.message ?? error).slice(0, 280)
+    });
+    return fallbackInstagramCaption(article, draft);
+  }
+}
+
 export async function translateArticle(article, { signal, completeJson = requestJson, validateDraft } = {}) {
   const startedAt = Date.now();
   log('info', 'Türkçe haber hazırlığı başladı', { source: article.source.id, url: article.url });
@@ -687,13 +793,21 @@ export async function translateArticle(article, { signal, completeJson = request
   }
 
   assertUsableEditorialOutput(final.draft);
+  const instagramText = await buildInstagramCaption(article, factSheet, final.draft, { signal, completeJson });
   log('info', 'Türkçe haber yayıma hazır', {
     source: article.source.id,
     title: final.draft.title,
     fluency: editorialFluencyProfile(final.draft),
+    instagramChars: instagramText.length,
     elapsedSeconds: elapsedSeconds(startedAt)
   });
-  // v16: kaynak başlığının bilgi hiyerarşisini referans alır; ana fikir daraltmasını
-  // ve yeni çeviri kokusu kalıplarını son edit kapısında cezalandırır.
-  return { ...final.draft, factSheet, editorialMode: 'fact-ledger-turkish-newsroom-v17-natural-rewrite-repair' };
+  // v18: haberin doğrulanmış son Türkçe sürümünden Instagram için ayrı,
+  // uzun ve emojili bir sosyal medya metni hazırlanır; haber üretimi sosyal metin
+  // hatası yüzünden kesilmez ve yerel şablona güvenli geri dönüş yapılır.
+  return {
+    ...final.draft,
+    factSheet,
+    instagramText,
+    editorialMode: 'fact-ledger-turkish-newsroom-v18-instagram-editorial'
+  };
 }
