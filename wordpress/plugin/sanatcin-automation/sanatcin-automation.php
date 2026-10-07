@@ -2,14 +2,14 @@
 /**
  * Plugin Name: SanatÇin Otomasyon Köprüsü
  * Description: Railway haber işleyicisi için kaynak alanlarını ve tekrar kontrolü REST uçlarını sağlar.
- * Version: 0.5.1
+ * Version: 0.5.2
  * Requires at least: 6.5
  * Requires PHP: 8.1
  */
 
 if (!defined('ABSPATH')) exit;
 
-const SANATCIN_AUTOMATION_VERSION = '0.5.1';
+const SANATCIN_AUTOMATION_VERSION = '0.5.2';
 
 const SANATCIN_META_FIELDS = [
     'sanatcin_source_url' => 'string',
@@ -25,7 +25,8 @@ const SANATCIN_META_FIELDS = [
     'sanatcin_score' => 'number',
     'sanatcin_hero_eligible' => 'number',
     'sanatcin_original_title' => 'string',
-    'sanatcin_editorial_mode' => 'string'
+    'sanatcin_editorial_mode' => 'string',
+    'sanatcin_social_instagram_text' => 'string'
 ];
 
 function sanatcin_sanitize_meta_text($value) {
@@ -44,7 +45,7 @@ function sanatcin_register_meta_fields() {
             'show_in_rest' => true,
             'sanitize_callback' => $type === 'number'
                 ? 'sanatcin_sanitize_meta_number'
-                : 'sanatcin_sanitize_meta_text',
+                : ($key === 'sanatcin_social_instagram_text' ? 'sanitize_textarea_field' : 'sanatcin_sanitize_meta_text'),
             'auth_callback' => function () { return current_user_can('edit_posts'); }
         ]);
     }
