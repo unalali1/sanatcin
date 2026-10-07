@@ -224,10 +224,26 @@ function sanatcin_related_posts($post_id, $limit = 3) {
 
 
 /**
- * SanatÇin X/Buffer editorial layer.
+ * Instagram caption produced by the worker. Register here as well as in the
+ * automation plugin so the REST field remains available during theme/plugin
+ * rollout windows.
+ */
+function sanatcin_register_social_meta() {
+    register_post_meta('post', 'sanatcin_social_instagram_text', [
+        'type' => 'string',
+        'single' => true,
+        'show_in_rest' => true,
+        'sanitize_callback' => 'sanitize_textarea_field',
+        'auth_callback' => function () { return current_user_can('edit_posts'); }
+    ]);
+}
+add_action('init', 'sanatcin_register_social_meta');
+
+/**
+ * SanatÇin X/Instagram Buffer editorial layer.
  *
  * Keeps WP to Buffer Pro's existing account, scheduling and link/image handling,
- * while replacing only the X/Twitter status text with a compact editorial hook.
+ * while using network-specific editorial text.
  */
 function sanatcin_x_trim_chars($text, $limit) {
     $text = trim(preg_replace('/\s+/u', ' ', wp_strip_all_tags((string) $text)));
@@ -298,6 +314,14 @@ function sanatcin_buffer_x_build_args($args, $post, $profile_id, $service, $stat
     if (!is_array($args) || !($post instanceof WP_Post) || $post->post_type !== 'post') return $args;
 
     $network = strtolower((string) $service);
+    if ($network === 'instagram') {
+        $instagram_text = trim((string) get_post_meta($post->ID, 'sanatcin_social_instagram_text', true));
+        if ($instagram_text !== '') {
+            $args['text'] = $instagram_text;
+        }
+        return $args;
+    }
+
     if (!in_array($network, ['twitter', 'x'], true)) return $args;
 
     $url = get_permalink($post);
@@ -356,9 +380,9 @@ add_filter('wp_to_buffer_pro_publish_build_args', 'sanatcin_buffer_x_build_args'
 function sanatcin_buffer_x_prevent_update_duplicates($conditions_met, $status, $post, $profile_id, $service, $action) {
     if (!$conditions_met) return false;
     $network = strtolower((string) $service);
-    if (!in_array($network, ['twitter', 'x'], true)) return $conditions_met;
+    if (!in_array($network, ['twitter', 'x', 'instagram'], true)) return $conditions_met;
 
-    // A normal editorial correction must not create a second X post.
+    // A normal editorial correction must not create a second social post.
     if ($action === 'update') return false;
     return $conditions_met;
 }
