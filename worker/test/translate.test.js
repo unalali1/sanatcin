@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { config } from '../src/config.js';
-import { translateArticle } from '../src/translate.js';
+import { normalizeInstagramText, translateArticle } from '../src/translate.js';
 
 const article = {
   title: 'New exhibition explores contemporary craft in Shanghai',
@@ -45,6 +45,13 @@ function editorialResult(excerpt = 'Şanghay’da açılan sergi, geleneksel zan
     tags: ['Şanghay', 'çağdaş sanat', 'zanaat', 'sergi']
   };
 }
+
+test('Instagram metnindeki kaçışlı satır sonları gerçek satır sonlarına çevrilir', () => {
+  const input = '🎨 Başlık\\n\\n📍 Açıklama\\n✨ Ayrıntı\\n\\n👉 Haberin tamamı SanatÇin’de.\\n\\n#SanatÇin #Çin';
+  const output = normalizeInstagramText(input);
+  assert.equal(output, '🎨 Başlık\n\n📍 Açıklama\n✨ Ayrıntı\n\n👉 Haberin tamamı SanatÇin’de.\n\n#SanatÇin #Çin');
+  assert.doesNotMatch(output, /\\\\n/);
+});
 
 test('olgu çıkarımı, haber yazımı ve Türkçe son okuma ardışık çalışır', async () => {
   const calls = [];
