@@ -165,6 +165,8 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
             : 'Zenginleştirilmiş olgu fişindeki doğrulanmış bilgilerden hareketle Türkçe haberi sıfırdan yaz; kaynak dildeki cümle sırasını yeniden kurmaya çalışma.',
           'Olgu fişi doğruluk sınırıdır, paragraf planı değildir. Kaynak haber ve kaynak başlığı yalnız haber hammaddesidir; cümle sırasını, paragraf sırasını veya vurgu hiyerarşisini kopyalama. Haber örgüsünü Türkçe gazetecilikteki önem sırasına göre kur.',
           'Yazmaya başlamadan önce sessizce üç şeyi belirle: haberin asıl hikâyesi nedir; Türk okuyucu açısından en ilginç ve ayırt edici somut unsur nedir; hangi bilgi girişte, hangisi arka planda kalmalıdır. Bu analizi çıktıda gösterme.',
+          'Giriş için özel haber değeri testi: okur ilk iki cümleden haberin esas gelişmesini ve niçin haber olduğunu öğrenmeli. Birden çok örnekli trend haberinde önce ortak eğilimi somut biçimde ortaya koy, tekil örnekleri ikinci paragraftan itibaren işle. Arkeoloji haberinde keşfin ilgi çekici bulgusunu teknik ölçülerden önce, film haberinde eserin kimliğini ve hikâyesini genel açıklamalardan önce ver.',
+          'Her paragrafın haberin ana açısıyla ilişkisini denetle. Mekanik olgu listeleri, rastgele şehirler arasında sıçrama ve gereksiz yan ayrıntılar varsa birleştir, yeniden sırala veya kaynak anlamını bozmadan kısalt. Başlık ve spotta ana gelişmeyi tekrar tekrar söyleme.',
           'İlk paragraf kaynak metnin ilk paragrafının çevirisi olmak zorunda değildir. Kim-ne-nerede-ne zaman sorularından kaynakta yanıtı bulunanları doğal biçimde ver; mümkünse haberin en güçlü somut unsurunu ilk 1-2 cümlede görünür kıl. Sonraki paragraflar önem, ayrıntı ve bağlam sırasıyla ilerlemeli.',
           'Kısa, açık ve çoğunlukla etkin cümleler kullan. Kaynak dilin sözdizimini, zincirleme tamlamalarını, tanıtım tonunu ve kelime kelime çeviri kokusunu taşıma. Bir cümle anlamca doğru olsa bile Türkiye Türkçesinde bir gazetecinin doğal biçimde kurmayacağı hissini veriyorsa cümleyi tamamen yeniden kur.',
           'İngilizcedeki isimleştirmeleri Türkçeye aynen aktarma. “karakterlerin gelişimi”, “mesleklerinin ilk yılları”, “iş birliğinin ilerletilmesi” gibi yapıları gerektiğinde fiilli ve doğal Türkçe cümlelere dönüştür.',
@@ -394,6 +396,23 @@ function editorialIssues(draft, factSheet) {
       fluency.translationeseHits ? `${fluency.translationeseHits} çeviri kalıbını somut ve fiilli Türkçeyle yeniden kur.` : '',
       repeated ? `Tekrarlanan soyut sözcükleri azalt: ${repeated}.` : ''
     ].filter(Boolean).join(' '));
+  }
+  return issues;
+}
+
+function editorialStructureIssues(draft) {
+  const paragraphs = draft.paragraphs ?? [];
+  const lead = String(paragraphs[0] ?? '').trim();
+  const issues = [];
+  if (lead.length < 110 || lead.length > 700) {
+    issues.push('Giriş paragrafı haber değerini açık anlatacak uzunlukta, ancak gereksiz ayrıntısız yeniden kurulmalı.');
+  }
+  if (/^(?:Bu (?:dönem|süreç|etkinlik|gelişme)|Söz konusu (?:etkinlik|çalışma)|Öte yandan|Ayrıca|Bunun yanı sıra)\\b/iu.test(lead)) {
+    issues.push('Giriş bağlamı bilinmeyen bir işaret zamiri veya geçiş kalıbıyla başlıyor; esas gelişmeyi doğrudan anlat.');
+  }
+  if (paragraphs.length >= 4 && paragraphs.slice(0, 2).every(p => /^.{0,55}(?:,|\\.)/u.test(p) && !/[.!?]/u.test(p.slice(0, 65)))) {
+    // Avoid treating a purely locational lead as the complete news angle.
+    issues.push('İlk iki paragrafı tekil yer ve faaliyet dökümü yerine haberin ortak teması etrafında yeniden kur.');
   }
   return issues;
 }
@@ -790,6 +809,45 @@ export async function translateArticle(article, { signal, completeJson = request
       source: article.source.id,
       error: String(headlineError?.message ?? headlineError).slice(0, 350)
     });
+  }
+
+  // Final publication gate: one focused rewrite, then fail closed.
+  // A failed candidate is left unpublished by the caller; the daily discovery pipeline continues.
+  let structureIssues = editorialStructureIssues(final.draft);
+  let fluencyBeforeGate = editorialFluencyProfile(final.draft);
+  if (structureIssues.length || fluencyBeforeGate.score < 86) {
+    const baseline = final.draft;
+    try {
+      const revision = await writeTurkishNews(article, factSheet, {
+        draft: baseline,
+        feedback: [
+          ...structureIssues,
+          ...(fluencyBeforeGate.score < 86 ? ['Metnin Türkiye Türkçesi doğallığını artır, soyut klişeleri ve kopuk paragraf sıralamasını düzelt.'] : []),
+          'Haberin en önemli gelişmesini ilk iki cümlede ver; paragraf planını bağımsız Türkçe haber metni olarak yeniden kur.',
+          'Kaynak fişi dışından bilgi ekleme, hiçbir sayıyı veya özgün adı değiştirme.'
+        ],
+        signal,
+        completeJson
+      });
+      if (revision.accepted) {
+        assertUsableEditorialOutput(revision.draft);
+        if (!numericFactRegression(baseline, revision.draft)
+            && !nativeNameRegression(baseline, revision.draft, factSheet.nativeNames)
+            && !editorialIssues(revision.draft, factSheet).some(issue => /Çince karakterler|doğrulanmış yerel ad|kaynak-site artığı|yinelenen cümle/iu.test(issue))) {
+          final = revision;
+        }
+      }
+    } catch (error) {
+      log('warn', 'Son yapı düzeltmesi başarısız', {
+        source: article.source.id,
+        error: String(error?.message ?? error).slice(0, 350)
+      });
+    }
+    structureIssues = editorialStructureIssues(final.draft);
+    fluencyBeforeGate = editorialFluencyProfile(final.draft);
+  }
+  if (structureIssues.length || fluencyBeforeGate.score < 82) {
+    throw new Error('Editoryal yayın kapısı: giriş, haber bütünlüğü veya Türkçe doğallığı yetersiz. ' + structureIssues.join(' '));
   }
 
   assertUsableEditorialOutput(final.draft);
