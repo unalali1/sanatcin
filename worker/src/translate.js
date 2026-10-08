@@ -427,8 +427,9 @@ function instagramCategoryEmoji(category) {
   }[category] ?? '🔎';
 }
 
-function normalizeInstagramText(value) {
+export function normalizeInstagramText(value) {
   return String(value ?? '')
+    .replace(/\\r\\n|\\n|\\r/g, '\n')
     .replace(/\r\n?/g, '\n')
     .replace(/[ \t]+/g, ' ')
     .replace(/ *\n */g, '\n')
