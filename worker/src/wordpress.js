@@ -321,7 +321,7 @@ async function loadSourceImage(article, imageUrl, signal, {
   const dimensions = assertImageDimensions(buffer, contentType, {
     minWidth,
     minHeight,
-    minRatio: 0.75,
+    minRatio: 0.62,
     maxRatio: 3.2
   });
   const imageHash = crypto.createHash('sha256').update(buffer).digest('hex');
@@ -520,7 +520,7 @@ export async function prepareFeaturedImage(article, { signal, preflight } = {}) 
   }
   if (emergencyBest) {
     noteVisualScene(emergencyBest.scene);
-    log('warn', 'AI görseli hazırlanamadı; yayını kaybetmemek için denetimden geçen düşük çözünürlüklü kaynak görseli kullanıldı', {
+    log('warn', 'Standart çözünürlükte kaynak fotoğrafı bulunamadı; denetimden geçen düşük çözünürlüklü özgün görsel kullanıldı', {
       source: article.source.id,
       dimensions: `${emergencyBest.dimensions.width}x${emergencyBest.dimensions.height}`,
       visualScore: emergencyBest.visualScore,
@@ -535,7 +535,7 @@ export async function prepareFeaturedImage(article, { signal, preflight } = {}) 
     attempted: candidates.length,
     errors: errors.slice(0, 5)
   });
-  throw new Error('Haber için uygun bir kaynak görseli veya temsili illüstrasyon hazırlanamadı.');
+  throw new Error('Haber için uygun, doğrulanabilir bir kaynak görseli hazırlanamadı.');
 }
 
 async function uploadFeaturedImage(article, image, signal) {
@@ -675,22 +675,24 @@ export async function publishArticle(article, preparedImage = undefined, { signa
       sanatcin_score: Math.round(article.score),
       sanatcin_original_title: article.originalTitle,
       sanatcin_editorial_mode: article.editorialMode,
-      sanatcin_hero_eligible: image?.heroEligible ? 1 : 0
+      sanatcin_hero_eligible: image?.heroEligible ? 1 : 0,
+      ...(article.instagramText ? { sanatcin_social_instagram_text: article.instagramText } : {})
     }
   };
   payload.featured_media = featuredMedia;
   let post = await wp('/wp/v2/posts', { method: 'POST', body: JSON.stringify(payload), signal });
 
-  // Instagram metni yeni WordPress meta alanına best-effort olarak yazılır.
-  // Tema/plugin rollout penceresinde alan henüz kayıtlı değilse haber yayını durmaz;
-  // alan kullanılabilir olduğunda publish tetiklenmeden önce kaydedilir.
+  // Instagram metnini ilk taslak oluşturma isteğinde kaydetmek, canlı WordPress'te
+  // doğrulanan güvenilir REST yoludur. Yalnız kaydedilemezse ikinci istek denenir.
   if (article.instagramText) {
     try {
-      post = await wp(`/wp/v2/posts/${post.id}`, {
-        method: 'POST',
-        body: JSON.stringify({ meta: { sanatcin_social_instagram_text: article.instagramText } }),
-        signal
-      });
+      if (post.meta?.sanatcin_social_instagram_text !== article.instagramText) {
+        post = await wp(`/wp/v2/posts/${post.id}`, {
+          method: 'POST',
+          body: JSON.stringify({ meta: { sanatcin_social_instagram_text: article.instagramText } }),
+          signal
+        });
+      }
       const verified = await wp(`/wp/v2/posts/${post.id}?context=edit&_fields=id,meta`, { signal });
       if (verified.meta?.sanatcin_social_instagram_text !== article.instagramText) {
         throw new Error('Instagram alanı WordPress REST yanıtında doğrulanamadı; aktif eklenti meta kayıt desteği kontrol edilmeli.');
