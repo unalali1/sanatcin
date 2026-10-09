@@ -21,7 +21,7 @@ export const config = {
   openaiImageModel: process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-2.5-flare',
   openaiImageQuality: process.env.OPENAI_IMAGE_QUALITY ?? 'medium',
   generatedImageAttempts: boundedInteger('GENERATED_IMAGE_ATTEMPTS', 2, 1, 2),
-  generateFallbackImages: boolean('GENERATE_FALLBACK_IMAGES', true),
+  generateFallbackImages: boolean('GENERATE_FALLBACK_IMAGES', false),
   sourceImagePolicy: process.env.SOURCE_IMAGE_POLICY ?? 'allow-all',
   sourceImageMinWidth: boundedInteger('SOURCE_IMAGE_MIN_WIDTH', 640, 320, 1600),
   sourceImageMinHeight: boundedInteger('SOURCE_IMAGE_MIN_HEIGHT', 360, 180, 1200),
