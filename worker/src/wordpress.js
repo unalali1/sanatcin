@@ -691,7 +691,11 @@ export async function publishArticle(article, preparedImage = undefined, { signa
         body: JSON.stringify({ meta: { sanatcin_social_instagram_text: article.instagramText } }),
         signal
       });
-      log('info', 'Instagram sosyal metni WordPress kaydına eklendi', {
+      const verified = await wp(`/wp/v2/posts/${post.id}?context=edit&_fields=id,meta`, { signal });
+      if (verified.meta?.sanatcin_social_instagram_text !== article.instagramText) {
+        throw new Error('Instagram alanı WordPress REST yanıtında doğrulanamadı; aktif eklenti meta kayıt desteği kontrol edilmeli.');
+      }
+      log('info', 'Instagram sosyal metni WordPress kaydına eklendi ve doğrulandı', {
         source: article.source.id,
         postId: post.id,
         chars: article.instagramText.length
