@@ -704,7 +704,7 @@ export async function rerankCandidates(candidates, { signal, prepareCandidates, 
       });
       try {
         const cinemaRerank = (batch, batchSignal) => rerankBatch(batch, batchSignal, recentContext, { cinemaRescue: true });
-        const cinemaItems = await rerankInputsResilient(cinemaRescuePool.map(rerankInput), {
+        const cinemaItems = await rerankInputsResilient(cinemaRescuePool.map((candidate) => rerankInput(candidate, { includeBody: true })), {
           signal,
           rerank: cinemaRerank
         });
