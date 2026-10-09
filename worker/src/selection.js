@@ -1,6 +1,17 @@
 import { config } from './config.js';
 import { isNearTopicRepeat, sourceCrowdingPenalty } from './rank.js';
 
+// Son yayın kapısı: kategori boşluğunu kapatmak, asgari editoryal niteliği düşüremez.
+export function passesPublicationFit(candidate, minimumFit = config.minEditorialFit) {
+  const editorialFit = Number(candidate?.editorialFit);
+  const categoryFit = Number(candidate?.categoryFit);
+  // Yüksek editoryal uyumlu gerçek film gişesi / kurum-sergi haberi sırf bir
+  // ikincil bayrak nedeniyle elenmez; bu bayrakları AI puanlaması zaten tartar.
+  return Number.isFinite(editorialFit)
+    && editorialFit >= Math.max(7, minimumFit)
+    && (candidate?.categoryFit == null || (Number.isFinite(categoryFit) && categoryFit >= 7));
+}
+
 export function candidateForRound(queue, sourceUseCounts, {
   publisherUseCounts = {},
   sourceFailures = {},
@@ -24,6 +35,7 @@ export function candidateForRound(queue, sourceUseCounts, {
 
   for (let index = 0; index < queue.length; index += 1) {
     const candidate = queue[index];
+    if (!passesPublicationFit(candidate)) continue;
     if (candidate.minimumTargetRescue && !fallbackActive) continue;
     if (candidate.score < hardMinimum) continue;
     if (rescueBelowScore != null && candidate.score < rescueBelowScore) {
