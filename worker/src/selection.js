@@ -1,6 +1,17 @@
 import { config } from './config.js';
 import { isNearTopicRepeat, sourceCrowdingPenalty } from './rank.js';
 
+// Son yayın kapısı: kategori boşluğunu kapatmak, asgari editoryal niteliği düşüremez.
+export function passesPublicationFit(candidate, minimumFit = config.minEditorialFit) {
+  const editorialFit = Number(candidate?.editorialFit);
+  const categoryFit = Number(candidate?.categoryFit);
+  return Number.isFinite(editorialFit)
+    && editorialFit >= minimumFit
+    && (candidate?.categoryFit == null || (Number.isFinite(categoryFit) && categoryFit >= 7))
+    && candidate?.institutionalEvent !== true
+    && candidate?.commercialDominant !== true;
+}
+
 export function candidateForRound(queue, sourceUseCounts, {
   publisherUseCounts = {},
   sourceFailures = {},
@@ -24,6 +35,7 @@ export function candidateForRound(queue, sourceUseCounts, {
 
   for (let index = 0; index < queue.length; index += 1) {
     const candidate = queue[index];
+    if (!passesPublicationFit(candidate)) continue;
     if (candidate.minimumTargetRescue && !fallbackActive) continue;
     if (candidate.score < hardMinimum) continue;
     if (rescueBelowScore != null && candidate.score < rescueBelowScore) {
