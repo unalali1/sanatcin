@@ -56,6 +56,19 @@ test('minimum hedef rezervi normal turda bekler, fallback turunda kullanılabili
   assert.equal(candidateForRound([reserve], {}, { ...options, fallbackActive: true }).candidate.id, 'reserve');
 });
 
+test('yedek yayın turu düşük editoryal nitelik veya yanlış kategoriyi geçiremez', () => {
+  const lowFit = { ...candidate('weak', 'cgtn', 99), editorialFit: 6, categoryFit: 8 };
+  const wrongCategory = { ...candidate('wrong', 'xinhua', 99), categoryFit: 6 };
+  const suitable = { ...candidate('good', 'radii', 75), categoryFit: 7 };
+  const queue = [lowFit, wrongCategory, suitable];
+  const selected = candidateForRound(queue, {}, {
+    ...options, rescueBelowScore: 50, rescueMinimumFit: 6
+  });
+  assert.equal(selected.candidate.id, 'good');
+  assert.equal(queue.length, 2);
+  assert.equal(candidateForRound([lowFit, wrongCategory], {}, options).candidate, null);
+});
+
 test('four publications with an empty cinema category report 75 percent coverage', () => {
   const report = editorialCoverage({ 'kultur-sanat': 2, sinema: 0, 'moda-tasarim': 1, 'sehir-yasam': 1 }, [{ heroEligible: false }]);
   assert.deepEqual(report.missingCategories, ['sinema']);
