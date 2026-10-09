@@ -1,5 +1,5 @@
 import { preflightCandidates } from './preflight.js';
-import { candidateForRound } from './selection.js';
+import { candidateForRound, passesPublicationFit } from './selection.js';
 import { editorialCoverage } from './run-report.js';
 import { readFileSync } from 'node:fs';
 import { config, validateConfig } from './config.js';
@@ -96,6 +96,8 @@ async function run() {
     preferredSecondSlotScore: config.preferredSecondSlotScore,
     adaptiveFallbackRound: config.adaptiveFallbackRound,
     minEditorialFit: config.minEditorialFit,
+    generateFallbackImages: config.generateFallbackImages,
+    sourceImagePolicy: config.sourceImagePolicy,
     maxAiCandidates: config.maxAiCandidates,
     rescueAiCandidates: config.rescueAiCandidates,
     aiBatchSize: config.aiBatchSize,
@@ -117,7 +119,8 @@ async function run() {
     topicPenalized: 0,
     sourcePenalized: 0,
     adaptiveFallbackAttempts: 0,
-    cachedFailedSkipped: 0
+    cachedFailedSkipped: 0,
+    editorialFloorBlocked: 0
   };
   const discovered = await mapLimit(SOURCES.filter((source) => source.enabled), config.discoveryConcurrency, async (source) => {
     try {
@@ -224,8 +227,12 @@ async function run() {
     });
   }
   log('info', 'AI seçim teşhisi', { categories: aiSelectionDiagnostics(ranked) });
+  selectionStats.editorialFloorBlocked = ranked.filter(
+    (item) => (item.eligible !== false || item.minimumTargetRescue === true)
+      && !passesPublicationFit(item)
+  ).length;
   const selectableCandidates = ranked
-    .filter((item) => item.eligible !== false || item.minimumTargetRescue === true)
+    .filter((item) => (item.eligible !== false || item.minimumTargetRescue === true) && passesPublicationFit(item))
     .map((item) => item.minimumTargetRescue
       ? { ...item, category: item.rescueCategory, score: item.rescueScore }
       : item);
