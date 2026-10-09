@@ -5,11 +5,11 @@ import { isNearTopicRepeat, sourceCrowdingPenalty } from './rank.js';
 export function passesPublicationFit(candidate, minimumFit = config.minEditorialFit) {
   const editorialFit = Number(candidate?.editorialFit);
   const categoryFit = Number(candidate?.categoryFit);
+  // Yüksek editoryal uyumlu gerçek film gişesi / kurum-sergi haberi sırf bir
+  // ikincil bayrak nedeniyle elenmez; bu bayrakları AI puanlaması zaten tartar.
   return Number.isFinite(editorialFit)
-    && editorialFit >= minimumFit
-    && (candidate?.categoryFit == null || (Number.isFinite(categoryFit) && categoryFit >= 7))
-    && candidate?.institutionalEvent !== true
-    && candidate?.commercialDominant !== true;
+    && editorialFit >= Math.max(7, minimumFit)
+    && (candidate?.categoryFit == null || (Number.isFinite(categoryFit) && categoryFit >= 7));
 }
 
 export function candidateForRound(queue, sourceUseCounts, {
