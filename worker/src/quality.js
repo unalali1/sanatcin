@@ -133,6 +133,36 @@ export function nativeNameRegression(before = {}, after = {}, nativeNames = []) 
   });
 }
 
+/**
+ * Editörün bugün elle düzelttiği tekrar eden başlık kusurları.
+ * Yalnız öneri üretir: kaynakta doğrulanmamış bir olguyu eklemez, yayını engellemez,
+ * mevcut başlığı otomatik değiştirmez ve ek bir model çağrısı yapmaz.
+ */
+export function headlineEditorialWarnings(title = '') {
+  const value = String(title).trim();
+  if (!value) return [];
+  const warnings = [];
+  if (/\bnoodle(?:s)?\b/iu.test(value)) {
+    warnings.push('Açıklamasız İngilizce yemek adı var. Kaynakta gerçekten erişte anlatılıyorsa başlıkta doğal Türkçeyi kullan; ramen gibi özgül yemekleri yanlış adlandırma.');
+  }
+  if (/\bÇince yazılmış\b/iu.test(value) && /\b(?:kitap|eser|roman|öykü)\b/iu.test(value)) {
+    warnings.push('Çeviri ödülü bağlamında “Çince yazılmış” yerine doğruysa “Çinceden çevrilen” de; ödülün esere değil çeviriye verildiğini karıştırma.');
+  }
+  if (/\bkısa listesinde\b/iu.test(value)) {
+    warnings.push('“Kısa listesinde” bürokratik kalıyor. Kaynak doğruluyorsa ödül için yarışma açısını doğal fiille anlat; kısa listeyi kazanan veya kesin finalist ilan etme.');
+  }
+  if (/\bfestival(?:i|in)?\b.{0,70}\b(?:başladı|düzenlendi|gerçekleştirildi)\b/iu.test(value)) {
+    warnings.push('Sadece etkinliğin başlamasını bildiren takvim başlığı. Kaynakta doğrulanmışsa programın kapsamını, ilk oluşunu veya somut izleyici ilgisini öncele; kanıtsız “yoğun ilgi” yazma.');
+  }
+  if (/\b(?:iki|üç|dört|beş|\d+)\b.{0,80}\b(?:heykeli|eserleri|eseri)\s*$/iu.test(value)) {
+    warnings.push('Başlık eser envanteri gibi bitiyor. Doğrulanmışsa tarihî/sanatsal değeri ya da mekânın özelliğini anlatan haber açısını tercih et.');
+  }
+  if (/\bMa Yansong\s+müzesi\b/iu.test(value)) {
+    warnings.push('Mimarın adı müzenin sahibi/adıymış gibi görünüyor. Ma Yansong’un tasarımcı olduğunu açıklaştır; eski otoparkın dönüşümünü kaynağa sadık aktar.');
+  }
+  return warnings;
+}
+
 export function translationIssues({ title = '', excerpt = '', text = '', paragraphs = [] }, factSheet = {}) {
   const issues = newsroomLanguageIssues({ title, text, paragraphs });
   const combined = `${title}\n${excerpt}\n${text}`.trim();
