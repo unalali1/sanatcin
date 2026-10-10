@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import OpenAI from 'openai';
 import { config } from './config.js';
+import { assertInstagramCaptionReady, assertInstagramCaptionStored } from './social-caption.js';
 import { sourceHash } from './fetch.js';
 import { log } from './logger.js';
 import { assertImageDimensions, detectImageContentType, isUsableImageUrl, likelyDuplicateTitles, titleSimilarity, heroImageEligible, selectRelatedPosts } from './quality.js';
@@ -627,6 +628,8 @@ async function buildInlineRelatedLinks(article, category, signal) {
 }
 
 export async function publishArticle(article, preparedImage = undefined, { signal } = {}) {
+  // No published WordPress transition until the caption to be sent to Buffer is usable.
+  if (!config.dryRun) assertInstagramCaptionReady(article.instagramText);
   const sourceUrl = new URL(article.url).href;
   const sourceLine = `<aside class="sanatcin-source"><strong>Kaynak:</strong> <a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(article.source.name)}</a><span> · Kaynak haber temel alınarak Türkçe yeniden yazıldı</span></aside>`;
   const category = await categoryId(article.category, signal);
@@ -694,9 +697,7 @@ export async function publishArticle(article, preparedImage = undefined, { signa
         });
       }
       const verified = await wp(`/wp/v2/posts/${post.id}?context=edit&_fields=id,meta`, { signal });
-      if (verified.meta?.sanatcin_social_instagram_text !== article.instagramText) {
-        throw new Error('Instagram alanı WordPress REST yanıtında doğrulanamadı; aktif eklenti meta kayıt desteği kontrol edilmeli.');
-      }
+      assertInstagramCaptionStored(verified.meta, article.instagramText, post.id);
       log('info', 'Instagram sosyal metni WordPress kaydına eklendi ve doğrulandı', {
         source: article.source.id,
         postId: post.id,
