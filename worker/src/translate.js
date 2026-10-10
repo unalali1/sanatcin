@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { config } from './config.js';
 import { log } from './logger.js';
+import { INSTAGRAM_FALLBACK_HASHTAGS, instagramCaptionProblems, assertInstagramCaptionReady } from './social-caption.js';
 import {
   editorialDraftChanged,
   normalizeNewsroomTerms,
@@ -458,7 +459,7 @@ function fallbackInstagramCaption(article, draft) {
       return firstSentence ? `${detailEmoji[index] ?? '🔹'} ${firstSentence}` : '';
     })
     .filter(Boolean);
-  const tags = [...new Set(['SanatÇin', ...(draft.tags ?? [])])]
+  const tags = [...new Set(['SanatÇin', ...(INSTAGRAM_FALLBACK_HASHTAGS[article.category] ?? INSTAGRAM_FALLBACK_HASHTAGS['kultur-sanat']), ...(draft.tags ?? [])])]
     .map((tag) => String(tag).replace(/^#/, '').replace(/[^\p{L}\p{N}_]/gu, ''))
     .filter(Boolean)
     .slice(0, 6)
@@ -516,7 +517,7 @@ async function buildInstagramCaption(article, factSheet, draft, { signal, comple
     });
     const text = normalizeInstagramText(result.text);
     const emojiCount = (text.match(/\p{Extended_Pictographic}/gu) ?? []).length;
-    if (!text || text.length < 350 || text.length > 1400 || !/Haberin tamamı SanatÇin’de\./u.test(text) || !/#SanatÇin/u.test(text) || emojiCount < 3) {
+    if (!text || text.length > 1400 || emojiCount < 4 || instagramCaptionProblems(text).length) {
       throw new Error('Instagram metni biçim kapısından geçmedi.');
     }
     return text;
@@ -525,7 +526,7 @@ async function buildInstagramCaption(article, factSheet, draft, { signal, comple
       source: article.source.id,
       error: String(error?.message ?? error).slice(0, 280)
     });
-    return fallbackInstagramCaption(article, draft);
+    return assertInstagramCaptionReady(fallbackInstagramCaption(article, draft));
   }
 }
 
