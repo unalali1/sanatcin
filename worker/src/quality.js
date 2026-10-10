@@ -145,7 +145,7 @@ export function headlineEditorialWarnings(title = '') {
   if (/\bnoodle(?:s)?\b/iu.test(value)) {
     warnings.push('Açıklamasız İngilizce yemek adı var. Kaynakta gerçekten erişte anlatılıyorsa başlıkta doğal Türkçeyi kullan; ramen gibi özgül yemekleri yanlış adlandırma.');
   }
-  if (/\bÇince yazılmış\b/iu.test(value) && /\b(?:kitap|eser|roman|öykü)\b/iu.test(value)) {
+  if (/Çince yazılmış\b/iu.test(value) && /\b(?:kitap|eser|roman|öykü)\b/iu.test(value)) {
     warnings.push('Çeviri ödülü bağlamında “Çince yazılmış” yerine doğruysa “Çinceden çevrilen” de; ödülün esere değil çeviriye verildiğini karıştırma.');
   }
   if (/\bkısa listesinde\b/iu.test(value)) {
@@ -154,7 +154,7 @@ export function headlineEditorialWarnings(title = '') {
   if (/\bfestival(?:i|in)?\b.{0,70}\b(?:başladı|düzenlendi|gerçekleştirildi)\b/iu.test(value)) {
     warnings.push('Sadece etkinliğin başlamasını bildiren takvim başlığı. Kaynakta doğrulanmışsa programın kapsamını, ilk oluşunu veya somut izleyici ilgisini öncele; kanıtsız “yoğun ilgi” yazma.');
   }
-  if (/\b(?:iki|üç|dört|beş|\d+)\b.{0,80}\b(?:heykeli|eserleri|eseri)\s*$/iu.test(value)) {
+  if (/(?<![\p{L}\p{N}])(?:iki|üç|dört|beş|\d+)(?![\p{L}\p{N}]).{0,80}\b(?:heykeli|eserleri|eseri)\s*$/iu.test(value)) {
     warnings.push('Başlık eser envanteri gibi bitiyor. Doğrulanmışsa tarihî/sanatsal değeri ya da mekânın özelliğini anlatan haber açısını tercih et.');
   }
   if (/\bMa Yansong\s+müzesi\b/iu.test(value)) {
