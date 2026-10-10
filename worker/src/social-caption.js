@@ -13,12 +13,12 @@ export function instagramCaptionProblems(text = '') {
   const value = String(text ?? '');
   const problems = [];
   if (value.length < 350 || value.length > 1800) problems.push('length');
-  const tags = value.match(/#[\\p{L}\\p{N}_]+/gu) ?? [];
+  const tags = value.match(/#[\p{L}\p{N}_]+/gu) ?? [];
   if (new Set(tags.map(tag => tag.toLocaleLowerCase('tr-TR'))).size < 4) problems.push('hashtags');
   if (!tags.includes('#SanatÇin')) problems.push('brand-hashtag');
-  if ((value.match(/\\p{Extended_Pictographic}/gu) ?? []).length < 4) problems.push('emojis');
+  if ((value.match(/\p{Extended_Pictographic}/gu) ?? []).length < 4) problems.push('emojis');
   if (!value.includes('Haberin tamamı SanatÇin’de.')) problems.push('call-to-action');
-  if (!value.includes('\\n\\n')) problems.push('paragraph-breaks');
+  if (!value.includes('\n\n')) problems.push('paragraph-breaks');
   return problems;
 }
 
