@@ -151,7 +151,7 @@ export function headlineEditorialWarnings(title = '') {
   if (/\bkısa listesinde\b/iu.test(value)) {
     warnings.push('“Kısa listesinde” bürokratik kalıyor. Kaynak doğruluyorsa ödül için yarışma açısını doğal fiille anlat; kısa listeyi kazanan veya kesin finalist ilan etme.');
   }
-  if (/\bfestival(?:i|in)?\b.{0,70}\b(?:başladı|düzenlendi|gerçekleştirildi)\b/iu.test(value)) {
+  if (/\bfestival(?:i|in)?\b.{0,70}\b(?:başladı|düzenlendi|gerçekleştirildi)(?![\p{L}\p{N}])/iu.test(value)) {
     warnings.push('Sadece etkinliğin başlamasını bildiren takvim başlığı. Kaynakta doğrulanmışsa programın kapsamını, ilk oluşunu veya somut izleyici ilgisini öncele; kanıtsız “yoğun ilgi” yazma.');
   }
   if (/(?<![\p{L}\p{N}])(?:iki|üç|dört|beş|\d+)(?![\p{L}\p{N}]).{0,80}\b(?:heykeli|eserleri|eseri)\s*$/iu.test(value)) {
