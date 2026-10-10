@@ -7,6 +7,7 @@ import {
   numericFactRegression,
   editorialFluencyProfile,
   headlineQualityRegression,
+  headlineEditorialWarnings,
   nativeNameRegression,
   translationIssues
 } from './quality.js';
@@ -165,6 +166,7 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
             : 'Zenginleştirilmiş olgu fişindeki doğrulanmış bilgilerden hareketle Türkçe haberi sıfırdan yaz; kaynak dildeki cümle sırasını yeniden kurmaya çalışma.',
           'Olgu fişi doğruluk sınırıdır, paragraf planı değildir. Kaynak haber ve kaynak başlığı yalnız haber hammaddesidir; cümle sırasını, paragraf sırasını veya vurgu hiyerarşisini kopyalama. Haber örgüsünü Türkçe gazetecilikteki önem sırasına göre kur.',
           'Yazmaya başlamadan önce sessizce üç şeyi belirle: haberin asıl hikâyesi nedir; Türk okuyucu açısından en ilginç ve ayırt edici somut unsur nedir; hangi bilgi girişte, hangisi arka planda kalmalıdır. Bu analizi çıktıda gösterme.',
+          'Haber türüne göre en güçlü açıyı değiştir: sıradışı bir iyilikte insan hikâyesini sayıdan; tarihî eser haberinde eserin değerini liste başlığından; film festivalinde doğrulanmış program ve ilgiyi sırf açılış duyurusundan; mimarlık haberinde tasarımcıyı yapı sahibinden ayırarak somut dönüşümü öne al. Çeviri ödülünde “Çince yazılmış eser” ile “Çinceden çevrilen eser” farkını koru. Kaynakta doğrulanmamış başarı, ilgi, unvan veya sonuç icat etme.',
           'Giriş için özel haber değeri testi: okur ilk iki cümleden haberin esas gelişmesini ve niçin haber olduğunu öğrenmeli. Birden çok örnekli trend haberinde önce ortak eğilimi somut biçimde ortaya koy, tekil örnekleri ikinci paragraftan itibaren işle. Arkeoloji haberinde keşfin ilgi çekici bulgusunu teknik ölçülerden önce, film haberinde eserin kimliğini ve hikâyesini genel açıklamalardan önce ver.',
           'Her paragrafın haberin ana açısıyla ilişkisini denetle. Mekanik olgu listeleri, rastgele şehirler arasında sıçrama ve gereksiz yan ayrıntılar varsa birleştir, yeniden sırala veya kaynak anlamını bozmadan kısalt. Başlık ve spotta ana gelişmeyi tekrar tekrar söyleme.',
           'İlk paragraf kaynak metnin ilk paragrafının çevirisi olmak zorunda değildir. Kim-ne-nerede-ne zaman sorularından kaynakta yanıtı bulunanları doğal biçimde ver; mümkünse haberin en güçlü somut unsurunu ilk 1-2 cümlede görünür kıl. Sonraki paragraflar önem, ayrıntı ve bağlam sırasıyla ilerlemeli.',
@@ -241,6 +243,7 @@ async function chooseMoreNaturalDraft(article, factSheet, before, after, { signa
               'B doğruluk sınırını koruyor ve Türkiye Türkçesinde belirgin biçimde daha doğal okunuyorsa B’yi tercih et. Yalnız “A daha ayrıntılı” gerekçesi, B ana olguları ve haber açısını koruyorsa A’ya dönmek için yeterli değildir. Eşitlikte A korunabilir; ancak B’nin cümle yapısı ve haber akışı açıkça daha doğalsa bunu önceliklendir.',
               'Özellikle şu soruyu bağımsız değerlendir: Okur B metninin yabancı dilden çevrildiğini cümle yapısından hissediyor mu? Hissedilmiyorsa ve olgusal güvenlik korunuyorsa B lehine değerlendir.',
               'İngilizce kurum adını, mekanik malzeme tamlamasını, bilgi vermeyen terim açıklamasını ve nesneye araştırmacı eylemi yükleyen başlığı kalite kusuru say. Yeni olgu eklemeyen doğal Türkçe anlatımı tercih et.',
+              'Başlık özelinde envanter gibi biten heykel listesi, “festival başladı” takvim kalıbı, “kısa listesinde” bürokratik ifadesi ve mimarın adıyla müzenin adını karıştırma riskini de dikkate al. Yalnızca doğrulanmış olgularla daha doğal, somut ve dikkat çekici sürümü seç; sırf güçlü görünmek için kaynakta olmayan “yoğun ilgi” veya ödül kazanımı ekleme.',
               'Çin National Day tatili için Milli Bayram, Mid-Autumn Festival için Güz Ortası Bayramı kullan. Girişte kaynakla doğrulanmış gelişmeyi, yeri ve haber değerini somut bir fiille anlat; protokol listesini ve uzun kurum adlarını sonraya bırak. Soyut önem cümlesi yerine kaynaktaki eser, üretim veya olay ayrıntısını ver.',
               'Yalnız geçerli JSON ver.'
             ].join(' ')
@@ -294,6 +297,7 @@ async function refineHeadline(article, factSheet, draft, { signal, completeJson 
           'Türkiye’de bilinmeyen kurum, etkinlik veya teknik terimi açıklamasız biçimde başlığın merkezine koyma.',
           'Daha somut bir fiil veya daha güçlü bir haber açısı mümkünse “sunuyor”, “genişliyor”, “öne çıkıyor”, “buluşuyor”, “yer alıyor”, “aynı sahneyi paylaştı” gibi jenerik kalıplara yaslanma. Kaynaktaki sayı, katılımcı adedi, tek bir sıra dışı ürün/tat ya da yan duyuru hikâyenin özü değilse sırf kolay veya çarpıcı olduğu için başlığı onun üzerine kurma.',
           'Sayı veya sıra dışı ayrıntı ana haber değeriyse kullan; yalnız rakam var diye başlığı mekanikleştirme.',
+          'Konuya uygun editoryal açı seç: insani dayanışma hikâyesinde olayın anlamını salt tekrar sayısına feda etme; tarihî sanat eserini cansız envanter gibi sıralama; müzenin mimarını yapı sahibi gibi gösterme. Kaynak doğruluyorsa festivalin somut kapsamını veya izleyici ilgisini “başladı” bilgisinden öne al; çeviri ödülü listesini Türkçede doğal bir yarışma fiiliyle açıkla ve kesin sonuç uydurma.',
           'Başlık yaklaşık 35-95 karakter arasında, tek okumada anlaşılır ve doğal Türkiye Türkçesiyle olmalı.',
           'İngilizce kurum adını, mekanik malzeme tamlamasını, bilgi vermeyen terim açıklamasını ve nesneye araştırmacı eylemi yükleyen başlığı kalite kusuru say. Yeni olgu eklemeyen doğal Türkçe anlatımı tercih et.',
           'Çin National Day tatili için Milli Bayram, Mid-Autumn Festival için Güz Ortası Bayramı kullan. Girişte kaynakla doğrulanmış gelişmeyi, yeri ve haber değerini somut bir fiille anlat; protokol listesini ve uzun kurum adlarını sonraya bırak. Soyut önem cümlesi yerine kaynaktaki eser, üretim veya olay ayrıntısını ver.',
@@ -306,6 +310,7 @@ async function refineHeadline(article, factSheet, draft, { signal, completeJson 
           `Kaynak başlığı: ${article.title}`,
           `Olgu fişi:\n${JSON.stringify(factSheet)}`,
           `Mevcut başlık: ${draft.title}`,
+          `Başlığa özgü editör uyarıları (yalnız kaynak doğrularsa uygula): ${JSON.stringify(headlineEditorialWarnings(draft.title))}`,
           `Spot: ${draft.excerpt}`,
           `Haber metni:\n${draft.paragraphs.join('\n\n')}`,
           'JSON şeması: {"title":"seçilen başlık","reason":"kısa gerekçe"}'

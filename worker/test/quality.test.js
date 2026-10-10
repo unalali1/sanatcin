@@ -1,6 +1,29 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertImageDimensions, countCjk, detectImageContentType, editorialFluencyProfile, imageDimensions, isUsableImageUrl, likelyDuplicateTitles, normalizeNewsroomTerms, newsroomLanguageIssues, sourceContentIssues, nativeNameRegression, titleSimilarity, translationIssues } from '../src/quality.js';
+import { assertImageDimensions, countCjk, detectImageContentType, editorialFluencyProfile, imageDimensions, isUsableImageUrl, likelyDuplicateTitles, normalizeNewsroomTerms, headlineEditorialWarnings, newsroomLanguageIssues, sourceContentIssues, nativeNameRegression, titleSimilarity, translationIssues } from '../src/quality.js';
+
+
+test('10 Ekim editoryal vaka başlıkları için kaynak-temelli uyarılar üretir', () => {
+  const cases = [
+    ['El çizimi notlarla 2 bin kez noodle alan müşterinin anısı yaşatılıyor', 'İngilizce yemek adı'],
+    ['Çince yazılmış iki kitap ABD Ulusal Çeviri Ödülleri kısa listesinde', 'Çeviri ödülü'],
+    ['Kuzey Makedonya’da İlk Çin Film Festivali Başladı', 'takvim başlığı'],
+    ['Pekin’deki Zhihua Tapınağı’nda üç Ming dönemi Budist heykeli', 'eser envanteri'],
+    ['Los Angeles’ta eski otoparkın yerini Ma Yansong müzesi aldı', 'Mimarın adı']
+  ];
+  for (const [headline, warningFragment] of cases) {
+    assert.ok(
+      headlineEditorialWarnings(headline).some((warning) => warning.includes(warningFragment)),
+      'Beklenen uyarı bulunamadı: ' + headline
+    );
+  }
+  assert.deepEqual(
+    headlineEditorialWarnings('Bir erişte dükkânında dokuz yıl süren iyilik hikâyesi'),
+    [],
+    'Doğal ve doğrulanabilir başlık gereksiz uyarı almamalı'
+  );
+  assert.deepEqual(headlineEditorialWarnings(''), []);
+});
 
 test('Çince karakterleri yakalar', () => {
   assert.equal(countCjk('Türkçe metin 龟兹'), 2);
