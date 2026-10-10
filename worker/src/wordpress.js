@@ -703,11 +703,16 @@ export async function publishArticle(article, preparedImage = undefined, { signa
         chars: article.instagramText.length
       });
     } catch (error) {
-      log('warn', 'Instagram sosyal metni WordPress meta alanına yazılamadı; haber normal biçimde yayımlanacak', {
+      log('error', 'Instagram sosyal metni doğrulanamadı; kısa veya etiketsiz paylaşımı önlemek için haber TASLAKTA tutuldu', {
         source: article.source.id,
         postId: post.id,
         error: String(error?.message ?? error).slice(0, 300)
       });
+      // The Buffer plugin publishes on the WordPress publish transition. A verified
+      // social caption is therefore a precondition to that transition, not a warning.
+      // Keep the recoverable draft, don't silently send the plugin's short default.
+      throw new Error('Instagram özel metni doğrulanmadı; haber taslakta bırakıldı (post ' + post.id + '): '
+        + String(error?.message ?? error).slice(0, 240));
     }
   }
 
