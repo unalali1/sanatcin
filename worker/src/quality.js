@@ -145,7 +145,7 @@ export function headlineEditorialWarnings(title = '') {
   if (/\bnoodle(?:s)?\b/iu.test(value)) {
     warnings.push('Açıklamasız İngilizce yemek adı var. Kaynakta gerçekten erişte anlatılıyorsa başlıkta doğal Türkçeyi kullan; ramen gibi özgül yemekleri yanlış adlandırma.');
   }
-  if (/Çince yazılmış\b/iu.test(value) && /\b(?:kitap|eser|roman|öykü)\b/iu.test(value)) {
+  if (/Çince yazılmış(?![\p{L}\p{N}])/iu.test(value) && /\b(?:kitap|eser|roman|öykü)\b/iu.test(value)) {
     warnings.push('Çeviri ödülü bağlamında “Çince yazılmış” yerine doğruysa “Çinceden çevrilen” de; ödülün esere değil çeviriye verildiğini karıştırma.');
   }
   if (/\bkısa listesinde\b/iu.test(value)) {
