@@ -32,12 +32,17 @@ SanatÇin'de haftada bir kez geleneksel Çin sanatları hakkında kaynak temelli
 ## İçerik standardı
 
 - Hedef uzunluk: 1.200–1.800 Türkçe kelime.
-- 6–10 anlamlı H2 ara başlık.
+- 5–7 anlamlı H2 ara başlık; anlatıyı gereksiz mikro başlıklara bölme.
 - Türkçede yerleşik karşılığı bulunmayan Çince eser, teknik, akım ve kültürel kavramlarda kısa ilk kullanım standardı: **Doğal Türkçe Karşılık (“中文名称”, Pinyin)**. Sonraki kullanımlarda yalnız Türkçe karşılık kullanılır.
 - Çince karakter ve pinyin yalnız ikinci fact-check turunda birlikte doğrulanmış glossary kayıtlarından alınır; doğrulanamayan kayıt metne taşınmaz.
 - Adlandırma önceliği: kişi adlarında kaynaktaki tam Latin yazımı; marka ve kurumlarda resmî ad + gerektiğinde Türkçe tür açıklaması; eser, etkinlik ve kavramlarda yerleşik Türkçe ad veya doğal Türkçe karşılık; coğrafi adlarda yerleşik Türkçe biçim.
 - Başlık ve spotta Hanzi veya Pinyin kullanılmaz; özgün ad yalnız gövdede ilk kullanımda verilir.
 - Tarih, hanedan, teknik, malzeme, coğrafya, kişi/usta ve UNESCO statüleri kaynakla doğrulanmadan kesin ifade edilmez.
+- Suzhou nakışı revizyonundaki gibi doğal ve akıcı **Türkiye Türkçesi kültür-sanat haber dili** kullanılır; kuru akademik tanımlamalar ve ansiklopedik kronoloji yerine konunun neden önemli olduğu okura açıklanır.
+- Girişte sanatı somut bir eser, malzeme ya da teknik ayrıntıyla tanıt; gerçek bir gözlem gibi sunulacak sahneler ancak kaynakça doğrulanmışsa kullanılabilir.
+- Omurga: tarihsel gelişimde belirleyici dönüm noktaları → sanatın ayırt edici teknik ve estetik özellikleri → gelenek ve değişimin bugünkü üretim, eğitim, kullanım ve korumaya yansıması. Bu üç katman arasında **neden-sonuç ilişkisi** kur; mekanik başlık şablonu dayatma.
+- Tarih ve kişi adları gereksiz yere sıralanmaz, teknik ayrıntılar sade dille açıklanır; paragraflar kısa tutulur, tekrar ve yapay geçişler çıkarılır.
+- Son paragraf, geçmişle günümüzü doğal ve somut bir gözlemde bağlar; yapay aforizma veya retorik soru kullanılmaz.
 - Pazarlama, turizm tanıtımı, propaganda, kaynaksız övgü ve çeviri kokan cümleler kullanılmaz.
 - Kaynaklar yazının sonunda `Kaynaklar ve ileri okuma` bölümünde listelenir.
 - Fildişi gibi hassas kültürel nesnelerde güncel koruma ve etik bağlam ayrıca verilir.
@@ -98,6 +103,9 @@ Taslak yayımlanmadan önce:
 - Görseller gerçekten aynı sanat geleneğine mi ait?
 - Commons lisans ve attribution bilgisi korunmuş mu?
 - Metin Türkçe okur için açıklayıcı mı, yoksa yalnız Çin'deki mevcut bilgiyi çeviriyor mu?
+- Tarihsel gelişim, ayırt edici özellikler ve günümüzdeki durum arasında gerçek neden-sonuç bağlantıları kuruldu mu?
+- Güncel örnekler kaynağıyla doğrulanmış mı? Kurgulanmış tanıklık ya da sahne bulunuyor mu?
+- Akademik kalıplar, gereksiz kronoloji, tekrarlanan teknik terimler ve yapay geçişler temizlendi mi?
 - Sonuç bölümü konuyu günümüze bağlayıp dosyayı tamamlıyor mu?
 
 ## Güvenli başarısızlık
