@@ -1,3 +1,4 @@
+import { newsroomFindings } from './editorial-review.js';
 const CJK_PATTERN = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/gu;
 const TURKISH_WORD_PATTERN = /\b(?:ve|bir|bu|için|ile|olarak|olan|daha|ancak|ise|göre|tarafından|üzerine|arasında|sonra|önce)\b/giu;
 const BAD_IMAGE_PATTERN = /(?:^|[\/_-])(?:logo|avatar|icon|placeholder|default|sprite|qrcode|qr-code)(?:[\/_\.\?-]|$)/i;
@@ -226,6 +227,7 @@ export function editorialFluencyProfile({ title = '', excerpt = '', text = '' } 
     .filter(([, count]) => count >= 4)
     .map(([word, count]) => ({ word, count }));
   const newsroomIssueCount = newsroomLanguageIssues({ title, text }).length;
+  const findings = newsroomFindings({ title, excerpt, text });
   const densityFactor = Math.max(1, words.length / 180);
   const penalty = Math.round(
     (translationeseHits * 7 + Math.max(0, nominalizations - 3) * 2 + clichéCount * 3
@@ -233,8 +235,9 @@ export function editorialFluencyProfile({ title = '', excerpt = '', text = '' } 
       + repeatedAbstractWords.reduce((sum, item) => sum + (item.count - 3) * 2, 0)) / densityFactor
   );
   return {
-    score: Math.max(0, Math.min(100, 100 - penalty - newsroomIssueCount * 12)),
+    score: Math.max(0, Math.min(100, 100 - penalty - newsroomIssueCount * 12 - findings.filter(item => item.severity === 'repair').length * 12)),
     newsroomIssueCount,
+    findings,
     translationeseHits,
     nominalizations,
     clichéCount,

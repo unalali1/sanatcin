@@ -221,3 +221,79 @@ test('nonduplicate early guard adds no AI call to the normal pipeline', async ()
   assert.equal(calls, 5);
   assert.equal(checks, 1);
 });
+
+test('final gate repairs a known calque and preserves factual numbers before returning publishable content', async () => {
+  let repairCount = 0;
+  const broken = editorialResult();
+  broken.paragraphs[1] += ' Programda halk geçitleri de var.';
+  const result = await translateArticle(article, { completeJson: async request => {
+    const system = request.input[0].content;
+    const input = request.input[1].content;
+    if (input.includes('[literal_folk_parade]')) {
+      repairCount++;
+      return editorialResult();
+    }
+    if (system.includes('başlık editörüsün.') && !system.includes('son okuma')) return { title: broken.title };
+    if (system.includes('Instagram')) return {};
+    if (input.includes('Son okuma yapılacak taslak')) return broken;
+    if (input.includes('Olgu fişi:')) return broken;
+    return { factSheet };
+  }});
+  assert.equal(repairCount, 1);
+  assert.doesNotMatch(result.text, /halk geçitleri/);
+  assert.match(result.text, /42/);
+});
+
+test('an unrepaired clear calque is rejected before Instagram generation', async () => {
+  let calls = 0;
+  let instagramCalls = 0;
+  const broken = editorialResult();
+  broken.paragraphs[1] += ' Programda halk geçitleri de var.';
+  await assert.rejects(translateArticle(article, { completeJson: async request => {
+    calls++;
+    if (request.input[0].content.includes('Instagram')) instagramCalls++;
+    return calls === 1 ? { factSheet } : broken;
+  }}), /literal_folk_parade/);
+  assert.equal(instagramCalls, 0);
+  assert.ok(calls <= 6, `repair must remain bounded, got ${calls} calls`);
+});
+
+test('micro-editor cannot discard a verified person for a generic festival title even if a judge would approve', async () => {
+  const original = { ...editorialResult(), title: 'Pekin Müzik Festivali’ni 90 yaşındaki Charles Dutoit açtı' };
+  let calls = 0;
+  const result = await translateArticle(article, { completeJson: async () => {
+    calls++;
+    if (calls === 1) return { factSheet: { ...factSheet, people: ['Charles Dutoit'] } };
+    if (calls === 2 || calls === 3) return original;
+    if (calls === 4) return { title: 'Pekin Müzik Festivali Mozart konseriyle başladı' };
+    return { preferred: 'B', reason: 'Onay', aScore: 80, bScore: 99 };
+  }});
+  assert.equal(result.title, original.title);
+  assert.equal(calls, 5);
+});
+
+test('language repair cannot silently drop a verified number', async () => {
+  const broken = editorialResult();
+  broken.paragraphs[1] += ' Programda halk geçitleri de var.';
+  let calls = 0;
+  await assert.rejects(translateArticle(article, { completeJson: async request => {
+    calls++;
+    if (calls === 1) return { factSheet };
+    if (request.input[1].content.includes('[literal_folk_parade]')) {
+      const clean = editorialResult();
+      clean.excerpt = clean.excerpt.replace('42', 'çok sayıda');
+      clean.paragraphs = clean.paragraphs.map(p => p.replace('42', 'çok sayıda'));
+      return clean;
+    }
+    return broken;
+  }}), /literal_folk_parade/);
+});
+
+test('contextual institution warning does not add a model stage or reject an otherwise usable draft', async () => {
+  const draft = editorialResult();
+  draft.paragraphs[1] += ' Pekin Müzik Festivali (Beijing Music Festival) de programda tanıtılıyor.';
+  let calls = 0;
+  const result = await translateArticle(article, { completeJson: async () => ++calls === 1 ? { factSheet } : draft });
+  assert.equal(calls, 5);
+  assert.match(result.text, /Beijing Music Festival/);
+});
