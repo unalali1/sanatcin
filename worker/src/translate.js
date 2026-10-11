@@ -1,3 +1,4 @@
+import { NEWSROOM_REVIEW_GUIDANCE, newsroomFindings, headlineRevisionIssues } from './editorial-review.js';
 import OpenAI from 'openai';
 import { config } from './config.js';
 import { log } from './logger.js';
@@ -165,6 +166,7 @@ async function writeTurkishNews(article, factSheet, { draft = null, feedback = [
           repairing
             ? 'Verilen Türkçe metindeki denetim notlarını gider; metni kaynak ve olgu fişine bağlı kalarak yeniden düzenle.'
             : 'Zenginleştirilmiş olgu fişindeki doğrulanmış bilgilerden hareketle Türkçe haberi sıfırdan yaz; kaynak dildeki cümle sırasını yeniden kurmaya çalışma.',
+          NEWSROOM_REVIEW_GUIDANCE,
           'Olgu fişi doğruluk sınırıdır, paragraf planı değildir. Kaynak haber ve kaynak başlığı yalnız haber hammaddesidir; cümle sırasını, paragraf sırasını veya vurgu hiyerarşisini kopyalama. Haber örgüsünü Türkçe gazetecilikteki önem sırasına göre kur.',
           'Yazmaya başlamadan önce sessizce üç şeyi belirle: haberin asıl hikâyesi nedir; Türk okuyucu açısından en ilginç ve ayırt edici somut unsur nedir; hangi bilgi girişte, hangisi arka planda kalmalıdır. Bu analizi çıktıda gösterme.',
           'Haber türüne göre en güçlü açıyı değiştir: sıradışı bir iyilikte insan hikâyesini sayıdan; tarihî eser haberinde eserin değerini liste başlığından; film festivalinde doğrulanmış program ve ilgiyi sırf açılış duyurusundan; mimarlık haberinde tasarımcıyı yapı sahibinden ayırarak somut dönüşümü öne al. Çeviri ödülünde “Çince yazılmış eser” ile “Çinceden çevrilen eser” farkını koru. Kaynakta doğrulanmamış başarı, ilgi, unvan veya sonuç icat etme.',
@@ -238,6 +240,7 @@ async function chooseMoreNaturalDraft(article, factSheet, before, after, { signa
           {
             role: 'system',
             content: [
+              NEWSROOM_REVIEW_GUIDANCE,
               'Türkiye Türkçesiyle çalışan tarafsız bir haber dili hakemisin.',
               'İki metin aynı doğrulanmış olgulara dayanıyor. A ilk Türkçe taslak, B ise çeviri kokusunu gidermek için kıdemli editör tarafından yeniden yazılmış sürümdür. Dil doğallığı, açıklık, haber ritmi, somut fiil kullanımı, Türkçe söz dizimi ve çeviri kokusunun yokluğunun yanında başlık ve girişin haberin ANA FİKRİNİ doğru temsil edip etmediğini karşılaştır.',
               'Olgu fişi doğruluk sınırıdır. B kaynakta olmayan bilgi ekliyor, doğrulanmış kişi/sayı/tarihi değiştiriyor veya ana haber gelişmesini bozuyorsa A’yı seç. Buna karşılık A’daki her tali ayrıntının B’de aynı cümleyle veya aynı uzunlukta bulunmasını şart koşma; doğru özetleme ve sadeleştirme bilgi kaybı değildir.',
@@ -254,6 +257,7 @@ async function chooseMoreNaturalDraft(article, factSheet, before, after, { signa
             content: [
               `Haber açısı: ${factSheet.angle}`,
               `Doğrulanmış olgu fişi:\n${JSON.stringify(factSheet)}`,
+              `Somut dil denetimi: ${JSON.stringify({ A: newsroomFindings(before), B: newsroomFindings(after) })}`,
               `A sürümü:\n${JSON.stringify({ title: before.title, excerpt: before.excerpt, paragraphs: before.paragraphs })}`,
               `B sürümü:\n${JSON.stringify({ title: after.title, excerpt: after.excerpt, paragraphs: after.paragraphs })}`,
               'JSON şeması: {"preferred":"A|B","reason":"kısa gerekçe","aScore":0,"bScore":0}'
@@ -292,6 +296,7 @@ async function refineHeadline(article, factSheet, draft, { signal, completeJson 
       {
         role: 'system',
         content: [
+          NEWSROOM_REVIEW_GUIDANCE,
           'Türkçe kültür-sanat haberleri için başlık editörüsün.',
           'Önce kaynak başlığının haberin ana fikrini ne kadar iyi taşıdığını değerlendir. Kaynak başlık açık ve kapsayıcıysa bilgi hiyerarşisini koruyan doğal bir Türkçe uyarlama adaylardan biri olsun. Ardından zihninde en az üç farklı başlık açısı üret: ana haber gelişmesi, kültürel/hikâyesel ayırt edici unsur ve varsa güçlü görsel/mekânsal unsur. Doğruluk, ana fikre sadakat, somutluk, Türkçe doğallık ve haber ritmi bakımından en iyisini seç; yalnız seçtiğin başlığı JSON içinde döndür.',
           'Başlık kaynakta olmayan bilgi, sıfat, önem atfı veya neden-sonuç eklememeli.',
@@ -327,7 +332,9 @@ async function refineHeadline(article, factSheet, draft, { signal, completeJson 
   const beforeIssues = editorialIssues(draft, factSheet);
   const afterIssues = editorialIssues(candidate, factSheet);
   const namingRegression = nativeNameRegression(draft, candidate, factSheet.nativeNames);
-  if (afterIssues.length > beforeIssues.length || namingRegression) {
+  const regressionIssues = headlineRevisionIssues(draft.title, title, factSheet);
+  if (afterIssues.length > beforeIssues.length || namingRegression || headlineQualityRegression(draft.title, title) || regressionIssues.length) {
+    log('info', 'Başlık gerilemesi önlendi', { source: article.source.id, proposedTitle: title, issues: regressionIssues });
     return { draft, changed: false, reason: 'Yeni başlık kalite veya adlandırma kapısından geçmedi.' };
   }
   return { draft: candidate, changed: true, reason: cleanString(result.reason).slice(0, 220) };
@@ -341,6 +348,7 @@ async function polishTurkishNews(article, factSheet, draft, { signal, completeJs
       {
         role: 'system',
         content: [
+          NEWSROOM_REVIEW_GUIDANCE,
           'Sen kaynak dilden çeviri yapan biri değil, Türkçe bir haber merkezinin son okuma ve başlık editörüsün.',
           "Metnin üretim sürecini anlatan meta-dil kullanma; 'Kaynak metne göre', 'Kaynak, ...' ve 'metinde belirtildi' gibi ifadeler yazma. Bilgi atfedilecekse gerçek kaynak, kişi veya kurum adını kullan.",
           'Görevin verilen taslağı yeniden çevirmek değil; metindeki çeviri kokusunu, yabancı sözdizimini, gereksiz isimleştirmeleri, mekanik cümle ritmini ve muğlak başlığı temizlemektir. Taslağın bilgi sırasına da bağlı değilsin: olguları değiştirmeden, Türk okur için daha güçlü bir haber akışı gerekiyorsa paragraf ve vurgu sırasını yeniden kur.',
@@ -369,6 +377,7 @@ async function polishTurkishNews(article, factSheet, draft, { signal, completeJs
         content: [
           `Kaynak başlığı: ${article.title}`,
           `Olgu fişi:\n${JSON.stringify(factSheet)}`,
+          `Somut dil denetimi bulguları: ${JSON.stringify(newsroomFindings(draft))}`,
           `Son okuma yapılacak taslak:\n${JSON.stringify({ title: draft.title, excerpt: draft.excerpt, paragraphs: draft.paragraphs, tags: draft.tags })}`,
           'JSON şeması: {"accepted":true,"issues":[],"title":"başlık","excerpt":"spot","paragraphs":["paragraf"],"tags":["etiket"]}'
         ].join('\n\n')
@@ -590,7 +599,7 @@ export async function translateArticle(article, { signal, completeJson = request
       let candidateDraft = polished.draft;
 
       // Gövde ve spot daha iyi ise yalnız zayıflayan başlık yüzünden tüm yeniden yazımı kaybetme.
-      if (headlineQualityRegression(prePolish.draft.title, candidateDraft.title)) {
+      if (headlineQualityRegression(prePolish.draft.title, candidateDraft.title) || headlineRevisionIssues(prePolish.draft.title, candidateDraft.title, factSheet).length) {
         candidateDraft = { ...candidateDraft, title: prePolish.draft.title };
         log('info', 'Türkçe son okumada gövde korundu; gerileyen başlık önceki sürümden alındı', {
           source: article.source.id,
@@ -822,13 +831,15 @@ export async function translateArticle(article, { signal, completeJson = request
   // A failed candidate is left unpublished by the caller; the daily discovery pipeline continues.
   let structureIssues = editorialStructureIssues(final.draft);
   let fluencyBeforeGate = editorialFluencyProfile(final.draft);
-  if (structureIssues.length || fluencyBeforeGate.score < 86) {
+  let languageFindings = newsroomFindings(final.draft);
+  if (structureIssues.length || fluencyBeforeGate.score < 86 || languageFindings.some(item => item.severity === 'repair')) {
     const baseline = final.draft;
     try {
       const revision = await writeTurkishNews(article, factSheet, {
         draft: baseline,
         feedback: [
           ...structureIssues,
+          ...languageFindings.map(item => `[${item.code}] ${item.message}`),
           ...(fluencyBeforeGate.score < 86 ? ['Metnin Türkiye Türkçesi doğallığını artır, soyut klişeleri ve kopuk paragraf sıralamasını düzelt.'] : []),
           'Haberin en önemli gelişmesini ilk iki cümlede ver; paragraf planını bağımsız Türkçe haber metni olarak yeniden kur.',
           'Kaynak fişi dışından bilgi ekleme, hiçbir sayıyı veya özgün adı değiştirme.'
@@ -841,6 +852,9 @@ export async function translateArticle(article, { signal, completeJson = request
         if (!numericFactRegression(baseline, revision.draft)
             && !nativeNameRegression(baseline, revision.draft, factSheet.nativeNames)
             && !editorialIssues(revision.draft, factSheet).some(issue => /Çince karakterler|doğrulanmış yerel ad|kaynak-site artığı|yinelenen cümle/iu.test(issue))) {
+          if (headlineQualityRegression(baseline.title, revision.draft.title) || headlineRevisionIssues(baseline.title, revision.draft.title, factSheet).length) {
+            revision.draft.title = baseline.title;
+          }
           final = revision;
         }
       }
@@ -853,8 +867,12 @@ export async function translateArticle(article, { signal, completeJson = request
     structureIssues = editorialStructureIssues(final.draft);
     fluencyBeforeGate = editorialFluencyProfile(final.draft);
   }
-  if (structureIssues.length || fluencyBeforeGate.score < 82) {
-    throw new Error('Editoryal yayın kapısı: giriş, haber bütünlüğü veya Türkçe doğallığı yetersiz. ' + structureIssues.join(' '));
+  languageFindings = newsroomFindings(final.draft);
+  log(languageFindings.length ? 'warn' : 'info', 'Somut Türkçe dil denetimi tamamlandı', {
+    source: article.source.id, reviewVersion: '2026-10-11', findings: languageFindings, heuristicScore: fluencyBeforeGate.score
+  });
+  if (structureIssues.length || fluencyBeforeGate.score < 82 || languageFindings.some(item => item.severity === 'repair')) {
+    throw new Error('Editoryal yayın kapısı: giriş, haber bütünlüğü veya Türkçe doğallığı yetersiz. ' + [...structureIssues, ...languageFindings.filter(item => item.severity === 'repair').map(item => `[${item.code}] ${item.message}`)].join(' '));
   }
 
   assertUsableEditorialOutput(final.draft);
