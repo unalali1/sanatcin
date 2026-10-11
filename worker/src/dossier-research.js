@@ -111,7 +111,7 @@ export async function researchDossierTopic(topic, {
         'Tek bir haber metnine dayanma. Müze koleksiyonları, UNESCO, üniversiteler, akademik kurumlar, kamu kültür kurumları ve güvenilir ansiklopedik/müze kaynaklarını önceliklendir.',
         'Pazarlama metni, turizm reklamı, SEO içerik çiftliği ve kaynaksız blogları temel kaynak yapma.',
         'Çelişkili tarihler veya tartışmalı kökenler varsa kesin hüküm verme; facts içinde confidence=medium kullan ve ihtilafı açıkla.',
-        'Türkçe okur için tarihsel bağlam, teknik üretim süreci, estetik ilkeler, semboller, önemli merkezler/ekoller ve günümüzdeki devamlılık birlikte araştırılmalı.',
+        'Türkçe okur için tarihsel gelişimin dönüm noktalarını, ayırt edici teknik/estetik özellikleri ve sanatın günümüzde nasıl yaşadığını doğrulanmış somut örneklerle araştır. Bu üç katman arasında neden-sonuç bağı kurabilecek olgular ve güncel koruma, üretim veya eğitim uygulamaları bul; kanıt yoksa iddia üretme.',
         'Özgün Çince eser, teknik, akım ve kültürel kavram adlarını güvenilir kaynaklardan doğrula; glossary alanında doğal Türkçe karşılık, Çince karakter ve doğru pinyin birlikte bulunsun. Kaynakla doğrulanmayan Çince yazım veya pinyin üretme.',
         'Fildişi gibi koruma/hukuk boyutu olan konularda güncel etik ve koruma bağlamını mutlaka belirt.',
         'Yalnız geçerli JSON döndür.'
@@ -122,6 +122,7 @@ export async function researchDossierTopic(topic, {
         `Konu: ${topicDisplayName(topic)}`,
         `Araştırma sorguları: ${(topic.queries || []).join(' | ')}`,
         'En az 12 doğrulanabilir olgu, 4-8 kaynak ve en az 3 farklı alan adı kullan.',
+        'Tarihsel gelişim, tekniğin/estetiğin ayırt edici yanları ve günümüzdeki durum için ayrı ayrı doğrulanabilir olgular topla; bunların birbirini nasıl etkilediğini gösterebilen örneklere öncelik ver.',
         'Kaynakların en az ikisi museum, university, unesco, government, cultural-institution veya academic türünde olsun.',
         'JSON şeması:',
         '{"angle":"...","thesis":"...","facts":[{"id":1,"claim":"...","confidence":"high|medium","sourceUrls":["https://..."]}],"timeline":[{"period":"...","event":"..."}],"glossary":[{"tr":"...","zh":"...","pinyin":"...","note":"..."}],"sources":[{"title":"...","url":"https://...","publisher":"...","sourceType":"museum|university|unesco|government|cultural-institution|academic|reference|other","usedFor":"..."}],"imageQueries":["..."]}'
@@ -196,12 +197,14 @@ async function requestArticle(client, model, research, signal, repairNote = '') 
       content: [
         'SanatÇin için Türkçe uzun form kültür-sanat editörüsün.',
         'Kaynak araştırmasındaki doğrulanmış olgular kesin factual sınırdır; bunların dışında tarih, sayı, kişi, kurum, teknik ayrıntı veya UNESCO statüsü uydurma.',
-        'Metin Türkiye Türkçesinde doğal, akıcı, dergi kalitesinde ve öğretici olmalı; İngilizce/Çince cümle yapısını taklit etme.',
+        'Metni Türkiye Türkçesinde akıcı, açık ve canlı bir kültür-sanat haberi dosyası olarak yaz; akademik makale, ansiklopedi maddesi veya çeviri izlenimi vermesin. İngilizce/Çince cümle yapısını taklit etme.',
         'Türkçede yerleşik karşılığı bulunmayan Çince eser, teknik, akım veya kültürel kavram adlarında doğal Türkçe karşılığı esas al. İlk kullanımda kısa standardı uygula: Doğal Türkçe Karşılık (“中文名称”, Pinyin). Türkçe karşılık anlamı, çağrışımı ve varsa kelime oyununu mümkün olduğunca korumalıdır. Sonraki kullanımlarda yalnız Türkçe karşılığı kullan. Çince ad veya pinyin araştırmada doğrulanmamışsa uydurma.',
         'Başlık açıklayıcı ve merak uyandırıcı olsun, clickbait olmasın. Bilinmeyen Çince terimi açıklamasız başlığın merkezine koyma.',
-        'Giriş sahici ve somut olsun; sonra tarih, yapım tekniği/malzeme, estetik düşünce, semboller, merkezler/ekoller, önemli örnekler ve günümüzdeki devamlılık arasında doğal bir anlatı kur.',
-        'CV listesi, turistik tanıtım dili, propaganda, kaynakta olmayan övgü ve klişelerden kaçın.',
-        '1200-1800 Türkçe kelime hedefle. 6-10 anlamlı H2 alt başlık kullan. Son bölüm soru işaretiyle bitmesin.',
+        'İlk iki paragrafta sanatı somut bir eser, malzeme veya yapım ayrıntısıyla tanıt; okur konunun ne olduğunu ve neden önemli olduğunu hemen anlasın. Kaynakta doğrulanmayan gözlem, sahne, doğrudan tanıklık veya hayalî usta tasviri kurma.',
+        'Ana omurga: kısa ve somut giriş → tarihsel gelişimde gerçekten belirleyici dönüm noktaları → sanatın ayırt edici teknik/estetik özellikleri → geleneğin değişimi ve günümüzdeki üretim, eğitim, koruma veya kullanımı. Paragraflar arasında doğal neden-sonuç ve geçmiş-bugün bağlantıları kur; bu sıralamayı mekanik bir şablon gibi tekrarlama.',
+        'Teknik terimleri ilk geçtiği yerde günlük Türkçeyle açıkla; ardından ayrıntıya boğmadan doğrulanmış bir örnek ver. Tarih ve hanedan adlarını art arda sıralama; bir olgu neden önemliyse onu anlat.',
+        'CV listesi, turistik tanıtım dili, propaganda, kaynakta olmayan övgü, uzun soyut benzetmeler, klişeler ve “yalnızca ... değil, aynı zamanda ...” kalıbının tekrarından kaçın. Kısa ve aktif cümleleri, açıklayıcı özne-fiil yapısını ve anlamlı geçişleri tercih et.',
+        '1200-1800 Türkçe kelime hedefle. 5-7 anlamlı H2 alt başlık kullan; her bölüm anlatıyı ilerletsin, mikro başlıklarla metni parçalama. Son bölüm geçmişle bugünü bağlayan somut bir gözlemle bitsin; retorik soru kullanma.',
         'Kaynak listesini yazma; sistem ayrıca ekleyecek.',
         repairNote,
         'Yalnız geçerli JSON döndür.'
