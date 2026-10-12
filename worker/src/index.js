@@ -1,6 +1,6 @@
 import { preflightCandidates } from './preflight.js';
 import { candidateForRound, passesPublicationFit } from './selection.js';
-import { editorialCoverage } from './run-report.js';
+import { discoveryFunnel, editorialCoverage } from './run-report.js';
 import { readFileSync } from 'node:fs';
 import { config, validateConfig } from './config.js';
 import { mapLimit } from './concurrency.js';
@@ -137,7 +137,9 @@ async function run() {
 
   const cutoff = Date.now() - config.fallbackLookbackDays * 24 * 60 * 60 * 1000;
   const futureLimit = Date.now() + 6 * 60 * 60 * 1000;
-  const candidates = uniqueCandidates(discovered.flat())
+  const discoveredItems = discovered.flat();
+  const uniqueItems = uniqueCandidates(discoveredItems);
+  const candidates = uniqueItems
     .filter((item) => !item.publishedAt || (new Date(item.publishedAt).getTime() >= cutoff && new Date(item.publishedAt).getTime() <= futureLimit))
     .map((item) => scoreCandidate(item));
   const known = new Set(await knownHashes(candidates.map((item) => sourceHash(item.url))));
@@ -151,6 +153,14 @@ async function run() {
     }
     return true;
   });
+  log('info', 'Keşif aşaması sayısal dökümü', discoveryFunnel({
+    discovered: discoveredItems.length,
+    unique: uniqueItems.length,
+    fresh: candidates.length,
+    known: candidates.filter((item) => known.has(sourceHash(item.url))).length,
+    cachedFailed: selectionStats.cachedFailedSkipped,
+    aiCandidates: newCandidates.length
+  }));
   if (selectionStats.cachedFailedSkipped > 0) {
     log('info', 'Yakın zamanda gövde çıkarımı başarısız olan adaylar geçici önbellekten atlandı', {
       skipped: selectionStats.cachedFailedSkipped,

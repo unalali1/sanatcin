@@ -313,6 +313,35 @@ export function imagesFromSrcset(value = '') {
     .map((item) => item.url);
 }
 
+// Recover full-resolution links stored beside an editorial image; every URL still
+// passes the normal network, size, relevance, licensing and duplication checks.
+export function discoverFullSizeEditorialImages(html, baseUrl) {
+  const $ = cheerio.load(String(html ?? ''));
+  const found = [];
+  const seen = new Set();
+  $('article figure, main figure, .article figure, .content figure, article .photo, main .photo, article .image-container').each((_, element) => {
+    const container = $(element);
+    container.find('img').each((__, img) => {
+      const node = $(img);
+      for (const key of ['data-full-src', 'data-full', 'data-large', 'data-original', 'data-original-src', 'data-zoom-image', 'data-ks-lazyload', 'data-echo']) {
+        const raw = node.attr(key);
+        if (raw) found.push(raw);
+      }
+      found.push(...imagesFromSrcset(node.attr('data-srcset') || ''));
+    });
+    container.find('a[href]').each((__, a) => {
+      const href = $(a).attr('href');
+      if (href && /\.(?:jpe?g|png|webp)(?:[?#]|$)/i.test(href)) found.push(href);
+    });
+  });
+  return found.map((value) => normalizeUrl(value, baseUrl))
+    .filter((value) => {
+      if (!value || !isUsableImageUrl(value) || seen.has(value)) return false;
+      seen.add(value);
+      return true;
+    });
+}
+
 function addJsonLdImage(value, output) {
   if (!value) return;
   if (typeof value === 'string') {
@@ -412,6 +441,11 @@ function collectSourceImageCaptions($, baseUrl) {
       node.attr('data-original'),
       node.attr('data-original-src'),
       node.attr('src'),
+      node.attr('data-full-src'),
+      node.attr('data-full'),
+      node.attr('data-large'),
+      node.attr('data-zoom-image'),
+      ...node.closest('figure').find('a[href]').map((__, a) => $(a).attr('href')).get().filter((href) => /\.(?:jpe?g|png|webp)(?:[?#]|$)/i.test(href ?? '')),
       ...picture.find('source').map((__, source) => imagesFromSrcset($(source).attr('srcset') || $(source).attr('data-srcset'))).get().flat()
     ].filter(Boolean);
     for (const rawUrl of urls) {
@@ -460,6 +494,7 @@ export async function extractArticle(candidate, { signal, allowBrowser = true } 
       $('meta[name="twitter:image"]').attr('content'),
       $('link[rel="image_src"]').attr('href'),
       ...jsonLdImageUrls($),
+      ...discoverFullSizeEditorialImages(html, candidate.url),
       ...$('article picture source, main picture source, .article picture source, .content picture source').map((_, element) => imagesFromSrcset($(element).attr('srcset') || $(element).attr('data-srcset'))).get().flat(),
       ...$('article img, main img, .article img, .content img').map((_, element) => imagesFromSrcset($(element).attr('srcset') || $(element).attr('data-srcset'))).get().flat(),
       ...$('article img, main img, .article img, .content img').map((_, element) => $(element).attr('data-src') || $(element).attr('data-lazy-src') || $(element).attr('data-original') || $(element).attr('data-original-src') || $(element).attr('src')).get()
