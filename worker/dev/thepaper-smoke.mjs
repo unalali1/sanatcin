@@ -12,6 +12,11 @@ for (const url of [
     const response = await fetch(url, { headers: { 'user-agent': 'SanatCinBot/1.0', accept: 'text/html' }, signal: AbortSignal.timeout(12000) });
     const html = await response.text();
     const challengeTerm = /(cf-chl-|cloudflare.{0,40}challenge|verify you are human|captcha)/i.exec(html);
+    const markers = ['__NEXT_DATA__','__NUXT__','__INITIAL_STATE__','__APOLLO_STATE__','__NEXT_P','articleList','newsList','newsDetail_forward','list_25455','34212822','fetch(', 'application/ld+json','verify you are human','captcha'].map((needle) => {
+      const at = html.indexOf(needle);
+      return { needle, at, context: at < 0 ? null : html.slice(Math.max(0, at - 50), at + 130) };
+    });
+    console.log(JSON.stringify({ diagnosticMarkers: url, markers }));
     console.log(JSON.stringify({
       diagnosticUrl: url, status: response.status, finalUrl: response.url, bytes: html.length,
       links: (html.match(/newsDetail_forward_\\d+/g) || []).length,
