@@ -64,7 +64,7 @@ const thepaper = (id, desk, listId, defaultCategory, options = {}) => html(
     defaultCategory,
     intervalMinutes: 180,
     linkSelector: "a[href*='newsDetail_forward_']",
-    pathPattern: /\\/newsDetail_forward_\\d+$/i,
+    pathPattern: /\/newsDetail_forward_\d+$/i,
     itemSelector: 'article, li, .news-item, .news_li, .list-item, .card, .list_news',
     articleLimit: 24,
     ...options
