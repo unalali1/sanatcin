@@ -43,8 +43,8 @@ export function challengePage(html = '') {
   // references "captcha" in a script tag.
   if (/cf-chl-|challenge-platform|checking your browser|cloudflare.{0,80}(?:challenge|verification)/i.test(snapshot)) return true;
   const visible = snapshot
-    .replace(/<script\\b[^>]*>[\\s\\S]*?<\\/script>/giu, ' ')
-    .replace(/<style\\b[^>]*>[\\s\\S]*?<\\/style>/giu, ' ');
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/giu, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/giu, ' ');
   return /verify you are human|human verification|captcha required|security verification|id=["']captcha(?:-|["'])|class=["'][^"']*captcha[-_ ](?:challenge|overlay)/iu.test(visible);
 }
 
