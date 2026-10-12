@@ -25,6 +25,8 @@ test('funnel sanitizes counters without creating negative stage drops', () => {
   assert.equal(funnel.duplicateEntries, 0);
   assert.equal(funnel.staleEntries, 0);
   assert.equal(funnel.selectionDeferred, 0);
+  assert.equal(discoveryFunnel({ aiCandidates: 57 }).selectionDeferred, null);
+  assert.equal(discoveryFunnel({ aiCandidates: 57 }).queuedButUnpublished, null);
 });
 
 test('explicit film festival can escape a general culture source default', () => {
