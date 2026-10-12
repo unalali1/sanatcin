@@ -79,8 +79,8 @@ export function hasExcludedTopic(candidate) {
 
 // Narrow headline-only hints: avoid interpreting any mention of a celebrity,
  // "film photography" or an art exhibition as a cinema story.
-const CINEMA_HEADLINE_EVENT = /\\b(?:feature film|documentary film|film festival|film premiere|film screening|movie premiere|box office|cinema release|film director|animated film|movie theatre|movie theater|television drama)\\b|(?:电影节|电影首映|电影上映|票房纪录|纪录片首映)/iu;
-const NON_CINEMA_FILM_CONTEXT = /\\b(?:film photography|photographic film|film camera|film negatives)\\b/iu;
+const CINEMA_HEADLINE_EVENT = /\b(?:feature film|documentary film|film festival|film premiere|film screening|movie premiere|box office|cinema release|film director|animated film|movie theatre|movie theater|television drama)\b|(?:电影节|电影首映|电影上映|票房纪录|纪录片首映)/iu;
+const NON_CINEMA_FILM_CONTEXT = /\b(?:film photography|photographic film|film camera|film negatives)\b/iu;
 
 export function inferCategory(candidate) {
   const headline = String(candidate.title ?? '');
