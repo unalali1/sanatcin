@@ -331,7 +331,7 @@ export function discoverFullSizeEditorialImages(html, baseUrl) {
     });
     container.find('a[href]').each((__, a) => {
       const href = $(a).attr('href');
-      if (href && /\\.(?:jpe?g|png|webp)(?:[?#]|$)/i.test(href)) found.push(href);
+      if (href && /\.(?:jpe?g|png|webp)(?:[?#]|$)/i.test(href)) found.push(href);
     });
   });
   return found.map((value) => normalizeUrl(value, baseUrl))
@@ -445,7 +445,7 @@ function collectSourceImageCaptions($, baseUrl) {
       node.attr('data-full'),
       node.attr('data-large'),
       node.attr('data-zoom-image'),
-      ...node.closest('figure').find('a[href]').map((__, a) => $(a).attr('href')).get().filter((href) => /\\.(?:jpe?g|png|webp)(?:[?#]|$)/i.test(href ?? '')),
+      ...node.closest('figure').find('a[href]').map((__, a) => $(a).attr('href')).get().filter((href) => /\.(?:jpe?g|png|webp)(?:[?#]|$)/i.test(href ?? '')),
       ...picture.find('source').map((__, source) => imagesFromSrcset($(source).attr('srcset') || $(source).attr('data-srcset'))).get().flat()
     ].filter(Boolean);
     for (const rawUrl of urls) {
