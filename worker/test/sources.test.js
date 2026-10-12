@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dateFromText, dateFromUrl, discoverFromFeedXml, discoverFromHtml, extractBestArticleTextFromHtml, normalizeUrl } from '../src/fetch.js';
+import { challengePage, dateFromText, dateFromUrl, discoverFromFeedXml, discoverFromHtml, extractBestArticleTextFromHtml, normalizeUrl } from '../src/fetch.js';
 import { SOURCES, SOURCE_SET_VERSION } from '../src/sources.js';
 
 test('Excel kaynak havuzu eksiksiz ve eski havuzdan bağımsızdır', () => {
@@ -147,4 +147,12 @@ test('The Paper lifestyle desk excludes business news but retains fashion and de
 
 test('The Paper article dates can be parsed from Chinese page text in Beijing time', () => {
   assert.equal(dateFromText('澎湃新闻记者 王诤 2026-10-09 17:09 来源：澎湃新闻'), '2026-10-09T09:09:00.000Z');
+});
+
+test('passive verification SDK does not block editorial HTML but an active human check does', () => {
+  const editorial = '<html><head><script>window.AliyunCaptchaConfig = { region: "cn" };</script><script src="/captcha/sdk.js"></script></head><body><a href="/newsDetail_forward_34227659">上海举办新艺术展</a></body></html>';
+  const challenge = '<html><body><div id="captcha-challenge">Security verification: verify you are human</div></body></html>';
+  assert.equal(challengePage(editorial), false);
+  assert.equal(challengePage(challenge), true);
+  assert.equal(challengePage('<html><body><div id="cf-chl-widget"></div></body></html>'), true);
 });
