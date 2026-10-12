@@ -1,34 +1,6 @@
 import { SOURCES } from '../src/sources.js';
 import { discover, extractArticle } from '../src/fetch.js';
 
-// Diagnostic only: read public desktop/mobile variants without any CAPTCHA bypass.
-for (const url of [
-  'https://m.thepaper.cn/list_25455',
-  'https://www.thepaper.cn/list_25455',
-  'https://m.thepaper.cn/newsDetail_forward_34212822',
-  'https://www.thepaper.cn/newsDetail_forward_34212822'
-]) {
-  try {
-    const response = await fetch(url, { headers: { 'user-agent': 'SanatCinBot/1.0', accept: 'text/html' }, signal: AbortSignal.timeout(12000) });
-    const html = await response.text();
-    const challengeTerm = /(cf-chl-|cloudflare.{0,40}challenge|verify you are human|captcha)/i.exec(html);
-    const markers = ['__NEXT_DATA__','__NUXT__','__INITIAL_STATE__','__APOLLO_STATE__','__NEXT_P','articleList','newsList','newsDetail_forward','list_25455','34212822','fetch(', 'application/ld+json','verify you are human','captcha'].map((needle) => {
-      const at = html.indexOf(needle);
-      return { needle, at, context: at < 0 ? null : html.slice(Math.max(0, at - 50), at + 130) };
-    });
-    console.log(JSON.stringify({ diagnosticMarkers: url, markers }));
-    console.log(JSON.stringify({
-      diagnosticUrl: url, status: response.status, finalUrl: response.url, bytes: html.length,
-      links: (html.match(/newsDetail_forward_\\d+/g) || []).length,
-      images: (html.match(/imgpai\\.thepaper\\.cn/g) || []).length,
-      challengeTerm: challengeTerm ? html.slice(Math.max(0, challengeTerm.index - 24), challengeTerm.index + 80) : null,
-      textPreview: html.slice(0, 150)
-    }));
-  } catch (error) {
-    console.log(JSON.stringify({ diagnosticUrl: url, error: error.message }));
-  }
-}
-
 const desks = SOURCES.filter((source) => source.id.startsWith('thepaper-'));
 const results = await Promise.all(desks.map(async (source) => {
   try {
