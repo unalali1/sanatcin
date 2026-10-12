@@ -1,4 +1,4 @@
-export const SOURCE_SET_VERSION = '2026-09-22-en-04';
+export const SOURCE_SET_VERSION = '2026-10-12-thepaper-01';
 
 export const CATEGORIES = [
   { slug: 'kultur-sanat', name: 'Kültür & Sanat' },
@@ -45,7 +45,49 @@ const chinaTerms = [
   'guangzhou', 'chengdu', 'hangzhou', 'chongqing', 'xi’an', "xi'an"
 ];
 
+
+/**
+ * The Paper (澎湃新闻): editorial sections only, not the general homepage.
+ * Mobile listings expose stable newsDetail_forward_ links, and individual
+ * articles provide published dates in the body when the listing only says
+ * "hours ago". Five desks share one publisher group and existing daily cap.
+ */
+const thepaper = (id, desk, listId, defaultCategory, options = {}) => html(
+  id,
+  `The Paper – ${desk}`,
+  `https://m.thepaper.cn/list_${listId}`,
+  9,
+  {
+    adapter: 'html_thepaper',
+    priority: 'P1',
+    publisherGroup: 'thepaper',
+    defaultCategory,
+    intervalMinutes: 180,
+    linkSelector: "a[href*='newsDetail_forward_']",
+    pathPattern: /\/newsDetail_forward_\d+$/i,
+    itemSelector: 'article, li, .news-item, .news_li, .list-item, .card, .list_news',
+    articleLimit: 24,
+    ...options
+  }
+);
+
+const thepaperFashionDesignTerms = [
+  '时装', '服装', '服饰', '时尚', '时装周', '设计', '设计师', '服装秀',
+  '秀场', '艺术展', '建筑设计', '室内设计', '工艺美术', '非遗设计', '创意设计',
+  'fashion', 'runway', 'designer', 'design week', 'fashion week'
+];
+
 export const SOURCES = [
+  thepaper('thepaper-art-review', 'Art Review 艺术评论', 25455, 'kultur-sanat'),
+  thepaper('thepaper-culture', 'Culture 文化课', 25450, 'kultur-sanat'),
+  thepaper('thepaper-cinema', 'Film & TV 有戏', 25448, 'sinema'),
+  thepaper('thepaper-performing-arts', 'Performing Arts 文艺范', 26609, 'kultur-sanat'),
+  thepaper('thepaper-fashion-design', 'Fashion & Design 生活方式', 25769, 'moda-tasarim', {
+    // This mixed desk carries business/tech/consumer news; only design-led
+    // headlines are admitted before spending an AI selection slot.
+    includeTerms: thepaperFashionDesignTerms
+  }),
+
   rss('cgtn-culture', 'CGTN – Culture', 'https://www.cgtn.com/subscribe/rss/section/culture.xml', 'https://www.cgtn.com/culture', 9),
   rss('sixth-tone', 'Sixth Tone', 'https://www.sixthtone.com/rss/index.xml', 'https://www.sixthtone.com/', 9, {
     includeTerms: cultureTerms

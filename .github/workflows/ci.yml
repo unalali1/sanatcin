@@ -24,3 +24,6 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm test
+      - name: Probe The Paper listings and an article (PR only)
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/thepaper-culture-sections-20261012'
+        run: node dev/thepaper-smoke.mjs

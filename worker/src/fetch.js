@@ -36,8 +36,16 @@ export function normalizeUrl(raw, base) {
   }
 }
 
-function challengePage(html = '') {
-  return /cf-chl-|cloudflare.*(?:challenge|verification)|verify you are human|captcha/i.test(html.slice(0, 80_000));
+export function challengePage(html = '') {
+  const snapshot = String(html).slice(0, 80_000);
+  // Normal news pages may load an unused CAPTCHA SDK (The Paper does).
+  // Detect active challenge markup rather than rejecting every page that
+  // references "captcha" in a script tag.
+  if (/cf-chl-|challenge-platform|checking your browser|cloudflare.{0,80}(?:challenge|verification)/i.test(snapshot)) return true;
+  const visible = snapshot
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/giu, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/giu, ' ');
+  return /verify you are human|human verification|captcha required|security verification|id=["']captcha(?:-|["'])|class=["'][^"']*captcha[-_ ](?:challenge|overlay)/iu.test(visible);
 }
 
 export async function fetchText(url, { browser = false, waitSelector = null, signal } = {}) {
