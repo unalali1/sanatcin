@@ -297,3 +297,53 @@ test('contextual institution warning does not add a model stage or reject an oth
   assert.equal(calls, 5);
   assert.match(result.text, /Beijing Music Festival/);
 });
+
+test('üç ayrı başlık açısı üretilir; bağımsız başlık hakemi doğrulanmış en güçlü adayı seçer', async () => {
+  const options = [
+    'Şanghay’daki sergide zanaat çağdaş sanatla yeniden yorumlanıyor',
+    'Şanghay’da 18 sanatçının 42 eseri aynı sergide buluşuyor',
+    'Geleneksel zanaat Şanghay sergisinde yeni biçimler kazanıyor'
+  ];
+  const calls = [];
+  const result = await translateArticle(article, { completeJson: async request => {
+    calls.push(request);
+    const system = request.input?.[0]?.content ?? '';
+    if (calls.length === 1) return { factSheet };
+    if (system.includes('başlık editörüsün.') && !system.includes('son okuma')) {
+      return { candidates: options.map((title, i) => ({ title, angle: ['main', 'distinctive', 'cultural'][i] })), reason: 'Üç ayrı haber açısı' };
+    }
+    if (system.includes('ilk başlık üreticisinden bağımsız')) {
+      return { accepted: true, selectedTitle: options[1], score: 94, reason: 'Doğrulanmış sayı ve sergi bilgisi birlikte.' };
+    }
+    if (system.includes('Instagram')) return {};
+    return editorialResult();
+  }});
+  assert.equal(result.title, options[1]);
+  assert.equal(calls.length, 6);
+  assert.match(calls[3].input[0].content, /en az üç farklı başlık açısı üret/);
+  assert.match(calls[3].input[1].content, /Onaylı karşılaştırma örnekleri/);
+  assert.match(calls[4].input[0].content, /doğruluk %30/);
+  assert.match(calls[1].input[0].content, /Başlık haberin en özgün/);
+});
+
+test('başlık hakemi aday listesinde olmayan dördüncü başlığı yayımlatamaz', async () => {
+  const choices = [
+    'Şanghay’da geleneksel zanaat sanatla yeniden buluşuyor',
+    'Şanghay sergisinde geleneksel zanaata yeni yorum',
+    'Şanghay’daki 42 eser zanaatın dönüşümünü anlatıyor'
+  ];
+  const calls = [];
+  const result = await translateArticle(article, { completeJson: async request => {
+    calls.push(request);
+    const system = request.input?.[0]?.content ?? '';
+    if (calls.length === 1) return { factSheet };
+    if (system.includes('başlık editörüsün.') && !system.includes('son okuma')) return { candidates: choices };
+    if (system.includes('ilk başlık üreticisinden bağımsız')) {
+      return { accepted: true, selectedTitle: 'İcat edilmiş yeni bir bilgiyle dolu dördüncü başlık', score: 100 };
+    }
+    if (system.includes('Instagram')) return {};
+    return editorialResult();
+  }});
+  assert.equal(result.title, editorialResult().title);
+  assert.equal(calls.length, 6);
+});
