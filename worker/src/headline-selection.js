@@ -14,6 +14,11 @@ export function headlineCandidates(result = {}, currentTitle = '') {
   const raw = isBatch ? result.candidates : (result?.title ? [result.title] : []);
   // For the new multi-angle contract, never silently pass one weak draft as three choices.
   if (isBatch && raw.length !== 3) return [];
+  // Structured model output must carry the three intended editorial angles.
+  if (isBatch && raw.every(item => item && typeof item === 'object')) {
+    const angles = raw.map(item => item.angle);
+    if (new Set(angles).size !== 3 || !['main', 'distinctive', 'cultural'].every(angle => angles.includes(angle))) return [];
+  }
   const seen = new Set([normalize(currentTitle)]);
   const titles = [];
   for (const item of raw) {
@@ -31,7 +36,7 @@ export function chooseVerifiedHeadline(judgement = {}, currentTitle = '', eligib
     const selected = eligibleTitles.find(title => normalize(title) === normalize(judgement.selectedTitle));
     // A model cannot insert a fourth unvetted headline or choose a sub-90 graded headline.
     const score = Number(judgement.score);
-    if (selected && (!Number.isFinite(score) || score >= 90) && !(/\d/.test(String(judgement.score)) && score < 90)) return selected;
+    if (selected && Number.isFinite(score) && score >= 90) return selected;
     return currentTitle;
   }
   // Compatibility with pre-existing unit tests and one-title legacy output only;
