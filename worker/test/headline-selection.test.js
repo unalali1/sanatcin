@@ -16,6 +16,8 @@ test('başlık kalite değerlendirmesinde doğruluk en yüksek ağırlıktadır'
 
 test('tam üç açı, tekrar ve karakter güvenliği olmadan otomatik başlık seçimi yapılmaz', () => {
   assert.deepEqual(headlineCandidates({ candidates: choices }, old), choices);
+  assert.deepEqual(headlineCandidates({ candidates: choices.map((title, i) => ({ title, angle: ['main','distinctive','cultural'][i] })) }, old), choices);
+  assert.deepEqual(headlineCandidates({ candidates: choices.map(title => ({ title, angle: 'main' })) }, old), []);
   assert.deepEqual(headlineCandidates({ candidates: choices.slice(0, 2) }, old), []);
   assert.equal(headlineCandidates({ candidates: [old, choices[1], choices[1]] }, old).length, 1);
   assert.deepEqual(headlineCandidates({ candidates: ['', 'A', 'Çok kısa'] }, old), []);
@@ -24,6 +26,7 @@ test('tam üç açı, tekrar ve karakter güvenliği olmadan otomatik başlık s
 test('hakem sadece izinli ve 90 veya üstü başlığı seçebilir', () => {
   assert.equal(chooseVerifiedHeadline({ accepted: true, selectedTitle: choices[2], score: 94 }, old, choices), choices[2]);
   assert.equal(chooseVerifiedHeadline({ accepted: true, selectedTitle: choices[2], score: 89 }, old, choices), old);
+  assert.equal(chooseVerifiedHeadline({ accepted: true, selectedTitle: choices[2] }, old, choices), old);
   assert.equal(chooseVerifiedHeadline({ accepted: true, selectedTitle: 'Yeni ama doğrulanmayan başlık', score: 100 }, old, choices), old);
   assert.equal(chooseVerifiedHeadline({ accepted: false, selectedTitle: choices[2], score: 99 }, old, choices), old);
   assert.equal(chooseVerifiedHeadline({ preferred: 'B' }, old, choices), old);
