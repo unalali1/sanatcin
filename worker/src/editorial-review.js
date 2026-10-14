@@ -7,7 +7,10 @@ export const NEWSROOM_REVIEW_GUIDANCE = [
   'Kurumun kimliğini koruyarak Türkçe açıklayıcı karşılık kullan; gerekirse özgün adını ilk kullanımda parantezde ver. Marka, kişi ve eser adlarını körlemesine çevirmeden terimleri bağlamında açıkla.',
   'Spot girişin aynısı olmasın: ana gelişmeyi girişte ver, spotta doğrulanmış tamamlayıcı ayrıntıyı kullan. Yalnız metni uzatmak için aynı görüşü sonuç paragrafında tekrarlama.',
   'Uluslararası haberde Çinli sanatçı veya tasarımcının katkısı kaynakta ana unsurlardan biriyse bunu girişte görünür kıl; tali Çin bağlantısını ana gelişme gibi büyütme.',
-  'Başlık düzeltmesinde doğrulanmış ayırt edici kişiyi veya ayrıntıyı genel bir “festival başladı” duyurusuna feda etme. Sırf değişiklik için başlığı değiştirme.'
+  'Başlık düzeltmesinde doğrulanmış ayırt edici kişiyi veya ayrıntıyı genel bir “festival başladı” duyurusuna feda etme. Sırf değişiklik için başlığı değiştirme.',
+  'Başlıkta “yabancı katılımcı” gibi belirsiz sıfatlar yerine, kaynakta doğrulanan kişinin rolünü veya eserin somut yönünü anlat; doğrulanmamış meslek ve milliyet ekleme.',
+  'Etkinliğin gerçekleşme tarihini kaynak tarihiyle karşılaştır; geçmişte biten etkinliği bugün başlamış gibi sunma. Eski bir olaya yeni yayın açısı eklemek için kaynakta olmayan gelişme uydurma.',
+  'Haber girişinde “uluslararası iletişim belgeseli” gibi kurumsal kalıpları gerekmedikçe kullanma; türü ve yapımın ne anlattığını doğal Türkçeyle açıkla.'
 ].join(' ');
 
 const RULES = [
@@ -19,6 +22,10 @@ const RULES = [
     message: 'Miras taşıyıcısı unvanını bağlamıyla açıkla; zanaat, usta ve resmî tanınma bilgisini birbirine karıştırma.' },
   { code: 'unexplained_institution', severity: 'review', pattern: /Beijing Music Festival|State Opera South Australia|Fédération de la Haute Couture et de la Mode/iu,
     message: 'Kurum adının yanında anlaşılır Türkçe karşılık bulunduğunu denetle; özgün ad gerekli olabilir.' },
+  { code: 'vague_foreign_participant', severity: 'review', pattern: /\byabancı katılımcı\p{L}*/iu,
+    message: '“Yabancı katılımcı” belirsiz kalıyor; kaynak doğruluyorsa kişilerin kimliğini/rolünü somutlaştır.' },
+  { code: 'institutional_documentary', severity: 'review', pattern: /\b(?:uluslararası\s+)?iletişim belgeseli\b/iu,
+    message: 'Kurumsal çeviri kalıbını doğal Türkçeyle yeniden kur: belgeselin neyi anlattığını belirt.' },
   { code: 'fashion_calque', severity: 'review', pattern: /kumaş odaklı ölçülü minimalizm|hareket hâlindeki bedeni merkeze al|sıvı lamé/iu,
     message: 'Moda terimini veya soyut tasarım ifadesini kaynakta anlatılan kumaş, kesim ya da kullanım özelliği üzerinden açıkla.' }
 ];
