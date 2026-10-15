@@ -1,4 +1,5 @@
 import { NEWSROOM_REVIEW_GUIDANCE, newsroomFindings, headlineRevisionIssues } from './editorial-review.js';
+import { rankedHeadlineCandidates } from './headline-editor.js';
 import OpenAI from 'openai';
 import { config } from './config.js';
 import { log } from './logger.js';
@@ -289,6 +290,7 @@ async function chooseMoreNaturalDraft(article, factSheet, before, after, { signa
 }
 
 async function refineHeadline(article, factSheet, draft, { signal, completeJson = requestJson } = {}) {
+  // Reuse the existing headline model call: three explicit proposals, no extra AI stage.
   const result = await completeJson({
     model: config.openaiEditorModel,
     signal,
@@ -297,47 +299,66 @@ async function refineHeadline(article, factSheet, draft, { signal, completeJson 
         role: 'system',
         content: [
           NEWSROOM_REVIEW_GUIDANCE,
-          'Türkçe kültür-sanat haberleri için başlık editörüsün.',
-          'Önce kaynak başlığının haberin ana fikrini ne kadar iyi taşıdığını değerlendir. Kaynak başlık açık ve kapsayıcıysa bilgi hiyerarşisini koruyan doğal bir Türkçe uyarlama adaylardan biri olsun. Ardından zihninde en az üç farklı başlık açısı üret: ana haber gelişmesi, kültürel/hikâyesel ayırt edici unsur ve varsa güçlü görsel/mekânsal unsur. Doğruluk, ana fikre sadakat, somutluk, Türkçe doğallık ve haber ritmi bakımından en iyisini seç; yalnız seçtiğin başlığı JSON içinde döndür.',
-          'Başlık kaynakta olmayan bilgi, sıfat, önem atfı veya neden-sonuç eklememeli.',
-          'Türkiye’de bilinmeyen kurum, etkinlik veya teknik terimi açıklamasız biçimde başlığın merkezine koyma.',
-          'Daha somut bir fiil veya daha güçlü bir haber açısı mümkünse “sunuyor”, “genişliyor”, “öne çıkıyor”, “buluşuyor”, “yer alıyor”, “aynı sahneyi paylaştı” gibi jenerik kalıplara yaslanma. Kaynaktaki sayı, katılımcı adedi, tek bir sıra dışı ürün/tat ya da yan duyuru hikâyenin özü değilse sırf kolay veya çarpıcı olduğu için başlığı onun üzerine kurma.',
-          'Sayı veya sıra dışı ayrıntı ana haber değeriyse kullan; yalnız rakam var diye başlığı mekanikleştirme.',
-          'Konuya uygun editoryal açı seç: insani dayanışma hikâyesinde olayın anlamını salt tekrar sayısına feda etme; tarihî sanat eserini cansız envanter gibi sıralama; müzenin mimarını yapı sahibi gibi gösterme. Kaynak doğruluyorsa festivalin somut kapsamını veya izleyici ilgisini “başladı” bilgisinden öne al; çeviri ödülü listesini Türkçede doğal bir yarışma fiiliyle açıkla ve kesin sonuç uydurma.',
-          'Başlık yaklaşık 35-95 karakter arasında, tek okumada anlaşılır ve doğal Türkiye Türkçesiyle olmalı.',
-          'İngilizce kurum adını, mekanik malzeme tamlamasını, bilgi vermeyen terim açıklamasını ve nesneye araştırmacı eylemi yükleyen başlığı kalite kusuru say. Yeni olgu eklemeyen doğal Türkçe anlatımı tercih et.',
-          'Çin National Day tatili için Milli Bayram, Mid-Autumn Festival için Güz Ortası Bayramı kullan. Girişte kaynakla doğrulanmış gelişmeyi, yeri ve haber değerini somut bir fiille anlat; protokol listesini ve uzun kurum adlarını sonraya bırak. Soyut önem cümlesi yerine kaynaktaki eser, üretim veya olay ayrıntısını ver.',
-          'Yalnız geçerli JSON ver.'
+          'SanatÇin için deneyimli bir Türkçe kültür-sanat başlık editörüsün.',
+          'MEVCUT BAŞLIĞI başlangıç kabul et; sırf değişiklik yapmak için değiştirme.',
+          'Haberin kategorisini ve ANA GELİŞMESİNİ esas al. Kültürel mirasta eserin tarihî/teknik önemini, sanat ve tasarımda yaratıcı yaklaşımı, sinemada eseri/yönetmeni ve gösterimi, şehir-yaşamda kültürel geleneği veya insan hikâyesini öne çıkar.',
+          'Üç FARKLI başlık öner: (1) temel haber gelişmesi, (2) doğrulanmış kültürel/insani anlam, (3) kaynakta varsa ayırt edici eser, mekân veya teknik ayrıntı. Uygun olmayan açıyı uydurma; yalnız kaynaktaki gerçeklere dayan.',
+          'Kişi/kurum/eser adları, sayılar, tarihler ve asıl gelişme bozulmasın. Sayı yalnızca haberin esas ayırt edici unsuruysa başlıkta öne çıksın. İhtiyatı koru; kaynakta bulunmayan üstünlük, etki, ilgi veya tarih icat etme.',
+          'Okur için bilinmeyen özel adı tek başına başlığın merkezine yerleştirme; gerekli kısa bağlamı ekle. Çince teknik terim yerine mümkün olan doğal Türkçe karşılığı kullan.',
+          '“Sahneye taşındı”, “buluştu”, “öne çıkıyor”, “dikkat çekiyor”, “yeniden hayat buldu”, “görücüye çıktı” gibi otomatik klişeleri azalt. Tıklama tuzağı, soru biçiminde yapay merak ve çeviri kokusu kullanma.',
+          'Başlıklar 32-82 karakter arasında olsun. İdeal olarak 45-75 karakter; kısalık uğruna açıklayıcılığı kaybetme.',
+          'HER adayı birbirinden bağımsız, aşağıdaki 100 puanlık ağırlıklı editoryal ölçüte göre puanla: accuracy 0-30 (kaynak doğruluğu ve ana fikir), turkish 0-25 (doğal Türkçe), interest 0-20 (ayırt edicilik ve okuma gerekçesi), clarity 0-15 (açıklık), seo 0-10 (doğal arama terimleri). Puanları olduğundan yüksek yazma.',
+          'Doğruluk veya anlam kayması varsa adaya kaç puan verirsen ver öneriyi yayımlanabilir sayma. Yalnız geçerli JSON döndür ve TAM OLARAK 3 aday ver.',
+          'JSON şeması: {"candidates":[{"angle":"gelişme","title":"...","scores":{"accuracy":0,"turkish":0,"interest":0,"clarity":0,"seo":0},"reason":"kısa gerekçe"},{"angle":"kültürel açı","title":"...","scores":{"accuracy":0,"turkish":0,"interest":0,"clarity":0,"seo":0},"reason":"kısa gerekçe"},{"angle":"somut ayrıntı","title":"...","scores":{"accuracy":0,"turkish":0,"interest":0,"clarity":0,"seo":0},"reason":"kısa gerekçe"}]}'
         ].join(' ')
       },
       {
         role: 'user',
         content: [
-          `Kaynak başlığı: ${article.title}`,
-          `Olgu fişi:\n${JSON.stringify(factSheet)}`,
-          `Mevcut başlık: ${draft.title}`,
-          `Başlığa özgü editör uyarıları (yalnız kaynak doğrularsa uygula): ${JSON.stringify(headlineEditorialWarnings(draft.title))}`,
-          `Spot: ${draft.excerpt}`,
-          `Haber metni:\n${draft.paragraphs.join('\n\n')}`,
-          'JSON şeması: {"title":"seçilen başlık","reason":"kısa gerekçe"}'
+          'Kaynak başlığı: ' + article.title,
+          'Haber kategorisi: ' + article.category,
+          'Olgu fişi:\n' + JSON.stringify(factSheet),
+          'Mevcut başlık: ' + draft.title,
+          'Başlığa özgü editör uyarıları: ' + JSON.stringify(headlineEditorialWarnings(draft.title)),
+          'Spot: ' + draft.excerpt,
+          'Haber metni:\n' + draft.paragraphs.join('\n\n')
         ].join('\n\n')
       }
     ]
   });
-  const title = cleanString(result.title);
-  if (!title || title.length < 15 || title.length > 120 || title === draft.title) {
-    return { draft, changed: false, reason: cleanString(result.reason).slice(0, 220) };
+
+  const ranking = rankedHeadlineCandidates(result, {
+    factSheet, excerpt: draft.excerpt, body: draft.text
+  });
+  const baselineIssues = editorialIssues(draft, factSheet);
+  log('info', 'Üçlü başlık puanlaması tamamlandı', {
+    source: article.source.id,
+    receivedCandidates: Array.isArray(result?.candidates) ? result.candidates.length : 0,
+    eligibleCandidates: ranking.map(item => ({ title: item.title, score: item.score }))
+  });
+
+  for (const proposal of ranking) {
+    const title = cleanString(proposal.title);
+    if (title === draft.title) continue;
+    const candidate = { ...draft, title };
+    const newIssues = editorialIssues(candidate, factSheet)
+      .filter(issue => !baselineIssues.includes(issue));
+    const namingRegression = nativeNameRegression(draft, candidate, factSheet.nativeNames);
+    const regressionIssues = headlineRevisionIssues(draft.title, title, factSheet);
+    if (newIssues.length || namingRegression || headlineQualityRegression(draft.title, title) || regressionIssues.length) {
+      log('info', 'Başlık önerisi güvenlik kapısında elendi', {
+        source: article.source.id, proposedTitle: title, score: proposal.score,
+        issues: [...newIssues, ...regressionIssues], namingRegression
+      });
+      continue;
+    }
+    return {
+      draft: candidate,
+      changed: true,
+      reason: '100 üzerinden ' + proposal.score + ' puan. ' + proposal.reason
+    };
   }
-  const candidate = { ...draft, title };
-  const beforeIssues = editorialIssues(draft, factSheet);
-  const afterIssues = editorialIssues(candidate, factSheet);
-  const namingRegression = nativeNameRegression(draft, candidate, factSheet.nativeNames);
-  const regressionIssues = headlineRevisionIssues(draft.title, title, factSheet);
-  if (afterIssues.length > beforeIssues.length || namingRegression || headlineQualityRegression(draft.title, title) || regressionIssues.length) {
-    log('info', 'Başlık gerilemesi önlendi', { source: article.source.id, proposedTitle: title, issues: regressionIssues });
-    return { draft, changed: false, reason: 'Yeni başlık kalite veya adlandırma kapısından geçmedi.' };
-  }
-  return { draft: candidate, changed: true, reason: cleanString(result.reason).slice(0, 220) };
+  return { draft, changed: false, reason: '85 puanı aşan doğrulanmış yeni başlık yok; mevcut başlık korundu.' };
 }
 
 async function polishTurkishNews(article, factSheet, draft, { signal, completeJson = requestJson } = {}) {

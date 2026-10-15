@@ -191,7 +191,11 @@ test('başlık mikro-editörü ancak bağımsız hakem açıkça daha iyi bulurs
     if (calls.length === 1) return { factSheet };
     if (calls.length === 2) return original;
     if (calls.length === 3) return original;
-    if (calls.length === 4) return { title: proposedTitle, reason: 'Sayıyı öne çıkarıyor.' };
+    if (calls.length === 4) return { candidates: [
+      { title: proposedTitle, angle: 'ayrıntı', scores: { accuracy: 29, turkish: 24, interest: 18, clarity: 14, seo: 9 } },
+      { title: 'Şanghay’da geleneksel zanaata çağdaş yorum', angle: 'kültür', scores: { accuracy: 29, turkish: 23, interest: 17, clarity: 13, seo: 8 } },
+      { title: 'Şanghay’da çağdaş zanaat sergisinde yeni eserler', angle: 'gelişme', scores: { accuracy: 29, turkish: 23, interest: 17, clarity: 14, seo: 8 } }
+    ] };
     return { preferred: 'A', reason: 'Mevcut başlık hikâyeyi daha doğal ve güçlü anlatıyor.', aScore: 9, bScore: 7 };
   };
 
