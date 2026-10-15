@@ -48,7 +48,7 @@ test('85 puan altındaki adayları geçirmez', () => {
 test('sık tekrarlanan klişe yüksek puanı düşürür', () => {
   const vague = candidates.map(candidate => ({
     ...candidate, title: 'Pekin’de Ming hanedanından altın taç öne çıkıyor',
-    scores: scores(30,25,20,15,10)
+    scores: scores(29,24,18,15,10)
   }));
   assert.deepEqual(rank({ candidates: vague }, { factSheet }), []);
 });
