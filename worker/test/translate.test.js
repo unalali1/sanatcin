@@ -73,7 +73,9 @@ test('olgu çıkarımı, haber yazımı ve Türkçe son okuma ardışık çalı�
   assert.match(calls[2].input[0].content, /Taslağın bilgi sırasına da bağlı değilsin/);
   assert.match(calls[2].input[0].content, /Cümlenin yabancı dilden çevrildiği hissediliyor mu/);
   assert.match(calls[2].input[0].content, /gerçekten YENİDEN YAZ/);
-  assert.match(calls[3].input[0].content, /en az üç farklı başlık açısı üret/);
+  assert.match(calls[3].input[0].content, /Üç FARKLI başlık öner/);
+  assert.match(calls[3].input[0].content, /accuracy 0-30/);
+  assert.match(calls[3].input[0].content, /TAM OLARAK 3 aday/);
   assert.match(calls[3].input[1].content, /Başlığa özgü editör uyarıları/);
   assert.match(calls[1].input[0].content, /insani dayanışma hikâyesinde|sıradışı bir iyilikte/);
   assert.doesNotMatch(calls[1].input[1].content, /Kaynak metin:/);
