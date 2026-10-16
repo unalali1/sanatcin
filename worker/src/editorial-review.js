@@ -1,6 +1,9 @@
 // Bounded, explainable newsroom checks. These are not a semantic accuracy score.
 // Only unambiguous calques require repair; contextual terminology stays advisory.
 export const NEWSROOM_REVIEW_GUIDANCE = [
+  'Sayıları birimleriyle, tarihleri olaylarıyla ve iddiaları söyleyenleriyle koru. Hikâye/kişi, eser/sanatçı, bölüm/sezon ve sergi başlangıcı/yayın başlangıcı birbirinin yerine kullanılamaz. Yaklaşık, tahmin, öneri ve yerel ilk olma sınırlarını başlıkta da koru.',
+  'Sinema ve sanat terimini eyleme göre seç: bir filme retrospektifte yer verilir, film gösterilir veya vizyona girer; yayına başlama bilgisi yoksa yayımlandı deme. Bağlamına göre yerleştirme, ciltleme ve nakış gibi yerleşik karşılıkları kullan; anlamı bilinmeyen tekniğe kaynakta bulunmayan açıklama ekleme.',
+  'Girişte ana gelişme ile somut kültürel ayrıntıyı birleştir; kurum listesiyle veya soyut önem cümlesiyle açma. Spotta aynı cümleyi yinelemek yerine doğrulanmış tamamlayıcı ayrıntı ver. Son paragrafta yeni bilgi yoksa genel bir önem hükmüyle metni uzatma. Klişeler mutlak yasak değildir; bağlama uygun ve kaynakla destekleniyorsa kullanılabilir.',
   'Dil denetimini puanla geçiştirme: her cümlede kimin ne yaptığını ve Türkçede aynı olayın nasıl anlatılacağını denetle.',
   'Geçit töreni bağlamındaki “halk geçitleri” ve “Han tarzı flaş moblar” gibi aktarmaları kelime değiştirerek değil, kaynak anlamını koruyarak yeniden kur. Bu örnekleri haberin olgusu gibi metne ekleme.',
   '“Somut olmayan kültürel miras taşıyıcısı” bir resmî unvansa anlamını koru ve ustanın hangi zanaatı yaşattığını açıkla; unvanı UNESCO statüsü gibi doğrulanmamış bir iddiaya dönüştürme.',
