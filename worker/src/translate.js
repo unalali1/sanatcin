@@ -261,7 +261,7 @@ async function chooseMoreNaturalDraft(article, factSheet, before, after, { signa
             content: [
               `Haber açısı: ${factSheet.angle}`,
               `Doğrulanmış olgu fişi:\n${JSON.stringify(factSheet)}`,
-              `Somut dil denetimi: ${JSON.stringify({ A: newsroomFindings(before), B: newsroomFindings(after) })}`,
+              `Somut dil denetimi: ${JSON.stringify({ A: newsroomFindings(before, factSheet), B: newsroomFindings(after, factSheet) })}`,
               `A sürümü:\n${JSON.stringify({ title: before.title, excerpt: before.excerpt, paragraphs: before.paragraphs })}`,
               `B sürümü:\n${JSON.stringify({ title: after.title, excerpt: after.excerpt, paragraphs: after.paragraphs })}`,
               'JSON şeması: {"preferred":"A|B","reason":"kısa gerekçe","aScore":0,"bScore":0,"factualConflict":null veya {"field":"hatalı olgu","evidence":"olgu fişinden somut kanıt"}}'
@@ -309,9 +309,11 @@ async function refineHeadline(article, factSheet, draft, { signal, completeJson 
           'MEVCUT BAŞLIĞI başlangıç kabul et; sırf değişiklik yapmak için değiştirme.',
           'Haberin kategorisini ve ANA GELİŞMESİNİ esas al. Kültürel mirasta eserin tarihî/teknik önemini, sanat ve tasarımda yaratıcı yaklaşımı, sinemada eseri/yönetmeni ve gösterimi, şehir-yaşamda kültürel geleneği veya insan hikâyesini öne çıkar.',
           'Üç FARKLI başlık öner: (1) temel haber gelişmesi, (2) doğrulanmış kültürel/insani anlam, (3) kaynakta varsa ayırt edici eser, mekân veya teknik ayrıntı. Uygun olmayan açıyı uydurma; yalnız kaynaktaki gerçeklere dayan.',
+          'Her aday için haber değeri, doğal Türkçe, açıklık, kültür-sanat terminolojisi, okur ilgisi ve kaynak/gövde tutarlılığını ayrı ayrı düşün. Model puanı seçim emri değildir; anlaşılmaz veya ana haberi örten yüksek puanlı başlığı ele.',
           'Kişi/kurum/eser adları, sayılar, tarihler ve asıl gelişme bozulmasın. Sayı yalnızca haberin esas ayırt edici unsuruysa başlıkta öne çıksın. İhtiyatı koru; kaynakta bulunmayan üstünlük, etki, ilgi veya tarih icat etme.',
           'Okur için bilinmeyen özel adı tek başına başlığın merkezine yerleştirme; gerekli kısa bağlamı ekle. Çince teknik terim yerine mümkün olan doğal Türkçe karşılığı kullan.',
           '“Sahneye taşındı”, “buluştu”, “öne çıkıyor”, “dikkat çekiyor”, “yeniden hayat buldu”, “görücüye çıktı” gibi otomatik klişeleri azalt. Tıklama tuzağı, soru biçiminde yapay merak ve çeviri kokusu kullanma.',
+          'Kaynağın açıkladığı geleneğin nedenini soran doğal bir soru başlığını sırf soru olduğu için eleme; yanıt metinde bulunmalı. Defiledeki tek aksesuar ayrıntısı ana gelişmeyi gölgelememeli. “Oscar yeterliliği” gibi teknik ama muğlak ifadeyi okurun yanlış anlamayacağı biçimde aç.',
           'Başlıklar 32-82 karakter arasında olsun. İdeal olarak 45-75 karakter; kısalık uğruna açıklayıcılığı kaybetme.',
           'Kısa başlık için yalnız doğru bir ayrıntıyı seçmek yetmez: o ayrıntı haberin ana gelişmesini de temsil etmeli. Hikâye sayısını kişi sayısı, bölüm sayısını sezon sayısı yapma; ilk olma iddiasının bölgesel sınırını koru. Kaynakta sayılan örnekleri toplamın tamamı gibi sunma; gösterilecek filmler arasında üç isim verilmesi programın yalnız üç filmden oluştuğu anlamına gelmez. Genel “sanatsal bakış” veya “yeniden hayat buluyor” ifadesi yerine kaynakta varsa eser, malzeme ya da eylemi belirt; iyi bir mevcut başlığı yapay biçimde farklılaştırma. HER adayı birbirinden bağımsız, aşağıdaki 100 puanlık ağırlıklı editoryal ölçüte göre puanla: accuracy 0-30 (kaynak doğruluğu ve ana fikir), turkish 0-25 (doğal Türkçe), interest 0-20 (ayırt edicilik ve okuma gerekçesi), clarity 0-15 (açıklık), seo 0-10 (doğal arama terimleri). Puanları olduğundan yüksek yazma.',
           'Doğruluk veya anlam kayması varsa adaya kaç puan verirsen ver öneriyi yayımlanabilir sayma. Yalnız geçerli JSON döndür ve TAM OLARAK 3 aday ver.',
@@ -404,7 +406,7 @@ async function polishTurkishNews(article, factSheet, draft, { signal, completeJs
         content: [
           `Kaynak başlığı: ${article.title}`,
           `Olgu fişi:\n${JSON.stringify(factSheet)}`,
-          `Somut dil denetimi bulguları: ${JSON.stringify(newsroomFindings(draft))}`,
+          `Somut dil denetimi bulguları: ${JSON.stringify(newsroomFindings(draft, factSheet))}`,
           `Son okuma yapılacak taslak:\n${JSON.stringify({ title: draft.title, excerpt: draft.excerpt, paragraphs: draft.paragraphs, tags: draft.tags })}`,
           'JSON şeması: {"accepted":true,"issues":[],"title":"başlık","excerpt":"spot","paragraphs":["paragraf"],"tags":["etiket"]}'
         ].join('\n\n')
@@ -836,7 +838,7 @@ export async function translateArticle(article, { signal, completeJson = request
         throw new Error(`Yayın engellendi: ${blockingIssues.join(' ')}`);
       }
     }
-    if (mechanicalIssues.length && !newsroomFindings(final.draft).some(item => item.severity === 'repair')) {
+    if (mechanicalIssues.length && !newsroomFindings(final.draft, factSheet).some(item => item.severity === 'repair')) {
       // A residual language warning deserves a focused correction, not silent publication.
       const baseline = final.draft;
       try {
@@ -912,7 +914,7 @@ export async function translateArticle(article, { signal, completeJson = request
   // A failed candidate is left unpublished by the caller; the daily discovery pipeline continues.
   let structureIssues = editorialStructureIssues(final.draft);
   let fluencyBeforeGate = editorialFluencyProfile(final.draft);
-  let languageFindings = newsroomFindings(final.draft);
+  let languageFindings = newsroomFindings(final.draft, factSheet);
   if (structureIssues.length || fluencyBeforeGate.score < 86 || languageFindings.some(item => item.severity === 'repair')) {
     const baseline = final.draft;
     try {
@@ -953,7 +955,7 @@ export async function translateArticle(article, { signal, completeJson = request
     structureIssues = editorialStructureIssues(final.draft);
     fluencyBeforeGate = editorialFluencyProfile(final.draft);
   }
-  languageFindings = newsroomFindings(final.draft);
+  languageFindings = newsroomFindings(final.draft, factSheet);
   log(languageFindings.length ? 'warn' : 'info', 'Somut Türkçe dil denetimi tamamlandı', {
     source: article.source.id, reviewVersion: '2026-10-11', findings: languageFindings, heuristicScore: fluencyBeforeGate.score
   });

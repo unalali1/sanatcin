@@ -52,3 +52,14 @@ test('sık tekrarlanan klişe yüksek puanı düşürür', () => {
   }));
   assert.deepEqual(rank({ candidates: vague }, { factSheet }), []);
 });
+
+test('high-scoring but contextually unclear culture arts titles lose to a clear alternative', () => {
+  const options = [
+    good('Suchness defilesinde osmanthus kokusu keselerle yayıldı', scores(30,25,20,15,10)),
+    good('Şanghay Moda Haftası’nda kıyafetlere osmanthus kokusu eşlik etti', scores(29,23,18,14,9)),
+    good('Tasarımcı yeni koleksiyonda kokuyla giysileri birleştirdi', scores(28,22,17,13,8))
+  ];
+  const ranking = rank({ candidates: options }, { body: 'Şanghay Moda Haftası kapsamında Suchness koleksiyonu tanıtıldı.' });
+  assert.equal(ranking[0].title, options[1].title);
+  assert.ok(!ranking.some(item => item.title === options[0].title));
+});

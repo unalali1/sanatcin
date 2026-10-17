@@ -1,6 +1,8 @@
 // Bounded, explainable newsroom checks. These are not a semantic accuracy score.
 // Only unambiguous calques require repair; contextual terminology stays advisory.
+import { ARTS_EDITOR_GUIDANCE, contextualArtsFindings } from './arts-editor.js';
 export const NEWSROOM_REVIEW_GUIDANCE = [
+  ARTS_EDITOR_GUIDANCE,
   'Sayıları birimleriyle, tarihleri olaylarıyla ve iddiaları söyleyenleriyle koru. Hikâye/kişi, eser/sanatçı, bölüm/sezon ve sergi başlangıcı/yayın başlangıcı birbirinin yerine kullanılamaz. Yaklaşık, tahmin, öneri ve yerel ilk olma sınırlarını başlıkta da koru.',
   'Sinema ve sanat terimini eyleme göre seç: bir filme retrospektifte yer verilir, film gösterilir veya vizyona girer; yayına başlama bilgisi yoksa yayımlandı deme. Bağlamına göre yerleştirme, ciltleme ve nakış gibi yerleşik karşılıkları kullan; anlamı bilinmeyen tekniğe kaynakta bulunmayan açıklama ekleme.',
   'Girişte ana gelişme ile somut kültürel ayrıntıyı birleştir; kurum listesiyle veya soyut önem cümlesiyle açma. Spotta aynı cümleyi yinelemek yerine doğrulanmış tamamlayıcı ayrıntı ver. Son paragrafta yeni bilgi yoksa genel bir önem hükmüyle metni uzatma. Klişeler mutlak yasak değildir; bağlama uygun ve kaynakla destekleniyorsa kullanılabilir.',
@@ -28,19 +30,14 @@ const RULES = [
 
 const normalize = value => String(value ?? '').toLocaleLowerCase('tr-TR').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
-export function newsroomFindings({ title = '', excerpt = '', text = '', paragraphs = [] } = {}) {
+export function newsroomFindings({ title = '', excerpt = '', text = '', paragraphs = [] } = {}, factSheet = {}) {
   const body = text || paragraphs.join('\n\n');
   const combined = `${title}\n${excerpt}\n${body}`;
   // Preserve attributed direct quotations; checks concern the newsroom's own wording.
   const prose = combined.toLocaleLowerCase('tr-TR').replace(/“[^”]*”|"[^"\n]*"|«[^»]*»/gu, '');
   const findings = RULES.filter(rule => rule.pattern.test(prose))
     .map(({ code, severity, message }) => ({ code, severity, message }));
-  const lead = paragraphs[0] || body.split(/\n+/u)[0] || '';
-  const spot = normalize(excerpt);
-  if (spot.length >= 80 && normalize(lead).includes(spot)) {
-    findings.push({ code: 'spot_lead_repeat', severity: 'review', message: 'Spot girişte aynen tekrarlanıyor; olgu eklemeden tamamlayıcı ayrıntı seç.' });
-  }
-  return findings;
+  return [...findings, ...contextualArtsFindings({ title, excerpt, text: body, paragraphs }, factSheet)];
 }
 
 export function headlineRevisionIssues(before = '', after = '', factSheet = {}) {
@@ -63,7 +60,7 @@ export function headlineRevisionIssues(before = '', after = '', factSheet = {}) 
     return ['Ayırt edici kişi/yaş bilgisini kaybeden genel festival duyurusu; mevcut başlığı koru.'];
   }
   const oldCodes = new Set(newsroomFindings({ title: before }).map(item => item.code));
-  return newsroomFindings({ title: after })
+  return newsroomFindings({ title: after }, factSheet)
     .filter(item => item.severity === 'repair' && !oldCodes.has(item.code))
     .map(item => item.message);
 }

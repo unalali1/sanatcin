@@ -264,6 +264,28 @@ test('an unrepaired clear calque is rejected before Instagram generation', async
   assert.ok(calls <= 6, `repair must remain bounded, got ${calls} calls`);
 });
 
+test('fashion calque gets one source-safe focused repair at the final editorial gate', async () => {
+  const broken = editorialResult();
+  broken.paragraphs[1] += ' Moda defilesinde koku podyum anlatısının parçası oldu.';
+  const clean = editorialResult();
+  clean.paragraphs[1] += ' Defilede koku, modellerin taşıdığı keselerden yayıldı.';
+  let repairs = 0;
+  let calls = 0;
+  const result = await translateArticle(article, { completeJson: async request => {
+    calls++;
+    if (calls === 1) return { factSheet };
+    const input = request.input.map(message => message.content).join('\n');
+    if (input.includes('[runway_narrative]')) {
+      repairs++;
+      return clean;
+    }
+    return broken;
+  }});
+  assert.equal(repairs, 1);
+  assert.doesNotMatch(result.text, /podyum anlatısının parçası/);
+  assert.match(result.text, /42/);
+});
+
 test('micro-editor cannot discard a verified person for a generic festival title even if a judge would approve', async () => {
   const original = { ...editorialResult(), title: 'Pekin Müzik Festivali’ni 90 yaşındaki Charles Dutoit açtı' };
   let calls = 0;
