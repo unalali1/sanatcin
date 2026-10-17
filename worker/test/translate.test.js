@@ -144,7 +144,7 @@ test('hakem eski sürümü seçerse akıcı sürüm geri atılmadan onarılıp y
     if (calls.length === 1) return { factSheet };
     if (calls.length === 2) return first;
     if (calls.length === 3) return polished;
-    if (calls.length === 4) return { preferred: 'A', reason: 'B sürümünde program ayrıntısı daha zayıf kalmış.', aScore: 90, bScore: 86 };
+    if (calls.length === 4) return { preferred: 'A', reason: 'B sürümünde program ayrıntısı daha zayıf kalmış.', aScore: 90, bScore: 86, factualConflict: { field: 'program ayrıntısı', evidence: 'Olgu fişinde konuşmalar ve atölyeler var.' } };
     if (calls.length === 5) return repaired;
     if (calls.length === 6) return { preferred: 'B', reason: 'Eksik ayrıntı tamamlandı; B artık daha doğal ve aynı ölçüde doğru.', aScore: 88, bScore: 95 };
     return { title: repaired.title, reason: 'Başlık doğal ve yeterince somut.' };
@@ -302,4 +302,35 @@ test('contextual institution warning does not add a model stage or reject an oth
   const result = await translateArticle(article, { completeJson: async () => ++calls === 1 ? { factSheet } : draft });
   assert.equal(calls, 5);
   assert.match(result.text, /Beijing Music Festival/);
+});
+
+test('unresolved factual conflict in the polished draft goes to editor review rather than the older draft', async () => {
+  const first = editorialResult();
+  const changed = { ...editorialResult(), title: 'Şanghay’da geleneksel zanaat sergisi açıldı' };
+  let calls = 0;
+  await assert.rejects(translateArticle(article, { completeJson: async () => {
+    calls++;
+    if (calls === 1) return { factSheet };
+    if (calls === 2) return first;
+    if (calls === 3) return changed;
+    return { preferred: 'A', reason: 'Kaynakta tarih farklı', aScore: 90, bScore: 80,
+      factualConflict: { field: 'açılış tarihi', evidence: 'Olgu fişindeki 10 Eylül tarihi' } };
+  }}), /Editör incelemesi gerekli/);
+  assert.ok(calls >= 4);
+});
+
+test('a clearly better Turkish draft survives a judge personal style preference', async () => {
+  const first = editorialResult();
+  const polished = { ...editorialResult(), title: 'Şanghay’da 18 sanatçının eserleri zanaatı yorumluyor' };
+  let calls = 0;
+  const result = await translateArticle(article, { completeJson: async () => {
+    calls++;
+    if (calls === 1) return { factSheet };
+    if (calls === 2) return first;
+    if (calls === 3) return polished;
+    if (calls === 4) return { preferred: 'A', reason: 'A üslubunu tercih ediyorum.', aScore: 75, bScore: 90 };
+    return { candidates: [] };
+  }});
+  assert.equal(result.title, polished.title);
+  assert.equal(calls, 6);
 });
