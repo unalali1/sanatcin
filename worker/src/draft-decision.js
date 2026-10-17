@@ -14,7 +14,7 @@ export function assessDraftTransition(before, after, factSheet) {
     factRegression, namingRegression, addedIssues,
     blocking: afterIssues.filter(issue => BLOCKING.test(issue)),
     language: addedIssues.filter(issue => !BLOCKING.test(issue)),
-    repairFindings: newsroomFindings(after).filter(item => item.severity === 'repair')
+    repairFindings: newsroomFindings(after, factSheet).filter(item => item.severity === 'repair')
   };
 }
 

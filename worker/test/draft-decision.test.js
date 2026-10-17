@@ -12,7 +12,7 @@ const entity = value => value.replace(/&#(\d+);/gu, (_, n) => String.fromCodePoi
 const plain = value => entity(value.replace(/<[^>]*>/gu, '')).replace(/\s+/gu, ' ').trim();
 function draft(row) {
   const paragraphs = [...row.html.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/giu)].map(match => plain(match[1]));
-  return { title: row.title, excerpt: paragraphs[0] ?? '', paragraphs, text: paragraphs.join('\n\n') };
+  return { title: row.title, excerpt: (paragraphs[1] ?? '').slice(0, 145), paragraphs, text: paragraphs.join('\n\n') };
 }
 
 test('20 different historical culture and arts texts have identifiable first revisions', () => {
@@ -31,7 +31,8 @@ for (const row of initial) {
     const style = { ...before, paragraphs: [...before.paragraphs] };
     style.text = style.paragraphs.join('\n\n');
     const chosen = selectEditorialDraft(before, style, {}, { preferred: 'B', aScore: 70, bScore: 85 });
-    const preexistingSafety = assessDraftTransition(before, style, {}).blocking.length > 0;
+    const assessment = assessDraftTransition(before, style, {});
+    const preexistingSafety = assessment.blocking.length > 0 || assessment.repairFindings.length > 0;
     assert.equal(chosen.selected, preexistingSafety ? null : 'B');
 
     // A visible new unverified Chinese name must block publication even if the judge likes it.
@@ -43,15 +44,15 @@ for (const row of initial) {
 }
 
 test('a clearly better Turkish version survives a purely stylistic A vote', () => {
-  const before = draft(initial[0]);
-  const after = { ...before, title: before.title.replace('zombi düşüşü ve hayalet adımları', 'hayalet adımları ve zombi düşüşü') };
+  const before = draft(initial.find(row => row.parent === 1338));
+  const after = { ...before, title: 'Çifte Dokuz Festivali’nde yükseğe çıkma geleneği ne anlatıyor?' };
   const decision = selectEditorialDraft(before, after, {}, { preferred: 'A', reason: 'A üslubunu tercih ettim', aScore: 75, bScore: 87 });
   assert.equal(decision.selected, 'B');
   assert.equal(decision.reason, 'style_override');
 });
 
 test('judge evidence of an unresolved factual conflict requires editor review', () => {
-  const before = draft(initial[0]);
+  const before = draft(initial.find(row => row.parent === 1338));
   const after = { ...before, title: `${before.title} yeniden` };
   const decision = selectEditorialDraft(before, after, {}, {
     preferred: 'A', factualConflict: { field: 'tarih', evidence: 'Olgu fişindeki tarih' }

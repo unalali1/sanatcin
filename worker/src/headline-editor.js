@@ -1,4 +1,5 @@
 /** Deterministic checks around AI headline choices. Model scores are advisory. */
+import { contextualArtsFindings } from './arts-editor.js';
 export const HEADLINE_SCORE_WEIGHTS = Object.freeze({
   accuracy: 30,
   turkish: 25,
@@ -28,6 +29,8 @@ export function rankedHeadlineCandidates(response, { factSheet = {}, excerpt = '
     seen.add(canonical);
     if (title.length < 32 || title.length > 82 || /[\u3400-\u9fff]/u.test(title)) continue;
     if (NUMERIC_CLAIM.test(title) && (title.match(DIGIT) ?? []).some(number => !allowedNumbers.has(number))) continue;
+    if (contextualArtsFindings({ title, excerpt, text: body }, factSheet)
+      .some(item => item.severity === 'repair' && (item.field === 'title' || item.field === 'title_spot'))) continue;
 
     let score = 0;
     let valid = true;

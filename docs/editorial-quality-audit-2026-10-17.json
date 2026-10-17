@@ -1,0 +1,912 @@
+{
+  "methodology": "Same 30 first-published texts evaluated by old and new deterministic checks; these are not regenerated model outputs or human quality scores.",
+  "baseline": "6df7ff2de7e235127a2cdc7403a9d9a9c91d1e08",
+  "count": 30,
+  "firstPublicationOnly": true,
+  "oldControls": {
+    "words": 7168,
+    "flaggedMechanicalArticles": 0,
+    "mechanicalFindings": 0,
+    "mechanicalFindingsPer1000Words": 0,
+    "headlineReviewArticles": 0,
+    "spotLeadRepeatArticles": 0,
+    "titleSpotOverlapAtLeast0_7": 0,
+    "meanHeuristicFluency": 96.5
+  },
+  "newControls": {
+    "words": 7168,
+    "flaggedMechanicalArticles": 4,
+    "mechanicalFindings": 6,
+    "mechanicalFindingsPer1000Words": 0.84,
+    "headlineReviewArticles": 3,
+    "spotLeadRepeatArticles": 0,
+    "titleSpotOverlapAtLeast0_7": 0,
+    "meanHeuristicFluency": 94.1
+  },
+  "grammarAndSemanticAccuracy": "not measured by deterministic checks",
+  "sourceFidelity": "source articles were not independently compared; numeric differences in manual edits are diagnostic, not confirmed errors",
+  "liveModelReplay": "not run; model credentials unavailable in this environment",
+  "sevenManualPairs": [
+    {
+      "postId": 1330,
+      "firstRevisionId": 1331,
+      "firstTitle": "Çin operasında zombi düşüşü ve hayalet adımları",
+      "manualTitle": "Çin operasının ürpertici yüzü: Hayalet adımları ve zombi düşüşü",
+      "headlineChanged": true,
+      "bodyChanged": true,
+      "baselineFluencyFirst": 92,
+      "baselineFluencyManual": 94,
+      "numericDifferenceFlag": true,
+      "firstLead": "Geleneksel Çin operasında bir oyuncu bedenini tamamen kilitleyip dümdüz geriye düşebiliyor; bir başkası ise geniş kostümünün altında attığı küçük adımlarla sahnede süzülüyormuş izlenimi yaratıyor. RADII, 16 Ekim 2026’da yayımlanan yazısında bu korku estetiğini kuran dört karakter ve performans unsurunu inceledi.",
+      "manualLead": "Geleneksel Çin operasında oyuncular bazen bedenlerini dimdik tutarak arkaya düşüyor, bazen de uzun kostümlerinin altında gizledikleri küçük adımlarla sahnede havada süzülüyormuş izlenimi yaratıyor. Kültür ve sanat yayını RADII’nin ele aldığı bu sahne teknikleri, Çin tiyatrosunun mitolojik ve ürpertici anlatı geleneğini yansıtıyor.",
+      "firstExcerpt": "Kâğıt Adam karakteri ile diş çevirme, geriye düşme ve süzülme illüzyonları, uzun çalışma ve sıkı beden kontrolü gerektiriyor.",
+      "manualExcerpt": "Kâğıt Adam’dan hayalet adımlarına, geleneksel Çin operasının ürpertici sahneleri şaşırtıcı oyunculuk teknikleri ve yıllar süren eğitimle hayat buluyor.",
+      "firstExampleParagraph": "Kâğıt Adam, ölüler adına kâğıt sunular yakılmasıyla bağlantılı eski cenaze uygulamalarından esinlenen bir karakter olarak tanımlanıyor. Oyuncular bu figürü belirgin beyaz yüz makyajı, kuklayı andıran sert hareketler ve ani seğirmelerle canlandırıyor. Karakterin arka planında, öte dünya için kâğıttan nesneler hazırlayıp yakma geleneği bulunuyor.",
+      "manualExampleParagraph": "Bu figürlerden biri olan “Kâğıt Adam”, ölen kişilere öte dünyada eşlik etmesi amacıyla kâğıttan nesnelerin yakıldığı gelenekten esinleniyor. Beyaz yüz makyajı, kuklayı andıran keskin hareketler ve ani seğirmeler, karaktere tekinsiz bir görünüm kazandırıyor."
+    },
+    {
+      "postId": 1333,
+      "firstRevisionId": 1334,
+      "firstTitle": "Majidi’nin filmi Busan ödülüyle Oscar yeterliliği kazandı",
+      "manualTitle": "Majid Majidi’nin “Öğle Yemeği” filmi Busan’da en iyi film seçildi",
+      "headlineChanged": true,
+      "bodyChanged": true,
+      "baselineFluencyFirst": 100,
+      "baselineFluencyManual": 100,
+      "numericDifferenceFlag": false,
+      "firstLead": "31. Busan Uluslararası Film Festivali’nin ana yarışmasında Busan En İyi Film Ödülü, İranlı yönetmen Majid Majidi’nin Öğle Yemeği filmine verildi. İran’ın güneydoğusundaki Chabahar’da geçen film, festivalin ödül düzenlemesi uyarınca Oscar En İyi Uluslararası Film kategorisine katılma yeterliliği kazandı.",
+      "manualLead": "İranlı yönetmen Majid Majidi’nin “Öğle Yemeği” (Midday Meal) filmi, 31. Busan Uluslararası Film Festivali’nde En İyi Film Ödülü’nü kazandı. Ana yarışmada 14 yapım arasından seçilen film, festivalin yeni ödül statüsü sayesinde Oscar’ın En İyi Uluslararası Film kategorisine başvurabilme hakkını da elde etti.",
+      "firstExcerpt": "Zhang Yimou başkanlığındaki jüri, 14 film arasından seçtiği yapımı oybirliğiyle ödüllendirdi; Bi Gan da jüride yer aldı.",
+      "manualExcerpt": "Majid Majidi’nin “Öğle Yemeği” filmi Busan’da büyük ödülü kazandı. Yapım, Oscar’ın En İyi Uluslararası Film kategorisine başvuru hakkı da elde etti.",
+      "firstExampleParagraph": "15 Ekim akşamı sona eren festivalde 14 film arasından seçilen Öğle Yemeği, öğrencilerin çoğunun ücretsiz öğle yemeği için okula gittiği yoksul bir köyü anlatıyor. Yemek bağışının kesilmesinin ardından vekil öğretmen Solan, öğrencilerini okulda tutmak ve kadrolu öğretmen olma hayalini korumak için masrafları karşılamaya çalışıyor.",
+      "manualExampleParagraph": "15 Ekim’de sona eren festivalde ödüllendirilen film, İran’ın güneydoğusundaki Çabahar’da yoksul bir köyde geçiyor. Öğrencilerin çoğunun ücretsiz öğle yemeği için okula gittiği köyde, bağışın kesilmesiyle çocukların eğitimden uzaklaşma tehlikesi doğuyor. Vekil öğretmen Solan, hem öğrencilerini okulda tutmak hem de kadrolu öğretmen olma umudunu korumak için yemek masraflarını karşılamaya çalışıyor."
+    },
+    {
+      "postId": 1338,
+      "firstRevisionId": 1339,
+      "firstTitle": "Çifte Dokuz Festivali’nde yüksek yerlere neden çıkılıyor?",
+      "manualTitle": "Çifte Dokuz Festivali’nde yüksek yerlere neden çıkılıyor?",
+      "headlineChanged": false,
+      "bodyChanged": true,
+      "baselineFluencyFirst": 97,
+      "baselineFluencyManual": 100,
+      "numericDifferenceFlag": false,
+      "firstLead": "Çifte Dokuz Festivali’nde yüksek yerlere çıkma geleneği sürüyor. Gelenek, uğursuzlukları uzaklaştırma ve bereket dileme düşüncesiyle ilişkilendiriliyor; bugün ise yürüyüş yapmak ve sonbahar manzaralarını izlemek için de bir fırsat olarak görülüyor.",
+      "manualLead": "Çin’de 18 Ekim’de kutlanacak Çifte Dokuz (Chongyang) Festivali’nin en eski geleneklerinden biri dağlara ve yüksek tepelere çıkmak. Ay takviminin dokuzuncu ayının dokuzuncu gününe rastlayan bayramda bu gelenek, geçmişte kötülüklerden korunma ve esenlik dileme inancıyla ilişkilendiriliyordu. Bugünse sonbaharda doğayla buluşmanın da bir yolu olarak yaşatılıyor.",
+      "firstExcerpt": "Uğursuzlukları uzaklaştırma ve bereket dileğiyle ilişkilendirilen gelenek, günümüzde sonbahar yürüyüşleri ve dağ manzaralarıyla da yaşatılıyor.",
+      "manualExcerpt": "18 Ekim’de kutlanacak Çifte Dokuz Festivali’nde Çinliler neden dağlara çıkıyor? Eski bir korunma geleneği bugün sonbahar yürüyüşleriyle yaşatılıyor.",
+      "firstExampleParagraph": "Huashan Dağı dik zirveleriyle, Huangshan Dağı bulut deniziyle, Taishan Dağı ise gün doğumu manzarasıyla anılıyor. Lushan Dağı sonbahar ormanlarıyla öne çıkarken Qingcheng Dağı sakin güzelliğiyle dikkat çekiyor.",
+      "manualExampleParagraph": "Çin’in farklı bölgelerindeki dağlar bu geleneğe ayrı manzaralar sunuyor: Huashan sarp zirveleriyle, Huangshan bulut deniziyle, Taishan ise gün doğumuyla tanınıyor. Lushan’ın sonbahar ormanları ve Qingcheng’in sakin doğası da yürüyüş rotaları arasında gösteriliyor."
+    },
+    {
+      "postId": 1341,
+      "firstRevisionId": 1342,
+      "firstTitle": "Suchness defilesinde osmanthus kokusu keselerle yayıldı",
+      "manualTitle": "Şanghay Moda Haftası’nda kıyafetlere osmanthus kokusu eşlik etti",
+      "headlineChanged": true,
+      "bodyChanged": true,
+      "baselineFluencyFirst": 100,
+      "baselineFluencyManual": 93,
+      "numericDifferenceFlag": false,
+      "firstLead": "Çinli tasarım markası Tuyue, Şanghay Moda Haftası’nda 2027 ilkbahar-yaz koleksiyonu Suchness’i tanıttı. Tuyue’nin koleksiyon sunumuna göre, giysi ve ışığın yanı sıra özel üretim bir koku da ilk kez podyum anlatısının parçası oldu.",
+      "manualLead": "Şanghay Moda Haftası’nda 2027 ilkbahar-yaz koleksiyonunu tanıtan Çinli moda markası Tuyue, gösterinin bir parçası olarak osmanthus çiçeğinin kokusunu kullandı. “Suchness” adlı defilede, modeller hareket ettikçe küçük keselerden yayılan koku podyumun atmosferini tamamladı.",
+      "firstExcerpt": "Şanghay Moda Haftası’nda tanıtılan Suchness koleksiyonunda, doğal osmanthus karışımı modeller hareket ettikçe koku yayan keselerde sunuldu.",
+      "manualExcerpt": "Çinli marka Tuyue, Şanghay Moda Haftası’ndaki defilesinde osmanthus çiçeğinin kokusunu ve geleneksel Guanyin heykellerinden esinlenen tasarımları bir araya getirdi.",
+      "firstExampleParagraph": "Bir tütsü markasıyla hazırlanan doğal osmanthus karışımı, modeller hareket ettikçe koku yayan narin keselerde kullanıldı. Markanın ilk özel üretim kokusu olan bu karışım için Tuyue’nin kurucusu Yang Yingying, “Kokuyu fark ettiğinizde zaten onun içindesiniz” dedi.",
+      "manualExampleParagraph": "Koku, markanın bir tütsü üreticisiyle hazırladığı doğal çiçek karışımından elde edildi. Tuyue’nin kurucusu Yang Yingying, böylece izleyicileri koleksiyonun çok duyulu dünyasına katmak istediklerini belirterek “Kokuyu fark ettiğinizde zaten onun içindesiniz” dedi."
+    },
+    {
+      "postId": 1344,
+      "firstRevisionId": 1345,
+      "firstTitle": "Yeraltı borularına taşınan deneysel Hamlet Şanghay’da",
+      "manualTitle": "Şanghay’da sıra dışı Hamlet: Yeraltı tünelleri ve ışın kılıçları",
+      "headlineChanged": true,
+      "bodyChanged": true,
+      "baselineFluencyFirst": 100,
+      "baselineFluencyManual": 93,
+      "numericDifferenceFlag": true,
+      "firstLead": "Shakespeare’in saray trajedisini yeraltı borularına taşıyan Pekin Halk Sanat Tiyatrosu’nun deneysel Hamlet yorumu, 16 Ekim akşamı Şanghay’daki Çin Büyük Tiyatrosu’nda seyirciyle buluştu. Dört genç oyuncunun birden fazla karakteri canlandırdığı yapım, 25. Çin Şanghay Uluslararası Sanat Festivali kapsamında 16-18 Ekim arasında sahneleniyor.",
+      "manualLead": "Pekin Halk Sanat Tiyatrosu’nun Shakespeare’in “Hamlet” eserine getirdiği deneysel yorum, 16 Ekim’de Şanghay’da seyirciyle buluştu. Saray dekorunun yerini yeraltı tünellerinin aldığı oyunda dört genç oyuncu birden fazla karakteri canlandırıyor. Yapım, 25. Çin Şanghay Uluslararası Sanat Festivali kapsamında 18 Ekim’e kadar Çin Büyük Tiyatrosu’nda sahneleniyor.",
+      "firstExcerpt": "Pekin Halk Sanat Tiyatrosu’nun Feng Yuanzheng yönetimindeki klasik büyük sahne versiyonu, 21-25 Ekim’de Meiqi Tiyatrosu’nda Zheng Yunlong’un başrolüyle sahnelenecek.",
+      "manualExcerpt": "Pekin Halk Sanat Tiyatrosu, “Hamlet”i yeraltı tünellerine taşıdı. Dört oyunculu deneysel yorum, Şanghay’da klasik sahnelemeyle aynı festivalde buluşuyor.",
+      "firstExampleParagraph": "Yang Jiayin’in yönettiği, Feng Yuanzheng’in sanat danışmanlığını üstlendiği yapımda Wei Jiacheng, Zhang Yezi, Wang Junqi ve Fang Yangfei rol alıyor. Ara vermeden yaklaşık 110 dakika süren oyun, Shakespeare’in yaklaşık 36 bin kelimelik metnini 16 bin kelimeye indiriyor.",
+      "manualExampleParagraph": "Yang Jiayin’in yönettiği ve Feng Yuanzheng’in sanat danışmanlığını yaptığı oyun, Shakespeare’in yaklaşık 36 bin kelimelik metnini 16 bin kelimeye indiriyor. Wei Jiacheng, Zhang Yezi, Wang Junqi ve Fang Yangfei’nin rol aldığı yapım, ara vermeden yaklaşık 110 dakika sürüyor."
+    },
+    {
+      "postId": 1347,
+      "firstRevisionId": 1348,
+      "firstTitle": "Anne Imhof’tan Hong Kong’da dört perdelik bale: “House of Swans”",
+      "manualTitle": "Anne Imhof, Hong Kong’da bale ile çağdaş sanatı buluşturuyor",
+      "headlineChanged": true,
+      "bodyChanged": true,
+      "baselineFluencyFirst": 89,
+      "baselineFluencyManual": 89,
+      "numericDifferenceFlag": false,
+      "firstLead": "Anne Imhof’un Hong Kong’daki Tai Kwun Contemporary’de düzenlenen “House of Swans” sergisinin merkezinde, American Ballet Theatre ve Hong Kong Ballet dansçılarının gerçekleştirdiği dört perdelik bir öykü balesi yer alıyor. Heykel, resim ve büyük ölçekli enstalasyonların yayıldığı sergideki performans, Amalia adlı genç kadının kurulu düzenin dışına çıkarak kendi kararlarını belirleme gücünü aramasını anlatıyor.",
+      "manualLead": "Alman sanatçı Anne Imhof, Hong Kong’daki Tai Kwun Contemporary’de düzenlenen “House of Swans” sergisinde bale, resim, heykel ve yerleştirme sanatını buluşturuyor. Serginin merkezinde, American Ballet Theatre ve Hong Kong Ballet dansçılarıyla hazırladığı dört perdelik performans yer alıyor. Yapım, Amalia adlı genç bir kadının kendisine biçilen düzene karşı çıkarak kendi yolunu bulma çabasını anlatıyor.",
+      "firstExcerpt": "Aynalı oda, kafesler, metal dolaplar ve çökmüş Jumbotron ekranı; disiplin ile özgürlük arayışını konu alan performansın sahne düzenini oluşturuyor.",
+      "manualExcerpt": "Anne Imhof’un Hong Kong’daki “House of Swans” sergisi, dört perdelik baleyi çağdaş sanatla buluşturuyor. Gösteri, bireysel özgürlük ve aidiyet arayışını sahneye taşıyor.",
+      "firstExampleParagraph": "Imhof, balenin biçimsel disiplininin kendisine bir beste formülü sunduğunu ve bu kısıtlamaların ifade alanını genişlettiğini söylüyor. Sanatçı, klasik bale ile çağdaş dansı bir araya getiren yapının, aşkın yanı sıra güç ve özneleşme üzerine kurulu trajik bir hikâye taşıdığını belirtiyor.",
+      "manualExampleParagraph": "Klasik balenin kurallarını çağdaş dansla bir araya getiren Imhof, bu karşıtlığı eserinin temelinde görüyor. Sanatçıya göre balenin disiplinli yapısı, ifade özgürlüğünü sınırlamak yerine yeni olanaklar açıyor. Performans, aşk ve güç ilişkilerinin yanı sıra bireyin kendi yaşamı üzerinde söz sahibi olma arayışını da ele alıyor."
+    },
+    {
+      "postId": 1358,
+      "firstRevisionId": 1359,
+      "firstTitle": "Asya markaları gurme kokuları tatlı ekseninin dışına taşıdı",
+      "manualTitle": "Asyalı parfüm markaları yeni kokuların peşinde: Çay, pirinç ve baharat",
+      "headlineChanged": true,
+      "bodyChanged": true,
+      "baselineFluencyFirst": 95,
+      "baselineFluencyManual": 95,
+      "numericDifferenceFlag": false,
+      "firstLead": "Paris’te 23-25 Eylül 2026’da düzenlenen Asia Perfume Show 2026, Çin’den 20, Asya’nın diğer bölgelerinden 25 parfüm markasını bir araya getirdi. Tayland, Endonezya, Filipinler, Vietnam ve Hindistan’dan katılan markalar; mango, pirinç, çay ve durian gibi malzemelerle gurme kokuları tatlı ekseninin dışına taşıdı.",
+      "manualLead": "Paris’te 23-25 Eylül 2026’da düzenlenen Asia Perfume Show, Çin’den 20, Asya’nın diğer ülkelerinden 25 parfüm markasını buluşturdu. Tayland, Endonezya, Filipinler, Vietnam ve Hindistan’dan katılan üreticiler; çay, pirinç, mango ve durian gibi malzemelerle alışılmış tatlı kokuların ötesine geçen parfümler tanıttı.",
+      "firstExcerpt": "Wren Atelier’nin Filipinler’de kömür ateşinde ızgara yapılan yapışkan pirinç tatlısı tupig’den esinlenen Smoky Gourmand parfümü, 2025 Emerging Perfume Brand Award ödülünü kazandı.",
+      "manualExcerpt": "Asyalı parfüm markaları çay, pirinç, baharat ve tropikal meyvelerle klasik tatlı kokuların dışına çıkıyor. Paris’teki fuarda farklı kültürlerin koku yorumları öne çıktı.",
+      "firstExampleParagraph": "Etkinlikteki yorumlar, koku yayılımı, kalıcılık ve belirgin koku izi gibi yerleşik ölçütlerin yanı sıra umami, ölçülü tatlılık ve geçicilik gibi nitelikleri de öne çıkardı. Fermente edildiğinde hayvansı ve ud benzeri bir karakter kazanan Thai Assam çayı kullanılan malzemeler arasındaydı. Mango ise yeşil ve ekşi tonlarıyla, acı biber, tuz ya da içkiyle eşleştirilerek işlendi.",
+      "manualExampleParagraph": "Fuarda yalnızca kokuların kalıcılığı ve yoğunluğu değil, yarattıkları farklı duyusal etkiler de öne çıktı. Bazı markalar tatlılığı geri planda tutarken yiyeceklerden tanıdığımız umami çağrışımlarına ve daha hafif koku izlerine yöneldi. Fermente Thai Assam çayı, ud ağacını andıran ve hayvansı notalarıyla kullanıldı; mango ise acı biber, tuz ya da içki çağrışımlarıyla birleştirildi."
+    }
+  ],
+  "rows": [
+    {
+      "postId": 1330,
+      "firstRevisionId": 1331,
+      "date": "2026-10-17 05:04:36",
+      "sourceUrl": "https://radii.co/article/chinese-opera-spooky-side-paper-man-zombie-fall",
+      "wordCount": 185,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 92,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 1,
+        "mechanicalPer1000Words": 5.41,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 80,
+        "findingCodes": [
+          "opera_technique"
+        ]
+      }
+    },
+    {
+      "postId": 1333,
+      "firstRevisionId": 1334,
+      "date": "2026-10-17 05:05:09",
+      "sourceUrl": "https://m.thepaper.cn/newsDetail_forward_34262389",
+      "wordCount": 228,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 1,
+        "mechanicalPer1000Words": 4.39,
+        "headlineReview": true,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 88,
+        "findingCodes": [
+          "oscar_qualification"
+        ]
+      }
+    },
+    {
+      "postId": 1338,
+      "firstRevisionId": 1339,
+      "date": "2026-10-17 05:05:49",
+      "sourceUrl": "https://www.chinadaily.com.cn/a/202610/17/WS6ad2cb12e4b06d4aa05634d1.html",
+      "wordCount": 85,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 97,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 97,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1341,
+      "firstRevisionId": 1342,
+      "date": "2026-10-17 05:06:53",
+      "sourceUrl": "https://www.chinadaily.com.cn/a/202610/14/WS6acf2772e4b06d4aa0562bfc.html",
+      "wordCount": 148,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.33,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 3,
+        "mechanicalPer1000Words": 20.27,
+        "headlineReview": true,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.33,
+        "heuristicFluency": 64,
+        "findingCodes": [
+          "runway_scent_angle",
+          "runway_narrative",
+          "fashion_looks"
+        ]
+      }
+    },
+    {
+      "postId": 1344,
+      "firstRevisionId": 1345,
+      "date": "2026-10-17 05:08:15",
+      "sourceUrl": "https://m.thepaper.cn/newsDetail_forward_34263749",
+      "wordCount": 210,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1347,
+      "firstRevisionId": 1348,
+      "date": "2026-10-17 05:08:32",
+      "sourceUrl": "https://www.artasiapacific.com/people/anne-imhof-on-discipline-agency-and-house-of-swans/",
+      "wordCount": 296,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 89,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 89,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1358,
+      "firstRevisionId": 1359,
+      "date": "2026-10-17 05:10:00",
+      "sourceUrl": "https://jingdaily.com/posts/savory-gourmands-and-quiet-sillage-asian-brands-challenge-fragrance-conventions",
+      "wordCount": 225,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 95,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 1,
+        "mechanicalPer1000Words": 4.44,
+        "headlineReview": true,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 83,
+        "findingCodes": [
+          "fragrance_axis"
+        ]
+      }
+    },
+    {
+      "postId": 1120,
+      "firstRevisionId": 1121,
+      "date": "2026-10-12 05:03:41",
+      "sourceUrl": "https://www.chinadaily.com.cn/a/202610/12/WS6acc2a69e4b06d4aa0562360.html",
+      "wordCount": 144,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 97,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 97,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1123,
+      "firstRevisionId": 1124,
+      "date": "2026-10-12 05:08:15",
+      "sourceUrl": "https://www.chinadaily.com.cn/a/202610/10/WS6ac9a402e4b06d4aa05620f7.html",
+      "wordCount": 235,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 88,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 88,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1130,
+      "firstRevisionId": 1131,
+      "date": "2026-10-12 05:22:10",
+      "sourceUrl": null,
+      "wordCount": 607,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 94,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 94,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1134,
+      "firstRevisionId": 1138,
+      "date": "2026-10-12 05:25:46",
+      "sourceUrl": null,
+      "wordCount": 274,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.4,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.4,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1139,
+      "firstRevisionId": 1141,
+      "date": "2026-10-12 05:27:42",
+      "sourceUrl": null,
+      "wordCount": 529,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.17,
+        "heuristicFluency": 92,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.17,
+        "heuristicFluency": 92,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1153,
+      "firstRevisionId": 1154,
+      "date": "2026-10-12 05:41:36",
+      "sourceUrl": null,
+      "wordCount": 453,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.4,
+        "heuristicFluency": 98,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.4,
+        "heuristicFluency": 98,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1159,
+      "firstRevisionId": 1160,
+      "date": "2026-10-12 05:45:35",
+      "sourceUrl": null,
+      "wordCount": 597,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.38,
+        "heuristicFluency": 91,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.38,
+        "heuristicFluency": 91,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1162,
+      "firstRevisionId": 1163,
+      "date": "2026-10-13 05:04:11",
+      "sourceUrl": "https://www.artasiapacific.com/people/shi-guowei-after-the-festival/",
+      "wordCount": 201,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 98,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 98,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1165,
+      "firstRevisionId": 1166,
+      "date": "2026-10-13 05:04:44",
+      "sourceUrl": "https://m.thepaper.cn/newsDetail_forward_34230440",
+      "wordCount": 190,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1172,
+      "firstRevisionId": 1175,
+      "date": "2026-10-13 05:06:17",
+      "sourceUrl": "https://radii.co/article/classic-chinese-carpet-making-in-modern-brands",
+      "wordCount": 159,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.13,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.13,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1177,
+      "firstRevisionId": 1178,
+      "date": "2026-10-13 05:07:35",
+      "sourceUrl": "https://m.thepaper.cn/newsDetail_forward_34232393",
+      "wordCount": 244,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 93,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 93,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1184,
+      "firstRevisionId": 1185,
+      "date": "2026-10-13 05:09:02",
+      "sourceUrl": "https://www.chinadaily.com.cn/a/202610/13/WS6acd7149e4b06d4aa056263d.html",
+      "wordCount": 222,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.14,
+        "heuristicFluency": 95,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.14,
+        "heuristicFluency": 95,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1212,
+      "firstRevisionId": 1213,
+      "date": "2026-10-14 05:08:13",
+      "sourceUrl": "https://www.chinadaily.com.cn/a/202610/13/WS6ace01e1e4b06d4aa0562931.html",
+      "wordCount": 138,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1215,
+      "firstRevisionId": 1218,
+      "date": "2026-10-14 05:08:58",
+      "sourceUrl": "https://www.sixthtone.com/news/1019102/She%20Is%20Chinese%20Opera%E2%80%99s%20Greatest%20Star.%20And%20Its%20Most%20Divisive.",
+      "wordCount": 248,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1220,
+      "firstRevisionId": 1221,
+      "date": "2026-10-14 05:12:13",
+      "sourceUrl": "https://m.thepaper.cn/newsDetail_forward_34226544",
+      "wordCount": 254,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.14,
+        "heuristicFluency": 98,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.14,
+        "heuristicFluency": 98,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1227,
+      "firstRevisionId": 1230,
+      "date": "2026-10-14 05:14:55",
+      "sourceUrl": "https://m.thepaper.cn/newsDetail_forward_34225452",
+      "wordCount": 149,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.29,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.29,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1232,
+      "firstRevisionId": 1233,
+      "date": "2026-10-14 05:16:06",
+      "sourceUrl": "https://www.chinadaily.com.cn/a/202610/12/WS6acc7219e4b06d4aa05624cf.html",
+      "wordCount": 135,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.14,
+        "heuristicFluency": 90,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.14,
+        "heuristicFluency": 90,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1240,
+      "firstRevisionId": 1241,
+      "date": "2026-10-15 05:07:22",
+      "sourceUrl": "https://global.chinadaily.com.cn/a/202610/14/WS6acf3285e4b06d4aa0562c6a.html",
+      "wordCount": 107,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 97,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 97,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1243,
+      "firstRevisionId": 1244,
+      "date": "2026-10-15 05:09:13",
+      "sourceUrl": "https://jingdaily.com/posts/beyond-made-in-china-brands-that-sell-stories-at-paris-fashion-week",
+      "wordCount": 258,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.43,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.43,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1246,
+      "firstRevisionId": 1247,
+      "date": "2026-10-15 05:10:24",
+      "sourceUrl": "https://www.chinadaily.com.cn/a/202610/15/WS6ad011a8e4b06d4aa0562d95.html",
+      "wordCount": 161,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 90,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 90,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1249,
+      "firstRevisionId": 1250,
+      "date": "2026-10-15 05:11:39",
+      "sourceUrl": "https://www.chinadaily.com.cn/a/202610/14/WS6acec06ce4b06d4aa05629db.html",
+      "wordCount": 220,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1252,
+      "firstRevisionId": 1253,
+      "date": "2026-10-15 05:12:39",
+      "sourceUrl": "https://news.cgtn.com/news/2026-10-13/Ming-era-gold-crown-showcases-exquisite-craftsmanship-1Rd3Mb6QOHK/p.html",
+      "wordCount": 109,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.29,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0.29,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      }
+    },
+    {
+      "postId": 1269,
+      "firstRevisionId": 1270,
+      "date": "2026-10-16 05:08:29",
+      "sourceUrl": "https://m.thepaper.cn/newsDetail_forward_34248776",
+      "wordCount": 157,
+      "oldControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      },
+      "newControls": {
+        "mechanicalFindingCount": 0,
+        "mechanicalPer1000Words": 0,
+        "headlineReview": false,
+        "spotLeadRepeat": false,
+        "titleSpotOverlap": 0,
+        "heuristicFluency": 100,
+        "findingCodes": []
+      }
+    }
+  ]
+}
