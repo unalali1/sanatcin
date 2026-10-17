@@ -1,4 +1,5 @@
 import { NEWSROOM_REVIEW_GUIDANCE, newsroomFindings, headlineRevisionIssues } from './editorial-review.js';
+import { assertPrepublishQuality, prepublishQuality } from './prepublish-quality.js';
 import { rankedHeadlineCandidates } from './headline-editor.js';
 import { assessDraftTransition, selectEditorialDraft } from './draft-decision.js';
 import OpenAI from 'openai';
@@ -587,6 +588,9 @@ export async function translateArticle(article, { signal, completeJson = request
     throw new Error(`Editoryal doğrulama başarısız: ${final.issues.join(' ') || 'yetersiz kaynak veya giderilemeyen olgu çelişkisi'}`);
   }
   assertUsableEditorialOutput(final.draft);
+  const initialHeadline = final.draft.title;
+  const initialRepairCodes = new Set(newsroomFindings(final.draft, factSheet)
+    .filter(item => item.severity === 'repair').map(item => item.code));
   log('info', 'Türkçe haber sıfırdan yazıldı', {
     source: article.source.id,
     title: final.draft.title,
@@ -959,11 +963,26 @@ export async function translateArticle(article, { signal, completeJson = request
   log(languageFindings.length ? 'warn' : 'info', 'Somut Türkçe dil denetimi tamamlandı', {
     source: article.source.id, reviewVersion: '2026-10-11', findings: languageFindings, heuristicScore: fluencyBeforeGate.score
   });
-  if (structureIssues.length || fluencyBeforeGate.score < 82 || languageFindings.some(item => item.severity === 'repair')) {
-    throw new Error('Editoryal yayın kapısı: giriş, haber bütünlüğü veya Türkçe doğallığı yetersiz. ' + [...structureIssues, ...languageFindings.filter(item => item.severity === 'repair').map(item => `[${item.code}] ${item.message}`)].join(' '));
-  }
-
   assertUsableEditorialOutput(final.draft);
+  const quality = prepublishQuality({ source: article, draft: final.draft, factSheet });
+  for (const issue of structureIssues) quality.language.push({ stage: 'B', code: 'structure', severity: 'major', message: issue });
+  if (fluencyBeforeGate.score < 82) quality.language.push({
+    stage: 'B', code: 'fluency_floor', severity: 'major', message: 'Giriş, haber bütünlüğü veya Türkçe doğallığı yetersiz.'
+  });
+  quality.publishable = quality.publishable && !quality.language.some(item => item.severity === 'major');
+  const remainingCodes = new Set([...quality.accuracy, ...quality.language]
+    .filter(item => item.severity === 'critical' || item.severity === 'major').map(item => item.code));
+  const editorialQuality = {
+    passed: quality.publishable,
+    headlineRewritten: initialHeadline !== final.draft.title,
+    mechanicalExpressionsCorrected: [...initialRepairCodes].filter(code => !remainingCodes.has(code)).length,
+    accuracy: quality.accuracy,
+    language: quality.language
+  };
+  log(quality.publishable ? 'info' : 'warn', 'Yayın öncesi editoryal kapı', {
+    source: article.source.id, articleUrl: article.url, ...editorialQuality
+  });
+  assertPrepublishQuality(quality);
   const instagramText = await buildInstagramCaption(article, factSheet, final.draft, { signal, completeJson });
   log('info', 'Türkçe haber yayıma hazır', {
     source: article.source.id,
@@ -979,6 +998,7 @@ export async function translateArticle(article, { signal, completeJson = request
   return {
     ...final.draft,
     factSheet,
+    editorialQuality,
     instagramText,
     editorialMode: 'fact-ledger-turkish-newsroom-v18-instagram-editorial'
   };

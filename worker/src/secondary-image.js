@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { config } from './config.js';
 import { sourceHash } from './fetch.js';
 import { log } from './logger.js';
+import { inlineImageFindings, uniqueEditorialImages } from './image-quality.js';
 import { assertImageDimensions, detectImageContentType, isUsableImageUrl } from './quality.js';
 
 const auth = `Basic ${Buffer.from(`${config.wpUsername}:${config.wpAppPassword}`).toString('base64')}`;
@@ -140,6 +141,7 @@ async function evaluatePair(article, primary, candidate, signal) {
             'similarityScore 0-100: iki görselin aynı anı, aynı kompozisyonu veya çok benzer kadrajı gösterme derecesi. 100 neredeyse aynı görsel demektir.',
             'complementaryScore 0-100: ikinci görselin farklı eser, kişi, mekân detayı, performans anı veya başka yeni görsel bilgi katma derecesi.',
             'useTogether yalnız ikinci görsel habere gerçek görsel çeşitlilik katıyorsa true olsun.',
+            'scene alanında sanatçı portresini portrait, sahnedeki icrayı performance olarak ayır. Portreyi sahne fotoğrafı diye anlatma; kaynak altyazısında veya görüntüde doğrulanmayan kişi/eser adını açıklamaya ekleme.',
             'description ikinci görsel için 8-18 kelimelik doğal Türkçe alternatif metin olsun.',
             'captionTr alanına yalnız kaynak fotoğraf altyazısı varsa tarih/yer/kişi ve kaynak bilgisini koruyarak doğal Türkçeye çevir; altyazı yoksa boş bırak.',
             'Yalnız şu JSON biçiminde yanıt ver: {"usable":true,"useTogether":true,"relevanceScore":82,"qualityScore":76,"similarityScore":30,"complementaryScore":84,"scene":"artifact","description":"...","captionTr":"...","reason":"..."}',
@@ -194,6 +196,8 @@ export function insertAfterParagraph(html, insertion, paragraphNumber = 2) {
       return `${source.slice(0, position)}\n${fragment}\n${source.slice(position)}`;
     }
   }
+  const sourceAside = source.search(/<aside\b[^>]*class=["'][^"']*sanatcin-source/iu);
+  if (sourceAside >= 0) return `${source.slice(0, sourceAside)}${fragment}\n${source.slice(sourceAside)}`;
   return `${source}\n${fragment}`;
 }
 
@@ -274,6 +278,7 @@ async function selectSecondaryImages(article, primaryImage, signal) {
   const reviewed = [];
   const errors = [];
   let attempted = 0;
+  let duplicateCount = 0;
   for (const imageUrl of urls) {
     if (attempted >= REVIEW_LIMIT || reviewed.length >= maxCount) break;
     attempted += 1;
@@ -294,12 +299,23 @@ async function selectSecondaryImages(article, primaryImage, signal) {
         + evaluated.complementaryScore * 0.30
         - Math.max(0, evaluated.similarityScore - 50) * 0.12
       ) * 10) / 10;
-      reviewed.push({ ...evaluated, secondaryScore: score });
+      const distinct = uniqueEditorialImages(primaryImage, [...reviewed, { ...evaluated, secondaryScore: score }]);
+      if (distinct.duplicates.length) {
+        duplicateCount += distinct.duplicates.length;
+        errors.push(`Aynı kaynak fotoğrafı yeniden seçilmedi: ${imageUrl}`);
+      } else {
+        reviewed.push({ ...evaluated, secondaryScore: score });
+      }
     } catch (error) {
       errors.push(error.message);
+      if (/İkinci görsel daha önce kullanılmış/iu.test(error.message)) duplicateCount += 1;
     }
   }
 
+  if (duplicateCount) log('warn', 'Yinelenen görseller ayıklandı', {
+    source: article.source?.id, articleUrl: article.url,
+    count: duplicateCount, reason: 'same-bytes-or-source-photo'
+  });
   const selected = reviewed
     .sort((left, right) => right.secondaryScore - left.secondaryScore)
     .slice(0, maxCount);
@@ -340,6 +356,13 @@ export async function attachSecondaryImage(article, primaryImage, post, { signal
   if (!rawContent) throw new Error('Ek görsel eklenecek haber gövdesi WordPress’ten okunamadı.');
   const figures = uploaded.map(({ image, media }) => inlineFigure(article, image, media));
   const content = insertFiguresAfterParagraphs(rawContent, figures, 2);
+  const imageFindings = inlineImageFindings(content);
+  if (imageFindings.length) {
+    log('warn', 'Haber gövdesi görsel denetimi başarısız; ek görseller yayımlanmayacak', {
+      source: article.source?.id, articleUrl: article.url, postId: post.id, findings: imageFindings
+    });
+    throw new Error(`Haber gövdesi görsel denetimi başarısız: ${imageFindings.map(item => item.code).join(', ')}`);
+  }
   await wp(`/wp/v2/posts/${post.id}`, {
     method: 'POST',
     body: JSON.stringify({ content }),
