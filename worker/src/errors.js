@@ -1,4 +1,6 @@
 const rules = [
+  ['QUALITY_FACT', /QUALITY_FACT:/u, 'editorial'],
+  ['QUALITY_LANGUAGE', /QUALITY_LANGUAGE:/u, 'editorial'],
   ['DUPLICATE', /benzer haber|known|daha önce/i, 'duplicate'],
   ['DATE_INVALID', /tarih|Eski makale/i, 'date'],
   ['EDITORIAL_INVALID', /olgu|Editoryal|Çeviri|Türkçe|başlık|spot/i, 'editorial'],

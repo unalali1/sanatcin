@@ -7,6 +7,10 @@ const runMetrics = {
   aiRetryEvents: 0,
   aiFailedParts: 0
 };
+const editorialGateEvents = new Map();
+const draftDecisions = [];
+const editorReferrals = new Set();
+let duplicateImagesRemoved = 0;
 
 function rawWrite(level, message, details = {}) {
   process.stdout.write(`${JSON.stringify({ time: new Date().toISOString(), level, message, ...context, ...details })}\n`);
@@ -30,7 +34,7 @@ function distribution(items, key) {
   }, {});
 }
 
-function buildEditorialReport(details = {}) {
+export function buildEditorialReport(details = {}) {
   const sourceStats = details.sourceStats ?? {};
   const sources = Object.entries(sourceStats).map(([source, stats]) => ({
     source,
@@ -73,6 +77,19 @@ function buildEditorialReport(details = {}) {
     preflightRejected: sources.reduce((sum, item) => sum + item.preflightRejected, 0),
     sourceCategoryOutcomes: Object.fromEntries(sources.map((item) => [item.source, item.categories])),
     rejected: sources.reduce((sum, item) => sum + item.rejected, 0),
+    editorialQuality: {
+      candidatesProcessed: sources.reduce((sum, item) => sum + item.attempted, 0),
+      articlesPassed: [...editorialGateEvents.values()].filter(item => item.passed).length,
+      headlinesRewritten: [...editorialGateEvents.values()].filter(item => item.headlineRewritten).length,
+      mechanicalExpressionsCorrected: [...editorialGateEvents.values()].reduce((sum, item) => sum + numeric(item.mechanicalExpressionsCorrected), 0),
+      sourceAccuracyStopped: [...editorialGateEvents.values()].filter(item => item.accuracy?.some(finding => finding.severity === 'critical')).length,
+      editorReferrals: new Set([
+        ...editorReferrals,
+        ...[...editorialGateEvents.entries()].filter(([, item]) => !item.passed && item.accuracy?.length).map(([url]) => url)
+      ]).size,
+      duplicateImagesRemoved,
+      draftDecisions: draftDecisions.slice(-30)
+    },
     categoryPublished: details.categoryPublished ?? {},
     scoreStats: details.scoreStats ?? {},
     imageOrigins: distribution(results, 'imageOrigin'),
@@ -162,6 +179,16 @@ export function setLogContext(values = {}) {
 
 export function log(level, message, details = {}) {
   rawWrite(level, message, details);
+
+  if (message === 'Yayın öncesi editoryal kapı' && details.articleUrl) {
+    editorialGateEvents.set(details.articleUrl, details);
+  }
+  if (message === 'Editoryal taslak kararı') {
+    draftDecisions.push({ articleUrl: details.articleUrl, selected: details.selected, reason: details.reason, remainingIssues: details.remainingIssues });
+  }
+  if (message === 'Yinelenen görseller ayıklandı') duplicateImagesRemoved += numeric(details.count);
+  if (message === 'Son editör taslağı reddetti; haber editör incelemesine alınacak' && details.articleUrl) editorReferrals.add(details.articleUrl);
+  if (message === 'Haber işlenemedi; sıradaki aday denenecek' && /Editör incelemesi gerekli/u.test(details.error ?? '') && details.url) editorReferrals.add(details.url);
 
   if ((message === 'AI sıralama partisi tamamlandı' || message === 'AI sıralama alt partisi tamamlandı') && Number.isFinite(Number(details.elapsedMs))) {
     runMetrics.aiDurationsMs.push(Number(details.elapsedMs));

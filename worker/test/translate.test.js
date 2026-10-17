@@ -289,9 +289,9 @@ test('fashion calque gets one source-safe focused repair at the final editorial 
 test('micro-editor cannot discard a verified person for a generic festival title even if a judge would approve', async () => {
   const original = { ...editorialResult(), title: 'Pekin Müzik Festivali’ni 90 yaşındaki Charles Dutoit açtı' };
   let calls = 0;
-  const result = await translateArticle(article, { completeJson: async () => {
+  const result = await translateArticle({ ...article, text: article.text + ' Charles Dutoit is 90 years old.' }, { completeJson: async () => {
     calls++;
-    if (calls === 1) return { factSheet: { ...factSheet, people: ['Charles Dutoit'] } };
+    if (calls === 1) return { factSheet: { ...factSheet, people: ['Charles Dutoit'], facts: [...factSheet.facts, 'Charles Dutoit 90 yaşında.'], numbers: [...factSheet.numbers, '90'] } };
     if (calls === 2 || calls === 3) return original;
     if (calls === 4) return { title: 'Pekin Müzik Festivali Mozart konseriyle başladı' };
     return { preferred: 'B', reason: 'Onay', aScore: 80, bScore: 99 };
@@ -355,4 +355,26 @@ test('a clearly better Turkish draft survives a judge personal style preference'
   }});
   assert.equal(result.title, polished.title);
   assert.equal(calls, 6);
+});
+
+test('a fluent invented quantity is stopped before Instagram and publication', async () => {
+  const invented = editorialResult();
+  invented.paragraphs[2] += ' Sergide 99 ayrı müze temsil edildi.';
+  let socialCalls = 0;
+  let calls = 0;
+  await assert.rejects(translateArticle(article, { completeJson: async request => {
+    calls++;
+    if (request.input[0].content.includes('Instagram')) socialCalls++;
+    return calls === 1 ? { factSheet } : invented;
+  }}), /QUALITY_FACT:.*99/);
+  assert.equal(socialCalls, 0);
+});
+
+test('fact extraction API failure never reaches the publication-ready result', async () => {
+  let calls = 0;
+  await assert.rejects(translateArticle(article, { completeJson: async () => {
+    calls++;
+    throw new Error('editorial API unavailable');
+  }}), /editorial API unavailable/);
+  assert.equal(calls, 1);
 });

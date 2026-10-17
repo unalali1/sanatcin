@@ -1,0 +1,248 @@
+{
+  "method": "Same 30 first-published Turkish revisions. Stage B deterministic shadow check; no generation or source fidelity assessment.",
+  "stageA": "not assessed: original source bodies and contemporaneous fact sheets not stored with these revisions",
+  "count": 30,
+  "package2MajorLanguageArticles": 4,
+  "package3MajorLanguageArticles": 6,
+  "uncertainWithoutNativeNameLedger": [
+    1130,
+    1134
+  ],
+  "package3MinorLanguageArticles": 0,
+  "rows": [
+    {
+      "postId": 1330,
+      "firstRevisionId": 1331,
+      "package2RepairCodes": [
+        "opera_technique"
+      ],
+      "package3MajorLanguageCodes": [
+        "opera_technique"
+      ],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1333,
+      "firstRevisionId": 1334,
+      "package2RepairCodes": [
+        "oscar_qualification"
+      ],
+      "package3MajorLanguageCodes": [
+        "oscar_qualification"
+      ],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1338,
+      "firstRevisionId": 1339,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1341,
+      "firstRevisionId": 1342,
+      "package2RepairCodes": [
+        "runway_scent_angle",
+        "runway_narrative",
+        "fashion_looks"
+      ],
+      "package3MajorLanguageCodes": [
+        "runway_scent_angle",
+        "runway_narrative",
+        "fashion_looks"
+      ],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1344,
+      "firstRevisionId": 1345,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1347,
+      "firstRevisionId": 1348,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1358,
+      "firstRevisionId": 1359,
+      "package2RepairCodes": [
+        "fragrance_axis"
+      ],
+      "package3MajorLanguageCodes": [
+        "fragrance_axis"
+      ],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1120,
+      "firstRevisionId": 1121,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1123,
+      "firstRevisionId": 1124,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1130,
+      "firstRevisionId": 1131,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [
+        "structural_language"
+      ],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1134,
+      "firstRevisionId": 1138,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [
+        "structural_language"
+      ],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1139,
+      "firstRevisionId": 1141,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1153,
+      "firstRevisionId": 1154,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1159,
+      "firstRevisionId": 1160,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1162,
+      "firstRevisionId": 1163,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1165,
+      "firstRevisionId": 1166,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1172,
+      "firstRevisionId": 1175,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1177,
+      "firstRevisionId": 1178,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1184,
+      "firstRevisionId": 1185,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1212,
+      "firstRevisionId": 1213,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1215,
+      "firstRevisionId": 1218,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1220,
+      "firstRevisionId": 1221,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1227,
+      "firstRevisionId": 1230,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1232,
+      "firstRevisionId": 1233,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1240,
+      "firstRevisionId": 1241,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1243,
+      "firstRevisionId": 1244,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1246,
+      "firstRevisionId": 1247,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1249,
+      "firstRevisionId": 1250,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1252,
+      "firstRevisionId": 1253,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    },
+    {
+      "postId": 1269,
+      "firstRevisionId": 1270,
+      "package2RepairCodes": [],
+      "package3MajorLanguageCodes": [],
+      "minorLanguageCount": 0
+    }
+  ]
+}
