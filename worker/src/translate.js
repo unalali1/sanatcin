@@ -1,5 +1,6 @@
 import { NEWSROOM_REVIEW_GUIDANCE, newsroomFindings, headlineRevisionIssues } from './editorial-review.js';
 import { rankedHeadlineCandidates } from './headline-editor.js';
+import { assessDraftTransition, selectEditorialDraft } from './draft-decision.js';
 import OpenAI from 'openai';
 import { config } from './config.js';
 import { log } from './logger.js';
@@ -247,6 +248,7 @@ async function chooseMoreNaturalDraft(article, factSheet, before, after, { signa
               'İki metin aynı doğrulanmış olgulara dayanıyor. A ilk Türkçe taslak, B ise çeviri kokusunu gidermek için kıdemli editör tarafından yeniden yazılmış sürümdür. Dil doğallığı, açıklık, haber ritmi, somut fiil kullanımı, Türkçe söz dizimi ve çeviri kokusunun yokluğunun yanında başlık ve girişin haberin ANA FİKRİNİ doğru temsil edip etmediğini karşılaştır.',
               'Olgu fişi doğruluk sınırıdır. B kaynakta olmayan bilgi ekliyor, doğrulanmış kişi/sayı/tarihi değiştiriyor veya ana haber gelişmesini bozuyorsa A’yı seç. Buna karşılık A’daki her tali ayrıntının B’de aynı cümleyle veya aynı uzunlukta bulunmasını şart koşma; doğru özetleme ve sadeleştirme bilgi kaybı değildir.',
               'B doğruluk sınırını koruyor ve Türkiye Türkçesinde belirgin biçimde daha doğal okunuyorsa B’yi tercih et. Yalnız “A daha ayrıntılı” gerekçesi, B ana olguları ve haber açısını koruyorsa A’ya dönmek için yeterli değildir. Eşitlikte A korunabilir; ancak B’nin cümle yapısı ve haber akışı açıkça daha doğalsa bunu önceliklendir.',
+              'Olgusal çatışmayı kişisel üslup tercihinden ayır. Yalnız kaynak/olgu fişiyle doğrulanabilen somut bir hata varsa factualConflict alanına etkilenen alanı ve olgu fişindeki kanıtı yaz; yalnız başlık açısı, sözcük tercihi veya tali ayrıntının kısaltılması olgusal çatışma değildir. Akıcılık, haber dili, paragraf sırası, tekrarlar, kültür-sanat terminolojisi ve gereksiz uzatmayı ayrı ayrı tart.',
               'Özellikle şu soruyu bağımsız değerlendir: Okur B metninin yabancı dilden çevrildiğini cümle yapısından hissediyor mu? Hissedilmiyorsa ve olgusal güvenlik korunuyorsa B lehine değerlendir.',
               'İngilizce kurum adını, mekanik malzeme tamlamasını, bilgi vermeyen terim açıklamasını ve nesneye araştırmacı eylemi yükleyen başlığı kalite kusuru say. Yeni olgu eklemeyen doğal Türkçe anlatımı tercih et.',
               'Başlık özelinde envanter gibi biten heykel listesi, “festival başladı” takvim kalıbı, “kısa listesinde” bürokratik ifadesi ve mimarın adıyla müzenin adını karıştırma riskini de dikkate al. Yalnızca doğrulanmış olgularla daha doğal, somut ve dikkat çekici sürümü seç; sırf güçlü görünmek için kaynakta olmayan “yoğun ilgi” veya ödül kazanımı ekleme.',
@@ -262,7 +264,7 @@ async function chooseMoreNaturalDraft(article, factSheet, before, after, { signa
               `Somut dil denetimi: ${JSON.stringify({ A: newsroomFindings(before), B: newsroomFindings(after) })}`,
               `A sürümü:\n${JSON.stringify({ title: before.title, excerpt: before.excerpt, paragraphs: before.paragraphs })}`,
               `B sürümü:\n${JSON.stringify({ title: after.title, excerpt: after.excerpt, paragraphs: after.paragraphs })}`,
-              'JSON şeması: {"preferred":"A|B","reason":"kısa gerekçe","aScore":0,"bScore":0}'
+              'JSON şeması: {"preferred":"A|B","reason":"kısa gerekçe","aScore":0,"bScore":0,"factualConflict":null veya {"field":"hatalı olgu","evidence":"olgu fişinden somut kanıt"}}'
             ].join('\n\n')
           }
         ]
@@ -272,6 +274,9 @@ async function chooseMoreNaturalDraft(article, factSheet, before, after, { signa
         reason: cleanString(result.reason).slice(0, 300),
         aScore: Number(result.aScore) || null,
         bScore: Number(result.bScore) || null,
+        factualConflict: result.factualConflict?.field && result.factualConflict?.evidence
+          ? { field: cleanString(result.factualConflict.field).slice(0, 180), evidence: cleanString(result.factualConflict.evidence).slice(0, 240) }
+          : null,
         source: article.source.id
       };
     } catch (error) {
@@ -614,6 +619,7 @@ export async function translateArticle(article, { signal, completeJson = request
   const prePolish = final;
   const prePolishIssues = editorialIssues(prePolish.draft, factSheet);
   const prePolishFluency = editorialFluencyProfile(prePolish.draft);
+  let reviewRequired = null;
   try {
     const polished = await polishTurkishNews(article, factSheet, prePolish.draft, { signal, completeJson });
     if (polished.accepted) {
@@ -671,7 +677,8 @@ export async function translateArticle(article, { signal, completeJson = request
 
       const changed = editorialDraftChanged(prePolish.draft, candidateDraft);
       const candidateFluency = editorialFluencyProfile(candidateDraft);
-      const hardSafe = !factRegression && !namingRegression;
+      let transition = assessDraftTransition(prePolish.draft, candidateDraft, factSheet);
+      let hardSafe = !transition.factRegression && !transition.namingRegression && !transition.blocking.length;
       let naturalnessDecision = {
         preferred: changed ? 'A' : 'B',
         reason: changed ? 'hakem çalıştırılmadı' : 'metin değişmedi'
@@ -696,7 +703,7 @@ export async function translateArticle(article, { signal, completeJson = request
 
       // Hakem yalnız olgu/kapsam gerekçesiyle A'yı seçerse B'yi çöpe atmak yerine
       // B üzerinde bir kez daha hedefli onarım yap ve yeniden değerlendir.
-      if (hardSafe && changed && naturalnessDecision.preferred === 'A') {
+      if (hardSafe && changed && naturalnessDecision.preferred === 'A' && naturalnessDecision.factualConflict) {
         try {
           const judgeRepair = await writeTurkishNews(article, factSheet, {
             draft: candidateDraft,
@@ -719,7 +726,7 @@ export async function translateArticle(article, { signal, completeJson = request
                 judgeRepair.draft,
                 { signal, completeJson }
               );
-              if (repairedDecision.preferred === 'B') {
+              if (repairedDecision.preferred === 'B' && !repairedDecision.factualConflict) {
                 candidateDraft = judgeRepair.draft;
                 candidateIssues = editorialIssues(candidateDraft, factSheet);
                 naturalnessDecision = repairedDecision;
@@ -734,7 +741,12 @@ export async function translateArticle(article, { signal, completeJson = request
         }
       }
 
-      const acceptPolish = hardSafe && (!changed || naturalnessDecision.preferred === 'B');
+      // Reassess the actual final candidate; a second repair can change facts or names.
+      transition = assessDraftTransition(prePolish.draft, candidateDraft, factSheet);
+      const selection = changed
+        ? selectEditorialDraft(prePolish.draft, candidateDraft, factSheet, naturalnessDecision)
+        : { selected: 'A', reason: 'unchanged', assessment: transition };
+      const acceptPolish = changed && selection.selected === 'B';
       if (acceptPolish) {
         final = { ...polished, draft: candidateDraft };
         mechanicalIssues = candidateIssues;
@@ -747,6 +759,7 @@ export async function translateArticle(article, { signal, completeJson = request
           elapsedSeconds: elapsedSeconds(startedAt)
         });
       } else {
+        if (selection.selected === null) reviewRequired = selection.reason;
         log('warn', 'Türkçe son okuma güvenlik veya editör hakemi nedeniyle önceki taslağa döndü', {
           source: article.source.id,
           beforeIssues: prePolishIssues,
@@ -757,9 +770,23 @@ export async function translateArticle(article, { signal, completeJson = request
           factRegression,
           beforeFluency: prePolishFluency,
           afterFluency: candidateFluency,
-          naturalnessDecision
+          naturalnessDecision,
+          selectionReason: selection.reason,
+          reviewRequired: Boolean(reviewRequired)
         });
       }
+      log('info', 'Editoryal taslak kararı', {
+        source: article.source.id, articleUrl: article.url,
+        candidates: { initial: prePolish.draft.title, polished: polished.draft.title, repaired: candidateDraft.title },
+        selected: acceptPolish ? 'polished_or_repaired' : 'initial',
+        reason: selection.reason, assessment: selection.assessment,
+        remainingIssues: acceptPolish ? candidateIssues : prePolishIssues
+      });
+    } else {
+      reviewRequired = 'polish_rejected';
+      log('warn', 'Son editör taslağı reddetti; haber editör incelemesine alınacak', {
+        source: article.source.id, articleUrl: article.url, issues: polished.issues
+      });
     }
   } catch (error) {
     log('warn', 'Türkçe son okuma tamamlanamadı; doğrulanmış önceki taslakla devam edilecek', {
@@ -767,6 +794,7 @@ export async function translateArticle(article, { signal, completeJson = request
       error: String(error?.message ?? error).slice(0, 500)
     });
   }
+  if (reviewRequired) throw new Error(`Editör incelemesi gerekli: son taslaktaki ${reviewRequired} giderilemedi.`);
 
   if (mechanicalIssues.length) {
     let blockingIssues = mechanicalIssues.filter((issue) => /Çince karakterler|doğrulanmış yerel ad|kaynak-site artığı|yinelenen cümle/iu.test(issue));
@@ -787,8 +815,11 @@ export async function translateArticle(article, { signal, completeJson = request
         });
         if (repaired.accepted) {
           assertUsableEditorialOutput(repaired.draft);
-          final = repaired;
-          mechanicalIssues = editorialIssues(final.draft, factSheet);
+          const transition = assessDraftTransition(final.draft, repaired.draft, factSheet);
+          if (!transition.factRegression && !transition.namingRegression && !transition.blocking.length) {
+            final = repaired;
+            mechanicalIssues = editorialIssues(final.draft, factSheet);
+          }
           blockingIssues = mechanicalIssues.filter((issue) => /Çince karakterler|doğrulanmış yerel ad|kaynak-site artığı|yinelenen cümle/iu.test(issue));
           log(blockingIssues.length ? 'warn' : 'info', 'Özel dil/adlandırma onarım turu tamamlandı', {
             source: article.source.id,
@@ -803,6 +834,30 @@ export async function translateArticle(article, { signal, completeJson = request
       }
       if (blockingIssues.length) {
         throw new Error(`Yayın engellendi: ${blockingIssues.join(' ')}`);
+      }
+    }
+    if (mechanicalIssues.length && !newsroomFindings(final.draft).some(item => item.severity === 'repair')) {
+      // A residual language warning deserves a focused correction, not silent publication.
+      const baseline = final.draft;
+      try {
+        const revision = await writeTurkishNews(article, factSheet, {
+          draft: baseline,
+          feedback: [...mechanicalIssues, 'Yalnız işaretlenen dil sorunlarını düzelt; haberin doğrulanmış bilgilerini, paragraf planını ve güçlü ifadelerini koru.'],
+          signal, completeJson
+        });
+        if (revision.accepted) {
+          assertUsableEditorialOutput(revision.draft);
+          const transition = assessDraftTransition(baseline, revision.draft, factSheet);
+          const revisedIssues = editorialIssues(revision.draft, factSheet);
+          if (!transition.factRegression && !transition.namingRegression && !transition.blocking.length
+              && revisedIssues.length < mechanicalIssues.length) {
+            final = revision;
+            mechanicalIssues = revisedIssues;
+            log('info', 'İkincil dil sorunları hedefli düzeltildi', { source: article.source.id, remainingIssues: mechanicalIssues });
+          }
+        }
+      } catch (error) {
+        log('warn', 'İkincil dil düzeltmesi tamamlanamadı', { source: article.source.id, error: String(error?.message ?? error).slice(0, 300) });
       }
     }
     if (mechanicalIssues.length) {
@@ -826,16 +881,20 @@ export async function translateArticle(article, { signal, completeJson = request
         });
       }
       if (decision.preferred === 'B') {
+        const previousTitle = final.draft.title;
         final = { ...final, draft: headline.draft };
         log('info', 'Başlık mikro-editör turunda güçlendirildi', {
           source: article.source.id,
+          articleUrl: article.url,
           title: final.draft.title,
+          previousTitle,
           reason: headline.reason,
           judgeReason: decision.reason
         });
       } else {
         log('info', 'Başlık mikro-editör önerisi hakem tarafından reddedildi; mevcut başlık korundu', {
           source: article.source.id,
+          articleUrl: article.url,
           currentTitle: final.draft.title,
           proposedTitle: headline.draft.title,
           reason: decision.reason
@@ -878,6 +937,11 @@ export async function translateArticle(article, { signal, completeJson = request
             revision.draft.title = baseline.title;
           }
           final = revision;
+          log('info', 'Son yapı düzeltmesi seçildi', {
+            source: article.source.id, articleUrl: article.url,
+            previousTitle: baseline.title, selectedTitle: final.draft.title,
+            remainingIssues: editorialIssues(final.draft, factSheet)
+          });
         }
       }
     } catch (error) {
@@ -901,6 +965,7 @@ export async function translateArticle(article, { signal, completeJson = request
   const instagramText = await buildInstagramCaption(article, factSheet, final.draft, { signal, completeJson });
   log('info', 'Türkçe haber yayıma hazır', {
     source: article.source.id,
+    articleUrl: article.url,
     title: final.draft.title,
     fluency: editorialFluencyProfile(final.draft),
     instagramChars: instagramText.length,
